@@ -1,6 +1,6 @@
 import { Platform, AppState } from 'react-native';
-import {defaultStorage} from "./mmkv";
-
+import { defaultStorage } from "./mmkv";
+import { BibleStep } from "./define";
 
 // 성경일독 타입 정의
 export interface BiblePlanType {
@@ -128,9 +128,63 @@ export const getTodayChapters = (planData: BiblePlanData): ReadingStatus[] => {
     const startIndex = (currentDay - 1) * planData.chaptersPerDay;
     const endIndex = Math.min(startIndex + planData.chaptersPerDay, planData.totalChapters);
 
-    // 여기서 실제 성경 책과 장 매핑 로직이 필요합니다
-    // 이는 OldBibleStep, NewBibleStep 데이터를 사용해야 합니다
-    return [];
+    // 실제 성경 책과 장 매핑 로직
+    const todayChapters: ReadingStatus[] = [];
+    let globalChapterIndex = startIndex;
+
+    for (let i = 0; i < planData.chaptersPerDay && globalChapterIndex < planData.totalChapters; i++) {
+        const { book, chapter } = getBookAndChapterFromGlobalIndex(globalChapterIndex + 1);
+
+        todayChapters.push({
+            book,
+            chapter,
+            date: new Date().toISOString(),
+            isRead: false,
+            type: 'today'
+        });
+
+        globalChapterIndex++;
+    }
+
+    return todayChapters;
+};
+
+/**
+ * 전역 장 인덱스로부터 책과 장을 계산하는 함수
+ */
+const getBookAndChapterFromGlobalIndex = (globalIndex: number): { book: number, chapter: number } => {
+    let remainingChapters = globalIndex;
+
+    for (let i = 0; i < BibleStep.length; i++) {
+        if (remainingChapters <= BibleStep[i].count) {
+            return {
+                book: i + 1,
+                chapter: remainingChapters
+            };
+        }
+        remainingChapters -= BibleStep[i].count;
+    }
+
+    // 마지막 장
+    return {
+        book: 66,
+        chapter: BibleStep[65].count
+    };
+};
+
+/**
+ * 성경 전체 장 순서를 계산하는 헬퍼 함수
+ */
+const getGlobalChapterIndex = (book: number, chapter: number): number => {
+    let totalChapters = 0;
+
+    // 해당 책 이전까지의 모든 장 수를 더함
+    for (let i = 0; i < book - 1; i++) {
+        totalChapters += BibleStep[i].count;
+    }
+
+    // 현재 책의 장 번호를 더함
+    return totalChapters + chapter;
 };
 
 /**
@@ -223,13 +277,15 @@ export const formatTime = (minutes: number): string => {
 };
 
 /**
- * 장 상태 확인
+ * 장 상태 확인 - 수정된 버전
  */
 export const getChapterStatus = (
     planData: BiblePlanData,
     book: number,
     chapter: number
 ): 'today' | 'yesterday' | 'missed' | 'completed' | 'future' | 'normal' => {
+    if (!planData) return 'normal';
+
     const currentDay = getCurrentDay(planData.startDate);
 
     // 읽기 완료 여부 확인
@@ -237,19 +293,152 @@ export const getChapterStatus = (
         r => r.book === book && r.chapter === chapter && r.isRead
     );
 
-    // 이 장이 몇 일차에 해당하는지 계산하는 로직이 필요
-    // 여기서는 간단한 예시만 제공
-    const chapterDay = Math.ceil((book * 50 + chapter) / planData.chaptersPerDay);
+    if (isRead) return 'completed';
 
-    if (chapterDay < currentDay) {
-        return isRead ? 'completed' : 'missed';
-    } else if (chapterDay === currentDay) {
-        return 'today';
+    // 이 장이 몇 일차에 해당하는지 계산
+    const chapterDay = findChapterDayInPlan(book, chapter, planData);
+
+    if (chapterDay === -1) return 'normal'; // 계획에 포함되지 않은 장
+
+    if (chapterDay < currentDay - 1) {
+        return 'missed';
     } else if (chapterDay === currentDay - 1) {
         return 'yesterday';
+    } else if (chapterDay === currentDay) {
+        return 'today';
     } else {
         return 'future';
     }
+};
+
+/**
+ * 일독 계획에서 특정 장이 몇 일차에 해당하는지 찾기
+ */
+const findChapterDayInPlan = (
+    book: number,
+    chapter: number,
+    planData: BiblePlanData
+): number => {
+    try {
+        switch (planData.planType) {
+            case 'full_bible':
+                return findChapterDayInFullBible(book, chapter, planData);
+            case 'new_testament':
+                if (book >= 40 && book <= 66) {
+                    return findChapterDayInNewTestament(book, chapter, planData);
+                }
+                break;
+            case 'old_testament':
+                if (book >= 1 && book <= 39) {
+                    return findChapterDayInOldTestament(book, chapter, planData);
+                }
+                break;
+            case 'pentateuch':
+                if (book >= 1 && book <= 5) {
+                    return findChapterDayInPentateuch(book, chapter, planData);
+                }
+                break;
+            case 'psalms':
+                if (book === 19) {
+                    return findChapterDayInPsalms(chapter, planData);
+                }
+                break;
+            default:
+                return -1;
+        }
+        return -1;
+    } catch (error) {
+        console.error('장 일수 계산 오류:', error);
+        return -1;
+    }
+};
+
+// 신약 챕터 일수 찾기
+const findChapterDayInNewTestament = (
+    book: number,
+    chapter: number,
+    planData: BiblePlanData
+): number => {
+    let totalChapters = 0;
+
+    // 신약 시작 전까지의 장수 계산
+    for (let b = 40; b < book; b++) {
+        const bookInfo = BibleStep.find(step => step.index === b);
+        if (bookInfo) {
+            totalChapters += bookInfo.count;
+        }
+    }
+
+    // 현재 책의 챕터 추가
+    totalChapters += chapter;
+
+    // 하루에 읽을 장수로 나누어 몇 일째인지 계산
+    return Math.ceil(totalChapters / planData.chaptersPerDay);
+};
+
+// 구약 챕터 일수 찾기
+const findChapterDayInOldTestament = (
+    book: number,
+    chapter: number,
+    planData: BiblePlanData
+): number => {
+    let totalChapters = 0;
+
+    // 구약 시작 전까지의 장수 계산
+    for (let b = 1; b < book; b++) {
+        const bookInfo = BibleStep.find(step => step.index === b);
+        if (bookInfo) {
+            totalChapters += bookInfo.count;
+        }
+    }
+
+    // 현재 책의 챕터 추가
+    totalChapters += chapter;
+
+    // 하루에 읽을 장수로 나누어 몇 일째인지 계산
+    return Math.ceil(totalChapters / planData.chaptersPerDay);
+};
+
+// 모세오경 챕터 일수 찾기
+const findChapterDayInPentateuch = (
+    book: number,
+    chapter: number,
+    planData: BiblePlanData
+): number => {
+    let totalChapters = 0;
+
+    // 모세오경 시작 전까지의 장수 계산
+    for (let b = 1; b < book; b++) {
+        const bookInfo = BibleStep.find(step => step.index === b);
+        if (bookInfo && b <= 5) { // 모세오경 범위 내에서만
+            totalChapters += bookInfo.count;
+        }
+    }
+
+    // 현재 책의 챕터 추가
+    totalChapters += chapter;
+
+    // 하루에 읽을 장수로 나누어 몇 일째인지 계산
+    return Math.ceil(totalChapters / planData.chaptersPerDay);
+};
+
+// 시편 챕터 일수 찾기
+const findChapterDayInPsalms = (
+    chapter: number,
+    planData: BiblePlanData
+): number => {
+    // 시편은 장 번호가 곧 순서
+    return Math.ceil(chapter / planData.chaptersPerDay);
+};
+
+// 전체 성경 챕터 일수 찾기 (맥체인)
+const findChapterDayInFullBible = (
+    book: number,
+    chapter: number,
+    planData: BiblePlanData
+): number => {
+    const globalIndex = getGlobalChapterIndex(book, chapter);
+    return Math.ceil(globalIndex / planData.chaptersPerDay);
 };
 
 /**
