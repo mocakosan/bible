@@ -126,13 +126,15 @@ function NewTestament({ readState, menuIndex }: Props) {
                 console.log(`New: 마태복음 1장 읽기 상태 확인: ${isRead}`);
             }
 
-            // 읽은 장은 항상 초록색 (일독 계획 여부와 무관)
+            // 읽은 장은 항상 초록색
             if (isRead) {
-                return {
-                    ...baseStyle,
-                    color: '#4CAF50', // 초록색
-                    showExclamation: false
-                };
+                if (planData) {
+                    return {
+                        ...baseStyle,
+                        color: '#4CAF50', // 초록색
+                        showExclamation: false
+                    };
+                }
             }
 
             // 일독 계획이 없는 경우 - 읽지 않은 장은 검정색

@@ -40,23 +40,25 @@ export default function ConectionPageBar({
     const JANG = defaultStorage.getNumber('bible_jang_connec') ?? 1;
 
     useEffect(() => {
-        // 페이지 로드 시 읽기 상태 확인
         const loadReadStatus = async () => {
             // 1. reading_table에서 상태 로드
             const tableRead = await loadReadingTableData(BOOK, JANG);
 
-            // 2. 일독 계획에서도 확인
-            const planRead = isChapterReadSync(BOOK, JANG);
+            // 2. 일독 계획 여부 확인
+            let planRead = false;
+            if (planData) {
+                planRead = isChapterReadSync(BOOK, JANG);
+            }
 
-            // 3. 둘 중 하나라도 읽었으면 읽은 것으로 표시
-            const finalRead = tableRead || planRead;
+            // 3. 일독 계획이 없으면 읽음 상태는 무조건 false
+            const finalRead = planData ? tableRead || planRead : false;
             setRead(finalRead);
 
             console.log(`Chapter ${BOOK}:${JANG} - Table: ${tableRead}, Plan: ${planRead}, Final: ${finalRead}`);
         };
 
         loadReadStatus();
-    }, [BOOK, JANG, loadReadingTableData, isChapterReadSync]);
+    }, [BOOK, JANG, loadReadingTableData, isChapterReadSync, planData]);
 
     const onReadPress = async () => {
         try {
