@@ -35,7 +35,9 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
   const [open, setOpen] = useState<number>(0);
   const { navigation } = useNativeNavigation();
   const mmkv = defaultStorage.getString('calender');
-  const { resetAllData } = useBibleReading();
+
+  // 🔥 수정: useBibleReading 훅 사용하지 않음 (직접 초기화로 변경)
+  // const { resetAllData } = useBibleReading(readState);
 
   // 바텀시트 상태 관리
   const { isOpen, onOpen, onClose } = useDisclose();
@@ -233,6 +235,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     }
   };
 
+  // 🔥 완전히 새로운 초기화 로직 (resetAllData 의존하지 않음)
   const onReset = () => {
     Alert.alert(
         '설정 초기화',
@@ -256,68 +259,111 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   autoHide: false
                 });
 
-                // 1. useBibleReading 훅의 완전 초기화
-                const resetSuccess = await resetAllData();
+                // 🔥 1. 직접 초기화 작업 수행 (resetAllData 의존하지 않음)
+                console.log('🔄 직접 초기화 작업 시작');
 
-                if (!resetSuccess) {
-                  throw new Error('데이터 초기화 실패');
-                }
-
-                // 2. Redux 상태 초기화
+                // 1-1. MMKV 스토리지 완전 정리
                 try {
-                  store.dispatch(bibleSelectSlice.actions.reset());
-                  store.dispatch(illdocSelectSlice.actions.reset());
-                  store.dispatch(bibleTextSlice.actions.reset());
+                  const allKeys = defaultStorage.getAllKeys();
+                  console.log('삭제 전 MMKV 키들:', allKeys);
+
+                  const keysToDelete = allKeys.filter(key =>
+                      key.startsWith('bible_') ||
+                      key.startsWith('reading_') ||
+                      key.includes('plan') ||
+                      key === 'calender' ||
+                      key === 'bible_reading_plan'
+                  );
+
+                  keysToDelete.forEach(key => {
+                    defaultStorage.delete(key);
+                    console.log('MMKV 키 삭제:', key);
+                  });
+
+                  console.log('MMKV 정리 완료');
+                } catch (mmkvError) {
+                  console.error('MMKV 정리 오류:', mmkvError);
+                }
+
+                // 1-2. SQLite reading_table 완전 삭제
+                try {
+                  const deleteSql = 'DELETE FROM reading_table';
+                  await fetchSql(bibleSetting, deleteSql, []);
+                  console.log('SQLite reading_table 데이터 삭제 완료');
+
+                  // 삭제 확인
+                  const checkSql = 'SELECT COUNT(*) as count FROM reading_table';
+                  const result = await fetchSql(bibleSetting, checkSql, []);
+                  console.log('삭제 후 reading_table 행 수:', result?.count || 0);
+                } catch (sqlError) {
+                  console.error('SQLite 삭제 오류:', sqlError);
+                }
+
+                // 🔥 2. Redux 상태 초기화
+                try {
+                  if (typeof store !== 'undefined' && store.dispatch) {
+                    store.dispatch(bibleSelectSlice.actions.reset());
+                    store.dispatch(illdocSelectSlice.actions.reset());
+                    store.dispatch(bibleTextSlice.actions.reset());
+                    console.log('Redux 상태 초기화 완료');
+                  }
                 } catch (reduxError) {
-                  console.error('Redux 초기화 오류:', reduxError);
+                  console.error('Redux 초기화 오류 (무시 가능):', reduxError);
                 }
 
-                // 3. 로컬 컴포넌트 상태 초기화
-                setPlanData(null);
-                setMissedCount(0);
-                setSelectedPlanType('');
-                setCalculationResult(null);
+                // 🔥 3. 로컬 컴포넌트 상태 초기화
+                try {
+                  setPlanData(null);
+                  setMissedCount(0);
+                  setSelectedPlanType('');
+                  setCalculationResult(null);
 
-                // 4. 캘린더 상태를 오늘 날짜로 초기화
-                const today = dayjs(new Date()).format('YYYY년MM월DD일');
-                setCalenderState({
-                  start: today,
-                  end: today
-                });
+                  // 캘린더 상태를 오늘 날짜로 초기화
+                  const today = dayjs(new Date()).format('YYYY년MM월DD일');
+                  setCalenderState({
+                    start: today,
+                    end: today
+                  });
 
-                // 5. 바텀시트 닫기
-                if (isOpen) {
-                  onClose();
+                  console.log('로컬 상태 초기화 완료');
+                } catch (stateError) {
+                  console.error('로컬 상태 초기화 오류:', stateError);
                 }
 
-                // 6. 🆕 강화된 상위 컴포넌트 새로고침 신호
+                // 🔥 4. 바텀시트 닫기
+                try {
+                  if (isOpen && typeof onClose === 'function') {
+                    onClose();
+                  }
+                } catch (closeError) {
+                  console.warn('바텀시트 닫기 오류 (무시 가능):', closeError);
+                }
+
+                // 🔥 5. 상위 컴포넌트 새로고침 (강화된 버전)
+                const triggerRefresh = () => {
+                  try {
+                    if (typeof onTrigger === 'function') {
+                      onTrigger();
+                    }
+                  } catch (triggerError) {
+                    console.warn('새로고침 트리거 오류:', triggerError);
+                  }
+                };
+
                 // 즉시 실행
                 console.log('🔄 Setting: Triggering immediate refresh');
-                onTrigger();
+                triggerRefresh();
 
-                // 🆕 다중 지연 실행으로 확실한 전파
-                const delays = [50, 100, 200, 300, 500, 800, 1200, 2000];
+                // 다중 지연 실행으로 확실한 전파
+                const delays = [50, 100, 200, 300, 500, 800, 1200, 2000, 3000];
                 delays.forEach((delay, index) => {
                   setTimeout(() => {
                     console.log(`🔄 Setting: Triggering refresh ${index + 1} (${delay}ms 후)`);
-                    onTrigger();
+                    triggerRefresh();
                   }, delay);
                 });
 
-                // 🆕 7. 추가 안전장치 - 메모리 정리 후 재실행
-                setTimeout(() => {
-                  console.log('🔄 Setting: Final cleanup and refresh');
-
-                  // 가비지 컬렉션 힌트 (강제는 아님)
-                  if (global.gc) {
-                    global.gc();
-                  }
-
-                  // 최종 새로고침
-                  onTrigger();
-                }, 3000);
-
-                // 8. 성공 메시지 (지연 후 표시)
+                // 🔥 6. 성공 메시지 표시
                 setTimeout(() => {
                   Toast.hide();
                   Toast.show({
@@ -331,14 +377,27 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 console.log('=== 설정 초기화 프로세스 완료 ===');
 
               } catch (error) {
-                console.error('초기화 중 오류 발생:', error);
-                Toast.hide();
-                Toast.show({
-                  type: 'error',
-                  text1: '초기화 실패',
-                  text2: '다시 시도해주세요',
-                  visibilityTime: 3000
-                });
+                console.error('초기화 중 최종 오류 발생:', error);
+
+                // 오류가 발생해도 부분 성공일 수 있으므로 일부 작업은 계속 진행
+                setTimeout(() => {
+                  Toast.hide();
+                  Toast.show({
+                    type: 'warning',
+                    text1: '부분 초기화 완료',
+                    text2: '일부 데이터는 초기화되었습니다. 앱을 재시작하면 완전히 정리됩니다.',
+                    visibilityTime: 4000
+                  });
+                }, 1000);
+
+                // 그래도 새로고침은 시도
+                try {
+                  if (typeof onTrigger === 'function') {
+                    onTrigger();
+                  }
+                } catch (triggerError) {
+                  console.warn('최종 새로고침 트리거 실패:', triggerError);
+                }
               }
             }
           }

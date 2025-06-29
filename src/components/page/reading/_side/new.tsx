@@ -8,7 +8,6 @@ import { useBaseStyle, useNativeNavigation } from '../../../../hooks';
 import { NewBibleStep } from '../../../../utils/define';
 import { defaultStorage } from '../../../../utils/mmkv';
 import { useBibleReading } from "../../../../utils/useBibleReading";
-import { getChapterStatus } from "../../../../utils/biblePlanUtils";
 
 interface Props {
     readState: any;
@@ -19,47 +18,48 @@ function NewTestament({ readState, menuIndex }: Props) {
     const { color } = useBaseStyle();
     const { navigation } = useNativeNavigation();
 
-    // useBibleReading 훅에서 사용 가능한 함수들만 구조분해
+    // 🔥 수정: useBibleReading 훅에서 새로운 함수들 추가
     const {
         planData,
         isChapterReadSync,
+        getChapterStatus,          // 🆕 추가
+        getChapterStyleWithExclamation,  // 🆕 추가 - 느낌표 포함 스타일 함수
         loadPlan,
         loadAllReadingTableData,
         refreshKey,
         forceRefresh,
-        readingTableData
+        readingTableData,
+        getTodayProgress,          // 🆕 추가
+        getYesterdayProgress       // 🆕 추가
     } = useBibleReading(readState);
 
     const [visibleChapters, setVisibleChapters] = useState<Set<string>>(new Set());
 
-    // 장 상태 확인 함수 (biblePlanUtils에서 가져온 함수 사용)
-    const getChapterStatusLocal = useCallback((book: number, chapter: number) => {
-        if (!planData) return 'normal';
-        return getChapterStatus(planData, book, chapter);
-    }, [planData]);
-
-    // 표시할 장들 업데이트 (간단화)
+    // 🔥 수정: 표시할 장들 업데이트 (구약과 동일한 로직)
     const updateVisibleChapters = useCallback(() => {
-        try {
-            // 일독 계획이 없으면 모든 장 표시
-            if (!planData) {
-                setVisibleChapters(new Set());
-                return;
-            }
+        if (!planData) {
+            setVisibleChapters(new Set());
+            return;
+        }
 
-            // 일독 계획이 있으면 오늘/어제 관련 장들만 강조 표시
+        try {
             const chaptersToShow = new Set<string>();
 
-            // 신약 모든 장에 대해 상태 확인
-            NewBibleStep.forEach(book => {
-                for (let chapter = 1; chapter <= book.count; chapter++) {
-                    const status = getChapterStatusLocal(book.index, chapter);
-                    // 오늘, 어제, 놓친 장들만 표시
-                    if (status === 'today' || status === 'yesterday' || status === 'missed') {
-                        chaptersToShow.add(`${book.index}_${chapter}`);
-                    }
-                }
-            });
+            // 오늘 읽을 장들 추가
+            const todayProgress = getTodayProgress();
+            if (todayProgress && todayProgress.remainingChapters) {
+                todayProgress.remainingChapters.forEach(chapter => {
+                    chaptersToShow.add(`${chapter.bookIndex}_${chapter.chapter}`);
+                });
+            }
+
+            // 어제 못 읽은 장들 추가
+            const yesterdayProgress = getYesterdayProgress();
+            if (yesterdayProgress && yesterdayProgress.missedChapters) {
+                yesterdayProgress.missedChapters.forEach(chapter => {
+                    chaptersToShow.add(`${chapter.bookIndex}_${chapter.chapter}`);
+                });
+            }
 
             setVisibleChapters(chaptersToShow);
             console.log('NewTestament - 표시할 장들 업데이트:', chaptersToShow.size, '개');
@@ -67,7 +67,7 @@ function NewTestament({ readState, menuIndex }: Props) {
             console.error('표시할 장 업데이트 오류:', error);
             setVisibleChapters(new Set());
         }
-    }, [planData, getChapterStatusLocal]);
+    }, [planData, getTodayProgress, getYesterdayProgress]);
 
     // 컴포넌트가 포커스될 때마다 데이터 새로고침
     useEffect(() => {
@@ -107,7 +107,8 @@ function NewTestament({ readState, menuIndex }: Props) {
         console.log('=== NewTestament readingTableData 변경 감지 ===', Object.keys(readingTableData || {}).length, '개 항목');
     }, [readingTableData]);
 
-    const getChapterStyle = useCallback((book: number, chapter: number) => {
+    // 🔥 기존 스타일 함수 (호환성 유지)
+    const getChapterStyleLegacy = useCallback((book: number, chapter: number) => {
         // 기본 스타일 (테두리만)
         const baseStyle = {
             borderRadius: 17.5,
@@ -148,7 +149,7 @@ function NewTestament({ readState, menuIndex }: Props) {
             }
 
             // 일독 계획이 있는 경우 - 읽지 않은 장의 상태별 색상
-            const status = getChapterStatusLocal(book, chapter);
+            const status = getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
 
             switch (status) {
                 case 'today':
@@ -161,13 +162,13 @@ function NewTestament({ readState, menuIndex }: Props) {
                     return {
                         ...baseStyle,
                         color: '#2196F3', // 파란색 (어제 읽어야 했던 장)
-                        showExclamation: true // 어제 놓친 장에 느낌표 표시
+                        showExclamation: true // 🔥 어제 놓친 장에 느낌표 표시
                     };
                 case 'missed':
                     return {
                         ...baseStyle,
                         color: '#000000', // 검정색 (놓친 장)
-                        showExclamation: true
+                        showExclamation: true // 🔥 놓친 장에 느낌표 표시
                     };
                 default:
                     return {
@@ -184,7 +185,7 @@ function NewTestament({ readState, menuIndex }: Props) {
                 showExclamation: false
             };
         }
-    }, [planData, isChapterReadSync, getChapterStatusLocal, refreshKey]);
+    }, [planData, isChapterReadSync, getChapterStatus, refreshKey]);
 
     const onNavigate = useCallback((book: number, chapter: number) => {
         try {
@@ -199,29 +200,6 @@ function NewTestament({ readState, menuIndex }: Props) {
             console.error('화면 이동 오류:', error);
         }
     }, [navigation, menuIndex]);
-
-    // 느낌표 아이콘 렌더링
-    const renderExclamationIcon = useCallback((showExclamation: boolean) => {
-        if (!showExclamation) return null;
-
-        return (
-            <Box
-                position="absolute"
-                top={-3}
-                right={-3}
-                backgroundColor="#F44336"
-                borderRadius={8}
-                width={16}
-                height={16}
-                justifyContent="center"
-                alignItems="center"
-            >
-                <Text color="white" fontSize={10} fontWeight="bold">
-                    !
-                </Text>
-            </Box>
-        );
-    }, []);
 
     const RenderItems = useCallback(
         ({ book, title, length }: { book: number; title: string; length: number }) => {
@@ -248,40 +226,88 @@ function NewTestament({ readState, menuIndex }: Props) {
                     >
                         {Array.from({ length }).map((_, index) => {
                             const chapter = index + 1;
+
+                            // 🔥 수정: 새로운 느낌표 포함 스타일 함수 사용
+                            const { style: chapterStyle, showExclamation } = getChapterStyleWithExclamation
+                                ? getChapterStyleWithExclamation(book, chapter)
+                                : getChapterStyleLegacy(book, chapter); // 호환성 유지
+
+                            // 읽기 상태 및 장 상태 확인
                             const isRead = isChapterReadSync ? isChapterReadSync(book, chapter) : false;
-                            const status = planData ? getChapterStatusLocal(book, chapter) : 'normal';
-                            const chapterStyle = getChapterStyle(book, chapter);
-                            const isVisible = visibleChapters.has(`${book}_${chapter}`) || !planData;
+                            const status = planData && getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
+
+                            // 디버깅용 로그 (마태복음 1장만)
+                            if (book === 40 && chapter === 1) {
+                                console.log(`New RenderItems: 마태복음 1장 - isRead: ${isRead}, status: ${status}, showExclamation: ${showExclamation || false}`);
+                            }
 
                             return (
-                                <View key={`${book}-${chapter}-${refreshKey}`} style={{ position: 'relative' }}>
-                                    <TouchableOpacity
-                                        activeOpacity={0.1}
-                                        style={{
-                                            ...chapterStyle,
-                                            margin: 2
-                                        }}
-                                        onPress={() => onNavigate(book, chapter)}
-                                    >
+                                <TouchableOpacity
+                                    key={`${book}-${chapter}-${refreshKey}-${readState?.length || 0}-${isRead ? 'read' : 'unread'}`}
+                                    activeOpacity={0.7}
+                                    style={{
+                                        margin: 2,
+                                        position: 'relative' // 🔥 느낌표 절대 위치를 위해 필요
+                                    }}
+                                    onPress={() => onNavigate(book, chapter)}
+                                >
+                                    {/* 장 번호 버튼 */}
+                                    <View style={chapterStyle}>
                                         <Text
                                             style={{
                                                 color: chapterStyle.color,
                                                 fontSize: 14,
-                                                fontWeight: isVisible && status === 'today' ? 'bold' : 'normal'
+                                                fontWeight: status === 'today' ? 'bold' : 'normal',
+                                                textAlign: 'center'
                                             }}
                                         >
                                             {chapter}
                                         </Text>
-                                    </TouchableOpacity>
-                                    {renderExclamationIcon(chapterStyle.showExclamation && isVisible)}
-                                </View>
+                                    </View>
+
+                                    {/* 🔥 느낌표 아이콘 (조건부 렌더링) */}
+                                    {showExclamation && (
+                                        <View
+                                            style={{
+                                                position: 'absolute',
+                                                top: -3,
+                                                right: -3,
+                                                backgroundColor: '#F44336', // 빨간색
+                                                borderRadius: 8,
+                                                width: 16,
+                                                height: 16,
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                                elevation: 2, // Android 그림자
+                                                shadowColor: '#000', // iOS 그림자
+                                                shadowOffset: {
+                                                    width: 0,
+                                                    height: 1,
+                                                },
+                                                shadowOpacity: 0.22,
+                                                shadowRadius: 2.22,
+                                            }}
+                                        >
+                                            <Text
+                                                style={{
+                                                    color: '#FFFFFF',
+                                                    fontSize: 10,
+                                                    fontWeight: 'bold',
+                                                    textAlign: 'center'
+                                                }}
+                                            >
+                                                !
+                                            </Text>
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
                             );
                         })}
                     </View>
                 </View>
             );
         },
-        [getChapterStyle, isChapterReadSync, getChapterStatusLocal, planData, onNavigate, refreshKey, visibleChapters, renderExclamationIcon]
+        [getChapterStyleWithExclamation, getChapterStyleLegacy, isChapterReadSync, getChapterStatus, planData, onNavigate, refreshKey, readState]
     );
 
     // 데이터 메모이제이션

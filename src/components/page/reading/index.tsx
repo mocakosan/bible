@@ -21,6 +21,7 @@ import { Alert } from "react-native";
 import { Toast } from "react-native-toast-message/lib/src/Toast";
 import { useNavigation } from "@react-navigation/native";
 import { useBibleReading } from "../../../utils/useBibleReading";
+import { defaultStorage } from "../../../utils/mmkv";
 
 export default function ReadingBibleScreen() {
   const [menuIndex, setMenuIndex] = useState<number>(2);
@@ -33,11 +34,11 @@ export default function ReadingBibleScreen() {
   const { color } = useBaseStyle();
   const navigation = useNavigation();
 
-  // useBibleReading 훅 사용하여 전역 새로고침 등록
+  // 🔥 수정: resetAllData 제거하고 필요한 함수만 사용
   const {
     registerGlobalRefreshCallback,
-    unregisterGlobalRefreshCallback,
-    resetAllData
+    unregisterGlobalRefreshCallback
+    // resetAllData 제거
   } = useBibleReading(mark);
 
   // 안전한 메뉴 리스트 확보
@@ -240,6 +241,88 @@ export default function ReadingBibleScreen() {
     navigation.navigate('ProgressScreen' as never);
   }, [navigation]);
 
+  // 🔥 직접 초기화 함수 (resetAllData 의존하지 않음)
+  const handleDirectReset = useCallback(async () => {
+    try {
+      console.log('=== ReadingBibleScreen 직접 초기화 시작 ===');
+
+      // 로딩 상태 표시
+      Toast.show({
+        type: 'info',
+        text1: '초기화 중...',
+        text2: '잠시만 기다려주세요',
+        autoHide: false
+      });
+
+      // 1. MMKV 스토리지 정리
+      try {
+        const allKeys = defaultStorage.getAllKeys();
+        const keysToDelete = allKeys.filter(key =>
+            key.startsWith('bible_') ||
+            key.startsWith('reading_') ||
+            key.includes('plan') ||
+            key === 'calender' ||
+            key === 'bible_reading_plan'
+        );
+
+        keysToDelete.forEach(key => {
+          defaultStorage.delete(key);
+          console.log('MMKV 키 삭제:', key);
+        });
+      } catch (mmkvError) {
+        console.error('MMKV 정리 오류:', mmkvError);
+      }
+
+      // 2. SQLite 정리
+      try {
+        const deleteSql = 'DELETE FROM reading_table';
+        await fetchSql(bibleSetting, deleteSql, []);
+        console.log('SQLite reading_table 삭제 완료');
+      } catch (sqlError) {
+        console.error('SQLite 삭제 오류:', sqlError);
+      }
+
+      // 3. 로컬 상태 초기화
+      setPlanData(null);
+      setMenuList(["구약", "신약", "설정"]);
+      setMenuIndex(2);
+      setForceUpdateKey(prev => prev + 1);
+
+      // 4. 데이터 새로고침
+      await loadReadingState();
+      updateMenuAndData();
+
+      // 5. 성공 메시지
+      setTimeout(() => {
+        Toast.hide();
+        Toast.show({
+          type: 'success',
+          text1: '초기화 완료',
+          text2: '일독 계획이 초기화되었습니다',
+          visibilityTime: 3000
+        });
+      }, 1000);
+
+      console.log('=== ReadingBibleScreen 직접 초기화 완료 ===');
+      return true;
+
+    } catch (error) {
+      console.error('ReadingBibleScreen 초기화 오류:', error);
+
+      setTimeout(() => {
+        Toast.hide();
+        Toast.show({
+          type: 'warning',
+          text1: '부분 초기화 완료',
+          text2: '일부 데이터는 초기화되었습니다',
+          visibilityTime: 3000
+        });
+      }, 1000);
+
+      return false;
+    }
+  }, [loadReadingState, updateMenuAndData]);
+
   // 간단한 진도 표시 컴포넌트
   const ProgressView = useCallback(() => {
     if (!planData) return null;
@@ -261,6 +344,7 @@ export default function ReadingBibleScreen() {
       return '#F44336';
     };
 
+    // 🔥 수정: handleDirectReset 사용
     const handleResetPlan = () => {
       Alert.alert(
           '일독 초기화',
@@ -270,47 +354,7 @@ export default function ReadingBibleScreen() {
             {
               text: '초기화',
               style: 'destructive',
-              onPress: async () => {
-                try {
-                  console.log('=== 일독 계획 초기화 시작 ===');
-
-                  // 로딩 상태 표시
-                  Toast.show({
-                    type: 'info',
-                    text1: '초기화 중...',
-                    text2: '잠시만 기다려주세요',
-                    autoHide: false
-                  });
-
-                  // useBibleReading 훅의 resetAllData 함수 호출
-                  const resetSuccess = await resetAllData();
-
-                  if (!resetSuccess) {
-                    throw new Error('데이터 초기화 실패');
-                  }
-
-                  // 로컬 상태도 초기화
-                  setPlanData(null);
-                  setMenuList(["구약", "신약", "설정"]);
-                  setMenuIndex(2);
-                  setForceUpdateKey(prev => prev + 1);
-
-                  // 성공 메시지 표시
-                  Toast.show({
-                    type: 'success',
-                    text1: '초기화 완료',
-                    text2: '일독 계획이 초기화되었습니다'
-                  });
-
-                } catch (error) {
-                  console.error('일독 초기화 오류:', error);
-                  Toast.show({
-                    type: 'error',
-                    text1: '초기화 실패',
-                    text2: '다시 시도해주세요'
-                  });
-                }
-              }
+              onPress: handleDirectReset // 🔥 직접 초기화 함수 사용
             }
           ]
       );
@@ -447,7 +491,7 @@ export default function ReadingBibleScreen() {
           </VStack>
         </ScrollView>
     );
-  }, [planData, color.white, navigateToProgress, resetAllData]);
+  }, [planData, color.white, navigateToProgress, handleDirectReset]);
 
   // 일독 타입 이름 변환 함수
   const getPlanTypeName = (planType: string): string => {
@@ -585,7 +629,7 @@ export default function ReadingBibleScreen() {
                         key={`pentateuch-view-${forceUpdateKey}-${mark?.length || 0}`}
                         readState={mark}
                         menuIndex={menuIndex}
-                        bookRange={{ start: 1, end: 5 }} // 창세기(1)~신명기(5)만
+                        filterBooks={[1, 2, 3, 4, 5]} // 창세기(1)~신명기(5)만
                     />
                 )}
               </ScrollView>
@@ -604,7 +648,7 @@ export default function ReadingBibleScreen() {
                         key={`psalms-view-${forceUpdateKey}-${mark?.length || 0}`}
                         readState={mark}
                         menuIndex={menuIndex}
-                        bookRange={{ start: 19, end: 19 }} // 시편(19)만
+                        filterBooks={[19]} // 시편(19)만
                     />
                 )}
               </ScrollView>
@@ -637,7 +681,7 @@ export default function ReadingBibleScreen() {
     }
 
     return null;
-  }, [planData, safeMenuList, menuIndex, forceUpdateKey, isFocused, mark, color.white, ProgressView, isLoading]);
+  }, [planData, safeMenuList, menuIndex, forceUpdateKey, isFocused, mark, color.white, ProgressView, isLoading, handleChangeUpdateData]);
 
   // 로딩 상태일 때의 처리
   if (isLoading) {

@@ -508,6 +508,73 @@ export const useBibleReading = (readState?: any) => {
         }
     }, [planData, isChapterReadSync]);
 
+    // 🆕 향상된 장 스타일 계산 함수 (느낌표 포함)
+    const getChapterStyleWithExclamation = useCallback((book: number, chapter: number) => {
+        try {
+            const isRead = isChapterReadSync(book, chapter);
+            const status = planData ? getChapterStatus(book, chapter) : 'normal';
+
+            const baseStyle = {
+                borderRadius: 17.5,
+                width: 35,
+                height: 35,
+                justifyContent: 'center' as const,
+                alignItems: 'center' as const,
+                borderWidth: 1,
+                borderColor: '#E0E0E0',
+                backgroundColor: 'transparent'
+            };
+
+            // 읽은 상태가 최우선
+            if (isRead) {
+                return {
+                    style: { ...baseStyle, color: '#4CAF50' },
+                    showExclamation: false
+                };
+            }
+
+            // 상태별 처리
+            switch (status) {
+                case 'today':
+                    return {
+                        style: { ...baseStyle, color: '#F44336' },
+                        showExclamation: false
+                    };
+                case 'yesterday':
+                    return {
+                        style: { ...baseStyle, color: '#2196F3' },
+                        showExclamation: true // 🔥 어제 안 읽은 장에 느낌표 표시
+                    };
+                case 'missed':
+                    return {
+                        style: { ...baseStyle, color: '#000000' },
+                        showExclamation: true // 🔥 놓친 장에 느낌표 표시
+                    };
+                default:
+                    return {
+                        style: { ...baseStyle, color: '#000000' },
+                        showExclamation: false
+                    };
+            }
+        } catch (error) {
+            console.error('장 스타일 계산 오류:', error);
+            return {
+                style: {
+                    borderRadius: 17.5,
+                    width: 35,
+                    height: 35,
+                    justifyContent: 'center' as const,
+                    alignItems: 'center' as const,
+                    borderWidth: 1,
+                    borderColor: '#E0E0E0',
+                    backgroundColor: 'transparent',
+                    color: '#000000'
+                },
+                showExclamation: false
+            };
+        }
+    }, [planData, isChapterReadSync, getChapterStatus]);
+
     // 🆕 전역 새로고침 콜백 등록/해제 함수들
     const registerGlobalRefreshCallback = useCallback((callback: () => void) => {
         console.log('🔄 전역 새로고침 콜백 등록됨');
@@ -543,6 +610,93 @@ export const useBibleReading = (readState?: any) => {
             });
         }
     }, [updateAppBadge]);
+
+    // 🆕 완전 초기화 함수 개선
+    const resetAllData = useCallback(async () => {
+        try {
+            console.log('=== useBibleReading 완전 초기화 시작 ===');
+
+            // 1. 로컬 상태 모두 초기화
+            setPlanData(null);
+            setMissedCount(0);
+            setTodayReading(null);
+            setYesterdayReading(null);
+            setProgressInfo(null);
+            setReadingTableData({});  // 중요: 빈 객체로 초기화
+
+            // 2. 일독 계획 데이터 삭제
+            deleteBiblePlanData();
+
+            // 3. SQLite reading_table 완전 삭제 (먼저 실행)
+            try {
+                const deleteSql = `DELETE FROM reading_table`;
+                await fetchSql(bibleSetting, deleteSql, []);
+                console.log('SQLite reading_table 데이터 삭제 완료');
+
+                // 삭제 확인
+                const checkSql = `SELECT COUNT(*) as count FROM reading_table`;
+                const result = await fetchSql(bibleSetting, checkSql, []);
+                console.log('삭제 후 reading_table 행 수:', result?.count || 0);
+            } catch (sqlError) {
+                console.error('SQLite 삭제 오류:', sqlError);
+            }
+
+            // 4. MMKV에서 성경 관련 데이터 삭제
+            try {
+                const allKeys = defaultStorage.getAllKeys();
+                console.log('삭제 전 MMKV 키들:', allKeys);
+
+                allKeys.forEach(key => {
+                    if (key.startsWith('bible_') ||
+                        key.startsWith('reading_') ||
+                        key.includes('plan') ||
+                        key === 'calender') {
+                        defaultStorage.delete(key);
+                        console.log('MMKV 키 삭제:', key);
+                    }
+                });
+
+                // 삭제 확인
+                const remainingKeys = defaultStorage.getAllKeys();
+                console.log('삭제 후 MMKV 키들:', remainingKeys);
+            } catch (mmkvError) {
+                console.error('MMKV 삭제 오류:', mmkvError);
+            }
+
+            // 5. 앱 뱃지 초기화
+            updateAppBadge(0);
+
+            // 6. refreshKey 업데이트 (리렌더링 강제)
+            setRefreshKey(prev => {
+                const newKey = prev + 1;
+                console.log('refreshKey 업데이트:', prev, '->', newKey);
+                return newKey;
+            });
+
+            // 🆕 7. 전역 새로고침 트리거 (여러 번 호출)
+            if (globalRefreshCallback) {
+                console.log('🔄 전역 새로고침 콜백 호출 (resetAllData)');
+                globalRefreshCallback();
+
+                // 지연 후에도 다시 호출
+                setTimeout(() => globalRefreshCallback(), 200);
+                setTimeout(() => globalRefreshCallback(), 500);
+                setTimeout(() => globalRefreshCallback(), 1000);
+            }
+
+            // 8. 약간의 지연 후 데이터 다시 로드 (빈 상태 확인)
+            setTimeout(async () => {
+                await loadPlan();
+                await loadAllReadingTableData();
+                console.log('초기화 후 데이터 재로드 완료');
+            }, 100);
+
+            return false;
+        }catch (error) {
+            console.error('useBibleReading 초기화 오류:', error);
+            return false; // 🔥 누락되었던 부분 추가
+        }
+    }, [updateAppBadge, loadPlan, loadAllReadingTableData, globalRefreshCallback]);
 
     // 🆕 강제 새로고침 함수 추가
     const forceRefresh = useCallback(async () => {
@@ -591,6 +745,84 @@ export const useBibleReading = (readState?: any) => {
         }
     }, []);
 
+    // 🆕 오늘 진도 계산 함수
+    const getTodayProgress = useCallback(() => {
+        if (!todayReading) {
+            return {
+                totalChapters: 0,
+                completedChapters: 0,
+                remainingChapters: [],
+                percentage: 0
+            };
+        }
+
+        try {
+            const completedChapters = todayReading.chapters.filter(ch =>
+                isChapterReadSync(ch.bookIndex, ch.chapter)
+            ).length;
+
+            const remainingChapters = todayReading.chapters.filter(ch =>
+                !isChapterReadSync(ch.bookIndex, ch.chapter)
+            );
+
+            return {
+                totalChapters: todayReading.chapters.length,
+                completedChapters,
+                remainingChapters,
+                percentage: todayReading.chapters.length > 0
+                    ? (completedChapters / todayReading.chapters.length) * 100
+                    : 0
+            };
+        } catch (error) {
+            console.error('오늘 진도 계산 오류:', error);
+            return {
+                totalChapters: 0,
+                completedChapters: 0,
+                remainingChapters: [],
+                percentage: 0
+            };
+        }
+    }, [todayReading, isChapterReadSync]);
+
+    // 🆕 어제 진도 계산 함수
+    const getYesterdayProgress = useCallback(() => {
+        if (!yesterdayReading) {
+            return {
+                totalChapters: 0,
+                completedChapters: 0,
+                percentage: 0,
+                missedChapters: []
+            };
+        }
+
+        try {
+            const completedChapters = yesterdayReading.chapters.filter(ch =>
+                isChapterReadSync(ch.bookIndex, ch.chapter)
+            ).length;
+
+            const missedChapters = yesterdayReading.chapters.filter(ch =>
+                !isChapterReadSync(ch.bookIndex, ch.chapter)
+            );
+
+            return {
+                totalChapters: yesterdayReading.chapters.length,
+                completedChapters,
+                percentage: yesterdayReading.chapters.length > 0
+                    ? (completedChapters / yesterdayReading.chapters.length) * 100
+                    : 0,
+                missedChapters
+            };
+        } catch (error) {
+            console.error('어제 진도 계산 오류:', error);
+            return {
+                totalChapters: 0,
+                completedChapters: 0,
+                percentage: 0,
+                missedChapters: []
+            };
+        }
+    }, [yesterdayReading, isChapterReadSync]);
+
     // reading_table 상태 업데이트 함수 (🆕 전역 새로고침 트리거 추가)
     const updateReadingTableCache = useCallback((book: number, chapter: number, isRead: boolean) => {
         const key = `${book}_${chapter}`;
@@ -625,8 +857,12 @@ export const useBibleReading = (readState?: any) => {
         markChapterAsRead,
         markChapterAsUnread,
         getChapterStatus,
+        getChapterStyleWithExclamation,  // 🔥 새로운 함수 추가
+        getTodayProgress,               // 🔥 추가
+        getYesterdayProgress,           // 🔥 추가
         refreshData,
         updateProgressInfo,
+        resetAllData,
 
         // 🆕 전역 새로고침 관련
         registerGlobalRefreshCallback,
