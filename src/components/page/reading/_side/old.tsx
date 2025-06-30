@@ -8,6 +8,7 @@ import { useBaseStyle, useNativeNavigation } from '../../../../hooks';
 import { OldBibleStep } from '../../../../utils/define';
 import { defaultStorage } from '../../../../utils/mmkv';
 import { useBibleReading } from "../../../../utils/useBibleReading";
+import FastImage from "react-native-fast-image";
 
 interface Props {
     readState: any;
@@ -319,34 +320,21 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                                         <View
                                             style={{
                                                 position: 'absolute',
-                                                top: -3,
-                                                right: -3,
-                                                backgroundColor: '#F44336', // 빨간색
-                                                borderRadius: 8,
-                                                width: 16,
-                                                height: 16,
+                                                top: -4,
+                                                right: -4,
+                                                width: 20,
+                                                height: 20,
                                                 justifyContent: 'center',
                                                 alignItems: 'center',
-                                                elevation: 2, // Android 그림자
-                                                shadowColor: '#000', // iOS 그림자
-                                                shadowOffset: {
-                                                    width: 0,
-                                                    height: 1,
-                                                },
-                                                shadowOpacity: 0.22,
-                                                shadowRadius: 2.22,
                                             }}
                                         >
-                                            <Text
-                                                style={{
-                                                    color: '#FFFFFF',
-                                                    fontSize: 10,
-                                                    fontWeight: 'bold',
-                                                    textAlign: 'center'
-                                                }}
-                                            >
-                                                !
-                                            </Text>
+                                          <FastImage
+                                              source={require('../../../../assets/img/noRead.png')}
+                                              style={{
+                                                  width: 11,
+                                                  height: 11,
+                                              }}
+                                              resizeMode={FastImage.resizeMode.contain}/>
                                         </View>
                                     )}
                                 </TouchableOpacity>

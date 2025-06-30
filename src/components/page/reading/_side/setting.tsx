@@ -36,9 +36,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
   const { navigation } = useNativeNavigation();
   const mmkv = defaultStorage.getString('calender');
 
-  // 🔥 수정: useBibleReading 훅 사용하지 않음 (직접 초기화로 변경)
-  // const { resetAllData } = useBibleReading(readState);
-
   // 바텀시트 상태 관리
   const { isOpen, onOpen, onClose } = useDisclose();
 
@@ -101,6 +98,81 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     return result ? result.toFixed(1) : "0";
   };
 
+  // 🔥 날짜 선택 완료 및 유효성 확인 함수
+  const isDatesCompleted = () => {
+    const today = dayjs(new Date()).format('YYYY년MM월DD일');
+    const startDate = calendarState.start;
+    const endDate = calendarState.end;
+
+    // 1. 시작일과 목표일이 모두 초기값(오늘)이 아닌 경우에만 기본 완료
+    const basicCompleted = startDate !== today || endDate !== today;
+
+    // 2. 목표일이 시작일보다 이후인지 확인
+    const startDateObj = convertDate('start');
+    const endDateObj = convertDate('end');
+    const isEndDateAfterStart = endDateObj.isAfter(startDateObj) || endDateObj.isSame(startDateObj);
+
+    // 두 조건 모두 만족해야 완료
+    return basicCompleted && isEndDateAfterStart;
+  };
+
+  // 🔥 일독 설정하기 버튼 클릭 핸들러 (유효성 검사 강화)
+  const handleSetupBibleReading = () => {
+    const today = dayjs(new Date()).format('YYYY년MM월DD일');
+    const startDate = calendarState.start;
+    const endDate = calendarState.end;
+
+    // 1. 기본 날짜 설정 확인
+    if (startDate === today && endDate === today) {
+      Toast.show({
+        type: 'error',
+        text1: '날짜 설정이 필요합니다',
+        text2: '시작일과 목표일을 모두 선택해주세요'
+      });
+      return;
+    }
+
+    // 2. 목표일이 시작일보다 이전인지 확인
+    const startDateObj = convertDate('start');
+    const endDateObj = convertDate('end');
+
+    if (endDateObj.isBefore(startDateObj)) {
+      Toast.show({
+        type: 'error',
+        text1: '목표일을 다시 설정해주세요',
+        text2: '목표일은 시작일 이후로 설정해주세요'
+      });
+      return;
+    }
+
+    onOpen(); // 바텀시트 열기
+  };
+
+  // 🔥 일독 설정하기 버튼 렌더링 함수 (항상 같은 색상, 항상 클릭 가능)
+  const renderSetupButton = () => {
+    return (
+        <Button
+            w="100%"
+            h={55}
+            bg="#37C4B9" // 🔥 항상 같은 색상 유지
+            borderRadius="md"
+            mb={3}
+            _pressed={{
+              bg: "#2BA89E" // 🔥 항상 같은 pressed 색상 유지
+            }}
+            onPress={handleSetupBibleReading} // 🔥 항상 클릭 가능하지만 내부에서 조건 체크
+        >
+          <Text
+              color={color.white} // 🔥 항상 흰색 텍스트 유지
+              fontSize={16}
+              fontWeight={500}
+          >
+            일독 설정하기
+          </Text>
+        </Button>
+    );
+  };
+
   useEffect(() => {
     // 컴포넌트 마운트 시 상태 정리
     const initializeComponent = () => {
@@ -158,23 +230,23 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
 
   const onDateChange = (date: string) => {
     if (open === 1) {
-      const afterChecked = dayjs(date).isAfter(
-          convertDate('end').format('YYYY-MM-DD')
-      );
+      // 🔥 시작일 선택: 제한 없이 자유롭게 선택 가능
+      const selectedStartDate = dayjs(date);
 
-      if (afterChecked) {
-        Toast.show({
-          type: 'error',
-          text1: '시작일은 목표일보다 이전이어야 합니다'
-        });
-        return;
-      }
-
+      // 시작일 설정 (과거, 현재, 미래 모든 날짜 허용)
       setCalenderState((pre) => ({
         ...pre,
-        start: dayjs(date).format('YYYY년MM월DD일')
+        start: selectedStartDate.format('YYYY년MM월DD일')
       }));
 
+      // 🆕 시작일 설정 후 목표일 설정 안내 메시지
+      Toast.show({
+        type: 'info',
+        text1: '목표일을 설정해주세요',
+        text2: '시작일이 설정되었습니다. 이제 목표일을 선택해주세요'
+      });
+
+      // 로컬 스토리지 업데이트
       if (mmkv) {
         const { end } = JSON.parse(mmkv);
         const result = Object.assign({
@@ -189,14 +261,30 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
         defaultStorage.set('calender', JSON.stringify(result));
       }
     } else {
-      const beforeChecked = dayjs(date).isBefore(
+      // 🔥 목표일 선택 로직 수정
+      const selectedEndDate = dayjs(date);
+      const currentStartDate = convertDate('start');
+
+      // 1. 오늘 이전 날짜 체크 (기존 로직 유지)
+      const beforeToday = selectedEndDate.isBefore(
           dayjs(new Date()).format('YYYY-MM-DD')
       );
 
-      if (beforeChecked) {
+      if (beforeToday) {
         Toast.show({
           type: 'error',
           text1: '목표일은 오늘 이후여야 합니다'
+        });
+        return;
+      }
+
+      // 🆕 2. 시작일보다 빠른 날짜 체크
+      const beforeStartDate = selectedEndDate.isBefore(currentStartDate);
+
+      if (beforeStartDate) {
+        Toast.show({
+          type: 'error',
+          text1: '목표일은 시작일 이후로 설정해주세요'
         });
         return;
       }
@@ -383,7 +471,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 setTimeout(() => {
                   Toast.hide();
                   Toast.show({
-                    type: 'warning',
+                    type: 'error', // 🔥 'warning'을 'error'로 변경
                     text1: '부분 초기화 완료',
                     text2: '일부 데이터는 초기화되었습니다. 앱을 재시작하면 완전히 정리됩니다.',
                     visibilityTime: 4000
@@ -607,19 +695,8 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 }}
             >
               {!planData ? (
-                  <Button
-                      w="100%"
-                      h={55}
-                      bg="#37C4B9"
-                      borderRadius="md"
-                      mb={3}
-                      _pressed={{
-                        bg: "#2BA89E"
-                      }}
-                      onPress={onOpen}
-                  >
-                    <Text color={color.white} fontSize={16} fontWeight={500}>일독 설정하기</Text>
-                  </Button>
+                  // 🔥 수정된 일독 설정하기 버튼 (날짜 완료 여부에 따라 활성화)
+                  renderSetupButton()
               ) : (
                   <Button
                       w="100%"
@@ -720,18 +797,18 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                     {/* 실시간 계산 결과 */}
                     {calculationResult && (
                         <VStack mt={2} pt={2} borderTopWidth={1} borderTopColor="#37C4B9">
-                          <Text fontSize={12} color="#37C4B9" textAlign="center" fontWeight="600">
+                          <Text fontSize={16} color="#37C4B9" textAlign="center" fontWeight="600">
                             🎯 계산 결과
                           </Text>
                           <HStack justifyContent="space-between" mt={1}>
-                            <Text fontSize={11} color="#666">하루 목표:</Text>
-                            <Text fontSize={11} color="#37C4B9" fontWeight="500">
+                            <Text fontSize={14} color="#666">하루 목표:</Text>
+                            <Text fontSize={14} color="#37C4B9" fontWeight="500">
                               {calculationResult.chaptersPerDay}장 / {calculationResult.minutesPerDay}분
                             </Text>
                           </HStack>
                           <HStack justifyContent="space-between">
-                            <Text fontSize={11} color="#666">총 기간:</Text>
-                            <Text fontSize={11} color="#37C4B9" fontWeight="500">
+                            <Text fontSize={14} color="#666">총 기간:</Text>
+                            <Text fontSize={14} color="#37C4B9" fontWeight="500">
                               {calculationResult.totalDays}일
                             </Text>
                           </HStack>

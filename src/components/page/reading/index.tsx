@@ -536,10 +536,10 @@ export default function ReadingBibleScreen() {
       const progressIndicator = (
           <Box bg="#E8F8F7" p={4} mx={4} mt={4} borderRadius="md">
             <VStack alignItems="center" space={2}>
-              <Text fontSize="16" fontWeight="600" color="#37C4B9">
+              <Text fontSize="20" fontWeight="600" color="#37C4B9">
                 📖 {getPlanTypeName(planData.planType)} 일독 진행중
               </Text>
-              <Text fontSize="12" color="#666" textAlign="center">
+              <Text fontSize="16" color="#666" textAlign="center">
                 하루 {planData.chaptersPerDay}장씩 • 예상시간 {planData.minutesPerDay}분
               </Text>
             </VStack>
