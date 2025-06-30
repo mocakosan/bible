@@ -485,12 +485,94 @@ export const useBibleReading = (readState?: any) => {
             // 경과 일수 계산 (0부터 시작)
             const daysPassed = Math.floor((currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
-            // 전역 장 인덱스 계산
-            const globalIndex = getGlobalChapterIndex(book, chapter);
+            // 🔥 계획 타입별로 다른 인덱스 계산 방식 사용
+            let chapterIndex = 0;
+            let isValidChapter = false;
+
+            switch (planData.planType) {
+                case 'psalms':
+                    // 시편 일독: 시편(19번책)만 계산
+                    if (book === 19) {
+                        chapterIndex = chapter - 1; // 시편 1장 = 인덱스 0
+                        isValidChapter = true;
+                    }
+                    break;
+
+                case 'pentateuch':
+                    // 모세오경 일독: 창세기(1)~신명기(5)만 계산
+                    if (book >= 1 && book <= 5) {
+                        // 모세오경 내에서의 순차적 인덱스 계산
+                        let totalChapters = 0;
+                        for (let b = 1; b < book; b++) {
+                            const bookInfo = BibleStep.find(step => step.index === b);
+                            if (bookInfo) {
+                                totalChapters += bookInfo.count;
+                            }
+                        }
+                        chapterIndex = totalChapters + chapter - 1;
+                        isValidChapter = true;
+                    }
+                    break;
+
+                case 'old_testament':
+                    // 구약 일독: 구약(1~39번책)만 계산
+                    if (book >= 1 && book <= 39) {
+                        // 구약 내에서의 순차적 인덱스 계산
+                        let totalChapters = 0;
+                        for (let b = 1; b < book; b++) {
+                            const bookInfo = BibleStep.find(step => step.index === b);
+                            if (bookInfo) {
+                                totalChapters += bookInfo.count;
+                            }
+                        }
+                        chapterIndex = totalChapters + chapter - 1;
+                        isValidChapter = true;
+                    }
+                    break;
+
+                case 'new_testament':
+                    // 신약 일독: 신약(40~66번책)만 계산
+                    if (book >= 40 && book <= 66) {
+                        // 신약 내에서의 순차적 인덱스 계산
+                        let totalChapters = 0;
+                        for (let b = 40; b < book; b++) {
+                            const bookInfo = BibleStep.find(step => step.index === b);
+                            if (bookInfo) {
+                                totalChapters += bookInfo.count;
+                            }
+                        }
+                        chapterIndex = totalChapters + chapter - 1;
+                        isValidChapter = true;
+                    }
+                    break;
+
+                case 'full_bible':
+                default:
+                    // 전체 성경 일독: 전역 인덱스 사용
+                    chapterIndex = getGlobalChapterIndex(book, chapter) - 1;
+                    isValidChapter = true;
+                    break;
+            }
+
+            // 해당 계획에 포함되지 않은 장
+            if (!isValidChapter) {
+                return 'normal';
+            }
 
             // 각 일차별 읽어야 할 장 계산
             const chaptersPerDay = planData.chaptersPerDay;
-            const chapterDay = Math.floor((globalIndex - 1) / chaptersPerDay); // 0부터 시작
+            const chapterDay = Math.floor(chapterIndex / chaptersPerDay); // 0부터 시작
+
+            // 디버깅 로그 (시편 1장, 창세기 1장만)
+            if ((book === 19 && chapter === 1 && planData.planType === 'psalms') ||
+                (book === 1 && chapter === 1 && planData.planType === 'pentateuch')) {
+                // console.log(`🔍 getChapterStatus Debug - ${book}권 ${chapter}장:`);
+                // console.log(`  planType: ${planData.planType}`);
+                // console.log(`  chapterIndex: ${chapterIndex}`);
+                // console.log(`  chaptersPerDay: ${chaptersPerDay}`);
+                // console.log(`  chapterDay: ${chapterDay}`);
+                // console.log(`  daysPassed: ${daysPassed}`);
+            }
 
             if (chapterDay === daysPassed) {
                 return 'today';

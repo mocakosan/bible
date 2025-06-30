@@ -293,7 +293,9 @@ function NewTestament({ readState, menuIndex }: Props) {
                                                     color: '#FFFFFF',
                                                     fontSize: 10,
                                                     fontWeight: 'bold',
-                                                    textAlign: 'center'
+                                                    textAlign: 'center',
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
                                                 }}
                                             >
                                                 !
