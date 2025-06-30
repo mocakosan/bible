@@ -331,8 +331,8 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                                           <FastImage
                                               source={require('../../../../assets/img/noRead.png')}
                                               style={{
-                                                  width: 11,
-                                                  height: 11,
+                                                  width: 16,
+                                                  height: 16,
                                               }}
                                               resizeMode={FastImage.resizeMode.contain}/>
                                         </View>
