@@ -26,22 +26,11 @@ export default function FirstModal({ data, isOpen, onClose }: Props) {
     });
   };
 
-  const windowWidth = Dimensions.get("window").width;
-  const windowHeight = Dimensions.get("window").height;
-  const imageHeight = windowWidth * (250 / 300);
-
   const renderItem = useCallback(
     ({ item }: { item: { image: string; link: string; id: number } }) => {
       const { id, link, image } = item;
       return (
         <Pressable key={image} onPress={() => onPressImage(id, link)}>
-          {/* <Image
-            width={windowWidth - 20}
-            height={imageHeight}
-            resizeMode="contain"
-            source={{ uri: image }}
-            alt={link}
-          /> */}
           <Image
             height={"100%"}
             width={300}
@@ -62,25 +51,11 @@ export default function FirstModal({ data, isOpen, onClose }: Props) {
   return (
     <>
       {!isEmpty(data) && isOpen && (
-        // <Modal
-        //   isOpen={isOpen}
-        //   onClose={onClose}
-        //   zIndex={20}
-        //   borderTopLeftRadius={50}
-        //   borderTopRightRadius={50}
-        //   marginTop={"90%"}
-        //   paddingBottom={"50%"}
-        //   backgroundColor={"#fff"}
-        //   width={windowWidth}
-        //   height={windowHeight}
-        // >
-        //   <Modal.Content height={imageHeight - 10} width={windowWidth - 20}>
         <Modal isOpen={isOpen} onClose={onClose} zIndex={20}>
           <Modal.Content height={500} width={300}>
             <Carousel
               loop
               width={300}
-              // width={windowWidth - 20}
               style={{ flex: 1 }}
               autoPlay={true}
               autoPlayInterval={5000}
@@ -98,30 +73,7 @@ export default function FirstModal({ data, isOpen, onClose }: Props) {
               </TouchableOpacity>
             </Box>
           </Modal.Content>
-          {/* <Box
-            bg={"#ffff"}
-            height={"23%"}
-            width={windowWidth}
-            marginTop={"30px"}
-            marginBottom={"30px"}
-            paddingLeft={"10px"}
-          >
-            <Button
-              borderRadius={10}
-              width={"90%"}
-              height={"40%"}
-              display={"flex"}
-              marginLeft={"10px"}
-              justifyItems={"center"}
-              alignItems={"center"}
-              backgroundColor={"#f1f1f1"}
-              onPress={onClose}
-            >
-              <Text color={"#323232"} fontWeight={"bold"} fontSize={"20px"}>
-                닫기
-              </Text>
-            </Button>
-          </Box> */}
+
           <Box bg={"#ffff"} width={300} height={"50px"}>
             <Button
               borderRadius={0}
