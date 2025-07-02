@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Box, Button, Center, HStack, Text, View } from 'native-base';
 import { useBaseStyle, useNativeNavigation } from '../../../hooks';
 import { BibleStep } from '../../../utils/define';
@@ -143,8 +143,18 @@ export function ChapterScreen2() {
     );
 }
 
-export default function ChapterScreen() {
-    const [menuIndex, setMenuIndex] = useState<number>(0);
+export default function ChapterScreen({ route }: any) {
+    // 라우트 파라미터에서 기본 탭 설정 가져오기
+    const defaultTab = route?.params?.defaultTab;
+
+    // 기본 탭에 따라 초기 menuIndex 설정
+    const getInitialMenuIndex = () => {
+        if (defaultTab === 'bible') return 0; // 성경탭
+        if (defaultTab === 'chapter') return 1; // 장탭
+        return 0; // 기본값은 성경탭
+    };
+
+    const [menuIndex, setMenuIndex] = useState<number>(getInitialMenuIndex());
     const { color } = useBaseStyle();
     const { navigation } = useNativeNavigation();
     const dispatch = useDispatch();
@@ -152,9 +162,19 @@ export default function ChapterScreen() {
     // MMKV에서 현재 값 읽기
     const BOOK = defaultStorage.getNumber('bible_book') ?? 1;
 
+    // 라우트 파라미터 변경 시 탭 업데이트
+    useEffect(() => {
+        if (defaultTab === 'bible') {
+            setMenuIndex(0);
+        } else if (defaultTab === 'chapter') {
+            setMenuIndex(1);
+        }
+    }, [defaultTab]);
+
     const onPressBook = (index: number, active: number) => {
         const newBook = index + 1;
-        setMenuIndex(active);
+        // 성경 선택 후 장탭으로 자동 이동
+        setMenuIndex(1);
 
         try {
             // MMKV 업데이트 (타입 확실히 하기)

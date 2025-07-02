@@ -29,14 +29,14 @@ function NumberList({ count, bookNumber, setActive, onPressJang }: Props) {
       }));
       dispatch(bibleTextSlice.actions.reset());
 
-      // 메뉴 인덱스 초기화
-      setActive(0);
+      console.log(`[NUMBER_LIST] 장 선택: ${bookNumber}권 ${jang}장`);
 
       // 부모 컴포넌트에서 전달된 콜백이 있으면 실행
       if (onPressJang) {
         onPressJang(jang);
       } else {
-        // 기본 동작: BibleScreen으로 네비게이션
+        // 기본 동작: BibleScreen으로 네비게이션 (backward compatibility)
+        setActive(0);
         navigation.navigate('BibleScreen', {});
       }
     } catch (error) {
