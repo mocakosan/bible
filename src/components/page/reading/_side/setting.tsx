@@ -150,20 +150,21 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
 
   // 🔥 일독 설정하기 버튼 렌더링 함수 (항상 같은 색상, 항상 클릭 가능)
   const renderSetupButton = () => {
+    const datesCompleted = isDatesCompleted();
     return (
         <Button
             w="100%"
             h={55}
-            bg="#37C4B9" // 🔥 항상 같은 색상 유지
+            bg={datesCompleted ? "#37C4B9" : "#ACACAC"} // 🔥 조건부 색상 적용
             borderRadius="md"
             mb={3}
             _pressed={{
-              bg: "#2BA89E" // 🔥 항상 같은 pressed 색상 유지
+              bg: datesCompleted ? "#2BA89E" : "#999999" // 🔥 pressed 상태도 조건부 적용
             }}
             onPress={handleSetupBibleReading} // 🔥 항상 클릭 가능하지만 내부에서 조건 체크
         >
           <Text
-              color={color.white} // 🔥 항상 흰색 텍스트 유지
+              color={color.white} // 🔥 텍스트는 항상 흰색 유지
               fontSize={16}
               fontWeight={500}
           >
@@ -293,6 +294,13 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
         ...pre,
         end: dayjs(date).format('YYYY년MM월DD일')
       }));
+
+      // 🆕 종료일 설정 후 일독 설정하기 안내 메시지
+      Toast.show({
+        type: 'success',
+        text1: '일독 설정하기를 눌러주세요',
+        text2: '목표일이 설정되었습니다. 이제 일독 설정하기 버튼을 눌러주세요'
+      });
 
       if (mmkv) {
         const { start } = JSON.parse(mmkv);
@@ -575,7 +583,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 borderBottomColor="#F0F0F0"
                 borderBottomWidth={1}
             >
-              <Text fontSize={16} fontWeight={600}>
+              <Text fontSize={20} fontWeight={600}>
                 {planData ? '일독 진행 현황' : '읽기 현황'}
               </Text>
               <Button
@@ -637,7 +645,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 borderBottomWidth={1}
             >
               <VStack>
-                <Text fontSize={16} fontWeight={600}>목표일</Text>
+                <Text fontSize={16} fontWeight={600}>종료일</Text>
                 <Text fontSize={14} color="#777777" mt={1}>
                   {calendarState.end}
                 </Text>
@@ -653,7 +661,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   onPress={() => planData ? null : setOpen(2)}
                   isDisabled={!!planData}
               >
-                <Text color={color.white} fontWeight={500}>목표일 선택</Text>
+                <Text color={color.white} fontWeight={500}>종료일 선택</Text>
               </Button>
             </HStack>
 
@@ -790,25 +798,25 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
               {/* 선택된 타입의 상세 정보 */}
               {selectedPlanType && (
                   <Box bg="#F0F9FF" p={3} borderRadius="md" mt={2}>
-                    <Text fontSize={14} color="#666" textAlign="center">
+                    <Text fontSize={20} color="#666" textAlign="center">
                       {DETAILED_BIBLE_PLAN_TYPES.find(t => t.id === selectedPlanType)?.description}
                     </Text>
 
                     {/* 실시간 계산 결과 */}
                     {calculationResult && (
                         <VStack mt={2} pt={2} borderTopWidth={1} borderTopColor="#37C4B9">
-                          <Text fontSize={16} color="#37C4B9" textAlign="center" fontWeight="600">
+                          <Text fontSize={22} color="#37C4B9" textAlign="center" fontWeight="600">
                             🎯 계산 결과
                           </Text>
                           <HStack justifyContent="space-between" mt={1}>
-                            <Text fontSize={14} color="#666">하루 목표:</Text>
-                            <Text fontSize={14} color="#37C4B9" fontWeight="500">
+                            <Text fontSize={20} color="#666">하루 목표:</Text>
+                            <Text fontSize={20} color="#37C4B9" fontWeight="500">
                               {calculationResult.chaptersPerDay}장 / {calculationResult.minutesPerDay}분
                             </Text>
                           </HStack>
                           <HStack justifyContent="space-between">
-                            <Text fontSize={14} color="#666">총 기간:</Text>
-                            <Text fontSize={14} color="#37C4B9" fontWeight="500">
+                            <Text fontSize={20} color="#666">총 기간:</Text>
+                            <Text fontSize={20} color="#37C4B9" fontWeight="500">
                               {calculationResult.totalDays}일
                             </Text>
                           </HStack>

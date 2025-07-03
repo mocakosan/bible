@@ -83,7 +83,8 @@ function ReadingHeaderLayout({ title, list, menuIndex, onMenuChange }: Props) {
               <Text
                 color={index === menuIndex ? color.white : color.gray1}
                 style={{
-                  fontWeight: '900'
+                  fontWeight: '900',
+                  fontSize:20
                 }}
               >
                 {name}

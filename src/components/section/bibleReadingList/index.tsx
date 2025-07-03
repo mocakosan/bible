@@ -8,7 +8,7 @@ interface Props {
   menuIndex: number;
   onPress: (index: number) => void;
 }
-function BibleList({ vector, menuIndex, onPress }: Props) {
+function BibleReadingList({ vector, menuIndex, onPress }: Props) {
   const { color } = useBaseStyle();
   const list = vector
       ? ['공유', '복사', '북마크', '형광펜', '취소']
@@ -48,4 +48,4 @@ function BibleList({ vector, menuIndex, onPress }: Props) {
       </HStack>
   );
 }
-export default memo(BibleList);
+export default memo(BibleReadingList);

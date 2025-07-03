@@ -324,8 +324,15 @@ export default function ReadingBibleScreen() {
   }, [loadReadingState, updateMenuAndData]);
 
   // 간단한 진도 표시 컴포넌트
+  // 간단한 진도 표시 컴포넌트 - 텍스트 에러 수정 및 크기 4포인트씩 증가
   const ProgressView = useCallback(() => {
-    if (!planData) return null;
+    if (!planData) {
+      return (
+          <Box flex={1} justifyContent="center" alignItems="center">
+            <Text fontSize="18" color="#666">일독 계획이 없습니다</Text>
+          </Box>
+      );
+    }
 
     const progress = calculateProgress(planData);
     const missedCount = calculateMissedChapters(planData);
@@ -365,17 +372,17 @@ export default function ReadingBibleScreen() {
           {/* 진행률 카드 */}
           <Box bg="white" mx={4} mt={4} p={4} borderRadius="md" shadow={1}>
             <VStack space={3}>
-              <Text fontSize="18" fontWeight="600" color="#333">
+              <Text fontSize="22" fontWeight="600" color="#333">
                 📊 일독 진행 현황
               </Text>
 
               {/* 진행률 바 */}
               <Box>
                 <HStack justifyContent="space-between" mb={2}>
-                  <Text fontSize="14" color="#666">
+                  <Text fontSize="18" color="#666">
                     진행률
                   </Text>
-                  <Text fontSize="14" fontWeight="600" color={getStatusColor(progress.progressPercentage)}>
+                  <Text fontSize="18" fontWeight="600" color={getStatusColor(progress.progressPercentage)}>
                     {progress.progressPercentage.toFixed(1)}%
                   </Text>
                 </HStack>
@@ -391,72 +398,55 @@ export default function ReadingBibleScreen() {
               {/* 통계 정보 */}
               <HStack justifyContent="space-around" pt={2}>
                 <VStack alignItems="center">
-                  <Text fontSize="20" fontWeight="600" color="#37C4B9">
+                  <Text fontSize="24" fontWeight="600" color="#37C4B9">
                     {progress.completedChapters}
                   </Text>
-                  <Text fontSize="12" color="#666">
+                  <Text fontSize="16" color="#666">
                     읽은 장
                   </Text>
                 </VStack>
                 <VStack alignItems="center">
-                  <Text fontSize="20" fontWeight="600" color="#666">
+                  <Text fontSize="24" fontWeight="600" color="#666">
                     {progress.totalChapters}
                   </Text>
-                  <Text fontSize="12" color="#666">
+                  <Text fontSize="16" color="#666">
                     전체 장
                   </Text>
                 </VStack>
                 <VStack alignItems="center">
-                  <Text fontSize="20" fontWeight="600" color="#FF9800">
-                    {getDaysRemaining()}
+                  <Text fontSize="24" fontWeight="600" color="#F44336">
+                    {missedCount}
                   </Text>
-                  <Text fontSize="12" color="#666">
-                    남은 일수
+                  <Text fontSize="16" color="#666">
+                    놓친 장
                   </Text>
                 </VStack>
               </HStack>
-
-              {/* 놓친 장수 표시 */}
-              {missedCount > 0 && (
-                  <Box bg="#FFEBEE" p={3} borderRadius="md" mt={2}>
-                    <HStack alignItems="center" space={2}>
-                      <Text fontSize="16">⚠️</Text>
-                      <Text fontSize="14" color="#C62828">
-                        놓친 장: {missedCount}개
-                      </Text>
-                    </HStack>
-                  </Box>
-              )}
             </VStack>
           </Box>
 
-          {/* 일독 정보 카드 */}
+          {/* 일정 정보 카드 */}
           <Box bg="white" mx={4} mt={4} p={4} borderRadius="md" shadow={1}>
             <VStack space={3}>
-              <Text fontSize="18" fontWeight="600" color="#333">
-                📖 일독 정보
+              <Text fontSize="22" fontWeight="600" color="#333">
+                📅 일독 정보
               </Text>
-
               <VStack space={2}>
                 <HStack justifyContent="space-between">
-                  <Text fontSize="14" color="#666">계획명</Text>
-                  <Text fontSize="14" fontWeight="500">{planData.planName}</Text>
+                  <Text fontSize="18" color="#666">계획 유형</Text>
+                  <Text fontSize="18" fontWeight="500">{planData.planName}</Text>
                 </HStack>
                 <HStack justifyContent="space-between">
-                  <Text fontSize="14" color="#666">시작일</Text>
-                  <Text fontSize="14" fontWeight="500">{formatDate(planData.startDate)}</Text>
+                  <Text fontSize="18" color="#666">하루 목표</Text>
+                  <Text fontSize="18" fontWeight="500">{planData.chaptersPerDay}장</Text>
                 </HStack>
                 <HStack justifyContent="space-between">
-                  <Text fontSize="14" color="#666">목표일</Text>
-                  <Text fontSize="14" fontWeight="500">{formatDate(planData.targetDate)}</Text>
+                  <Text fontSize="18" color="#666">예상 시간</Text>
+                  <Text fontSize="18" fontWeight="500">{planData.minutesPerDay}분</Text>
                 </HStack>
                 <HStack justifyContent="space-between">
-                  <Text fontSize="14" color="#666">하루 분량</Text>
-                  <Text fontSize="14" fontWeight="500">{planData.chaptersPerDay}장</Text>
-                </HStack>
-                <HStack justifyContent="space-between">
-                  <Text fontSize="14" color="#666">예상 시간</Text>
-                  <Text fontSize="14" fontWeight="500">{planData.minutesPerDay}분</Text>
+                  <Text fontSize="18" color="#666">남은 일수</Text>
+                  <Text fontSize="18" fontWeight="500">{getDaysRemaining()}일</Text>
                 </HStack>
               </VStack>
             </VStack>
@@ -471,7 +461,7 @@ export default function ReadingBibleScreen() {
                 borderRadius="md"
                 py={3}
             >
-              <Text color="white" fontSize="16" fontWeight="600">
+              <Text color="white" fontSize="20" fontWeight="600">
                 📈 상세 진도 보기
               </Text>
             </Button>
@@ -484,7 +474,7 @@ export default function ReadingBibleScreen() {
                 borderRadius="md"
                 py={3}
             >
-              <Text color="#FF5722" fontSize="16" fontWeight="600">
+              <Text color="#FF5722" fontSize="20" fontWeight="600">
                 🔄 일독 계획 초기화
               </Text>
             </Button>

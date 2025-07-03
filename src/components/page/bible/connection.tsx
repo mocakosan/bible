@@ -29,6 +29,7 @@ import BibleList from "../../section/bibleList";
 import BibleConectionSubPage from "./_side/bible_conec";
 import OtherPage from "./_side/other";
 import React from "react";
+import BibleReadingList from "../../section/bibleReadingList";
 
 export default function BibleConectionScreen() {
     const dispatch = useDispatch();
@@ -438,7 +439,7 @@ export default function BibleConectionScreen() {
                             sound,
                         }}
                     />
-                    {!sound && <BibleList vector={false} menuIndex={menuIndex} onPress={onMenuPress} />}
+                    {!sound && <BibleReadingList vector={false} menuIndex={menuIndex} onPress={onMenuPress} />}
                     <IllDocPlayFooterLayout
                         ref={audioPlayerRef}
                         onTrigger={handleUpdateData}
