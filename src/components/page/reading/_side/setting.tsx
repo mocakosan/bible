@@ -571,34 +571,34 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
           <Calender isOpen={open} onClose={setOpen} onChange={onDateChange} />
           {planData && (
               <>
-              <Box w="100%" h={38} bg="#F0F0F0" justifyContent="center">
-              </Box>
-              <HStack
-              h={70}
-              alignItems="center"
-              justifyContent="space-between"
-              px={4}
-              borderBottomColor="#F0F0F0"
-              borderBottomWidth={1}
-              >
-              <Text fontSize={20} fontWeight={600}>
-                일독 진행 현황
-              </Text>
-              <Button
-                  w={120}
-                  h={45}
-                  bg="#37C4B9"
-                  borderRadius="md"
-                  _pressed={{
-                    bg: "#2BA89E"
-                  }}
-                  onPress={onNavigate}
-              >
-                <Text color={color.white} fontWeight={500}>
-                  일독 보기
-                </Text>
-                </Button>
-               </HStack>
+                <Box w="100%" h={38} bg="#F0F0F0" justifyContent="center">
+                </Box>
+                <HStack
+                    h={70}
+                    alignItems="center"
+                    justifyContent="space-between"
+                    px={4}
+                    borderBottomColor="#F0F0F0"
+                    borderBottomWidth={1}
+                >
+                  <Text fontSize={20} fontWeight={600}>
+                    일독 진행 현황
+                  </Text>
+                  <Button
+                      w={120}
+                      h={45}
+                      bg="#37C4B9"
+                      borderRadius="md"
+                      _pressed={{
+                        bg: "#2BA89E"
+                      }}
+                      onPress={onNavigate}
+                  >
+                    <Text color={color.white} fontWeight={500}>
+                      일독 보기
+                    </Text>
+                  </Button>
+                </HStack>
               </>
           )}
           <Box bg={color.white}>
@@ -621,7 +621,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
               </VStack>
               <VStack>
                 <Text fontSize={16} color="#777777" >
-                {calendarState.start}
+                  {calendarState.start}
                 </Text>
               </VStack>
               <Button
