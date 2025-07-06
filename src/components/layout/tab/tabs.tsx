@@ -48,7 +48,17 @@ const Tabs = ({ selectedIndex, onSelectHandler, menus }: Props) => {
                     }}
                 >
                     <Text
-                        style={{ fontWeight: '300',color:'#000000',fontSize:14}}
+                        style={{
+                            fontFamily: 'Pretendard',
+                            fontWeight: '400',
+                            fontSize: 16,
+                            lineHeight: 20,
+                            letterSpacing: 0,
+                            textAlign: 'center',
+                            color: '#000000',
+                            includeFontPadding: false,
+                            textAlignVertical: 'center',
+                        }}
                     >
                         {v}
                     </Text>

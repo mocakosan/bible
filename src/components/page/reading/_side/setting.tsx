@@ -166,7 +166,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
           <Text
               color={color.white} // 🔥 텍스트는 항상 흰색 유지
               fontSize={16}
-              fontWeight={500}
+              fontWeight={700}
           >
             일독 설정하기
           </Text>
@@ -569,22 +569,20 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
       <>
         <ScrollView style={{ backgroundColor: color.white }}>
           <Calender isOpen={open} onClose={setOpen} onChange={onDateChange} />
-          <Box bg={color.white}>
-            {/* 읽기 현황 섹션 */}
-            <Box w="100%" h={38} bg="#F0F0F0" justifyContent="center">
-            </Box>
-
-            {/* 진도 보기 버튼이 있는 행 */}
-            <HStack
-                h={70}
-                alignItems="center"
-                justifyContent="space-between"
-                px={4}
-                borderBottomColor="#F0F0F0"
-                borderBottomWidth={1}
-            >
+          {planData && (
+              <>
+              <Box w="100%" h={38} bg="#F0F0F0" justifyContent="center">
+              </Box>
+              <HStack
+              h={70}
+              alignItems="center"
+              justifyContent="space-between"
+              px={4}
+              borderBottomColor="#F0F0F0"
+              borderBottomWidth={1}
+              >
               <Text fontSize={20} fontWeight={600}>
-                {planData ? '일독 진행 현황' : '읽기 현황'}
+                일독 진행 현황
               </Text>
               <Button
                   w={120}
@@ -597,13 +595,17 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   onPress={onNavigate}
               >
                 <Text color={color.white} fontWeight={500}>
-                  {planData ? '일독 보기' : '진도 보기'}
+                  일독 보기
                 </Text>
-              </Button>
-            </HStack>
+                </Button>
+               </HStack>
+              </>
+          )}
+          <Box bg={color.white}>
+            {/* 읽기 현황 섹션 */}
 
-            <Box w="100%" h={38} bg="#F0F0F0" justifyContent="center">
-            </Box>
+
+
 
             {/* 시작일 섹션 */}
             <HStack
@@ -615,9 +617,11 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 borderBottomWidth={1}
             >
               <VStack>
-                <Text fontSize={16} fontWeight={600}>시작일</Text>
-                <Text fontSize={14} color="#777777" mt={1}>
-                  {calendarState.start}
+                <Text fontSize={18} fontWeight={600}>시작일</Text>
+              </VStack>
+              <VStack>
+                <Text fontSize={16} color="#777777" >
+                {calendarState.start}
                 </Text>
               </VStack>
               <Button
@@ -631,7 +635,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   onPress={() => planData ? null : setOpen(1)}
                   isDisabled={!!planData}
               >
-                <Text color={color.white} fontWeight={500}>시작일 선택</Text>
+                <Text color={color.white}  fontSize={16} fontWeight={500}>시작일 선택</Text>
               </Button>
             </HStack>
 
@@ -645,8 +649,10 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 borderBottomWidth={1}
             >
               <VStack>
-                <Text fontSize={16} fontWeight={600}>종료일</Text>
-                <Text fontSize={14} color="#777777" mt={1}>
+                <Text fontSize={18} fontWeight={600}>종료일</Text>
+              </VStack>
+              <VStack>
+                <Text fontSize={16} color="#777777">
                   {calendarState.end}
                 </Text>
               </VStack>
@@ -661,7 +667,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   onPress={() => planData ? null : setOpen(2)}
                   isDisabled={!!planData}
               >
-                <Text color={color.white} fontWeight={500}>종료일 선택</Text>
+                <Text color={color.white} fontSize={16} fontWeight={500}>종료일 선택</Text>
               </Button>
             </HStack>
 
@@ -736,7 +742,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   }}
                   onPress={onReset}
               >
-                <Text color="#37C4B9" fontSize={16} fontWeight={500}>설정초기화</Text>
+                <Text color="#37C4B9" fontSize={16} fontWeight={700}>설정초기화</Text>
               </Button>
             </View>
           </Box>
