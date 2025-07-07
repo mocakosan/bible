@@ -45,28 +45,36 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
   const [missedCount, setMissedCount] = useState(0);
   const [calculationResult, setCalculationResult] = useState<any>(null);
 
-  // ! 시작, 끝 날짜 분리
+  // ! 시작, 끝 날짜 분리 - 초기값을 null로 설정
   const [calendarState, setCalenderState] = useState<{
-    start: string;
-    end: string;
+    start: string | null;
+    end: string | null;
   }>({
-    start: dayjs(new Date()).format('YYYY년MM월DD일'),
-    end: dayjs(new Date()).format('YYYY년MM월DD일')
+    start: null,
+    end: null
   });
 
   const convertDate = (type: 'start' | 'end') => {
-    const result: { [key: string]: string } = calendarState;
+    const result: { [key: string]: string | null } = calendarState;
+    const dateString = result[type];
+
+    if (!dateString) {
+      return dayjs(new Date()); // null인 경우 오늘 날짜 반환
+    }
+
     return dayjs(
-        result[type].replace('년', '-').replace('월', '-').replace('일', '')
+        dateString.replace('년', '-').replace('월', '-').replace('일', '')
     );
   };
 
   const s1Day = () => {
+    if (!calendarState.start || !calendarState.end) return 1;
     const result = dayjs(convertDate('end')).diff(convertDate('start'), 'day');
     return result >= 0 ? result + 1 : 1;
   };
 
   const s2Day = () => {
+    if (!calendarState.start) return 1;
     const nowDate = dayjs(new Date());
     const result = dayjs(nowDate).diff(convertDate('start'), 'day');
     return result >= 0 ? result + 1 : 1;
@@ -100,30 +108,21 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
 
   // 🔥 날짜 선택 완료 및 유효성 확인 함수
   const isDatesCompleted = () => {
-    const today = dayjs(new Date()).format('YYYY년MM월DD일');
-    const startDate = calendarState.start;
-    const endDate = calendarState.end;
+    // 시작일과 종료일이 모두 선택되었는지 확인
+    if (!calendarState.start || !calendarState.end) return false;
 
-    // 1. 시작일과 목표일이 모두 초기값(오늘)이 아닌 경우에만 기본 완료
-    const basicCompleted = startDate !== today || endDate !== today;
-
-    // 2. 목표일이 시작일보다 이후인지 확인
+    // 목표일이 시작일보다 이후인지 확인
     const startDateObj = convertDate('start');
     const endDateObj = convertDate('end');
     const isEndDateAfterStart = endDateObj.isAfter(startDateObj) || endDateObj.isSame(startDateObj);
 
-    // 두 조건 모두 만족해야 완료
-    return basicCompleted && isEndDateAfterStart;
+    return isEndDateAfterStart;
   };
 
   // 🔥 일독 설정하기 버튼 클릭 핸들러 (유효성 검사 강화)
   const handleSetupBibleReading = () => {
-    const today = dayjs(new Date()).format('YYYY년MM월DD일');
-    const startDate = calendarState.start;
-    const endDate = calendarState.end;
-
     // 1. 기본 날짜 설정 확인
-    if (startDate === today && endDate === today) {
+    if (!calendarState.start || !calendarState.end) {
       Toast.show({
         type: 'error',
         text1: '날짜 설정이 필요합니다',
@@ -182,15 +181,14 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
       if (mmkv) {
         const result = JSON.parse(mmkv);
         setCalenderState({
-          start: dayjs(result.start ?? new Date()).format('YYYY년MM월DD일'),
-          end: dayjs(result.end ?? new Date()).format('YYYY년MM월DD일')
+          start: result.start ? dayjs(result.start).format('YYYY년MM월DD일') : null,
+          end: result.end ? dayjs(result.end).format('YYYY년MM월DD일') : null
         });
       } else {
-        // MMKV 데이터가 없으면 오늘 날짜로 초기화
-        const today = dayjs(new Date()).format('YYYY년MM월DD일');
+        // MMKV 데이터가 없으면 null로 초기화 (날짜 미표시)
         setCalenderState({
-          start: today,
-          end: today
+          start: null,
+          end: null
         });
       }
     };
@@ -231,7 +229,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
 
   const onDateChange = (date: string) => {
     if (open === 1) {
-      // 🔥 시작일 선택: 제한 없이 자유롭게 선택 가능
+      // 🔥 시작일 선택: 제한 없이 자유롭게 선택 가능 (오늘 날짜도 허용)
       const selectedStartDate = dayjs(date);
 
       // 시작일 설정 (과거, 현재, 미래 모든 날짜 허용)
@@ -249,21 +247,30 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
 
       // 로컬 스토리지 업데이트
       if (mmkv) {
-        const { end } = JSON.parse(mmkv);
-        const result = Object.assign({
-          start: new Date(date),
-          ...(end && { end })
+        const parsed = JSON.parse(mmkv);
+        const result = Object.assign(parsed, {
+          start: new Date(date)
         });
         defaultStorage.set('calender', JSON.stringify(result));
       } else {
-        const result = Object.assign({
+        const result = {
           start: new Date(date)
-        });
+        };
         defaultStorage.set('calender', JSON.stringify(result));
       }
     } else {
       // 🔥 목표일 선택 로직 수정
       const selectedEndDate = dayjs(date);
+
+      // 시작일이 설정되지 않은 경우 처리
+      if (!calendarState.start) {
+        Toast.show({
+          type: 'error',
+          text1: '시작일을 먼저 선택해주세요'
+        });
+        return;
+      }
+
       const currentStartDate = convertDate('start');
 
       // 1. 오늘 이전 날짜 체크 (기존 로직 유지)
@@ -302,17 +309,17 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
         text2: '목표일이 설정되었습니다. 이제 일독 설정하기 버튼을 눌러주세요'
       });
 
+      // 로컬 스토리지 업데이트
       if (mmkv) {
-        const { start } = JSON.parse(mmkv);
-        const result = Object.assign({
-          ...(start && { start }),
+        const parsed = JSON.parse(mmkv);
+        const result = Object.assign(parsed, {
           end: new Date(date)
         });
         defaultStorage.set('calender', JSON.stringify(result));
       } else {
-        const result = Object.assign({
+        const result = {
           end: new Date(date)
-        });
+        };
         defaultStorage.set('calender', JSON.stringify(result));
       }
     }
@@ -414,11 +421,10 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   setSelectedPlanType('');
                   setCalculationResult(null);
 
-                  // 캘린더 상태를 오늘 날짜로 초기화
-                  const today = dayjs(new Date()).format('YYYY년MM월DD일');
+                  // 캘린더 상태를 null로 초기화 (날짜 미표시)
                   setCalenderState({
-                    start: today,
-                    end: today
+                    start: null,
+                    end: null
                   });
 
                   console.log('로컬 상태 초기화 완료');
@@ -604,9 +610,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
           <Box bg={color.white}>
             {/* 읽기 현황 섹션 */}
 
-
-
-
             {/* 시작일 섹션 */}
             <HStack
                 h={70}
@@ -620,9 +623,11 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 <Text fontSize={18} fontWeight={600}>시작일</Text>
               </VStack>
               <VStack>
-                <Text fontSize={16} color="#777777" >
-                  {calendarState.start}
-                </Text>
+                {calendarState.start && (
+                    <Text fontSize={16} color="#777777" >
+                      {calendarState.start}
+                    </Text>
+                )}
               </VStack>
               <Button
                   w={120}
@@ -652,9 +657,11 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 <Text fontSize={18} fontWeight={600}>종료일</Text>
               </VStack>
               <VStack>
-                <Text fontSize={16} color="#777777">
-                  {calendarState.end}
-                </Text>
+                {calendarState.end && (
+                    <Text fontSize={16} color="#777777">
+                      {calendarState.end}
+                    </Text>
+                )}
               </VStack>
               <Button
                   w={120}
