@@ -5,7 +5,7 @@ import Calender from '../../../section/calendar';
 
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
-import { ScrollView, View, Alert } from 'react-native';
+import {ScrollView, View, Alert, Image} from 'react-native';
 import { Toast } from 'react-native-toast-message/lib/src/Toast';
 import { bibleSetting, fetchSql } from '../../../../utils';
 import { defaultStorage } from '../../../../utils/mmkv';
@@ -96,40 +96,38 @@ const DurationControlComponent = ({ startDate, endDate, onEndDateChange, planDat
         </VStack>
 
         <HStack alignItems="center" space={3}>
-          <Text fontSize={16} color="#37C4B9" fontWeight={600}>
+          <Text fontSize={16} color="#37C4B9" fontWeight={600} mr={6}>
             {totalDays}일
           </Text>
 
           {/* 기간 조정 버튼들 - 기존 플랜이 없을 때만 활성화 */}
           <HStack space={1}>
             <Button
-                w={10}
-                h={10}
+                w={18}
+                h={22}
                 bg="transparent"
                 borderRadius="sm"
                 p={0}
                 onPress={() => !planData && adjustEndDate('up')}
                 isDisabled={!!planData}
                 _pressed={{ bg: "transparent" }}
+                mr={6}
             >
-              <Text fontSize="16" color={planData ? "#999999" : "#37C4B9"}>
-                🔼
-              </Text>
+             <Image source={require('../../../../assets/img/up.png')}/>
             </Button>
 
             <Button
-                w={10}
-                h={10}
+                w={18}
+                h={22}
                 bg="transparent"
                 borderRadius="sm"
                 p={0}
                 onPress={() => !planData && adjustEndDate('down')}
                 isDisabled={!!planData}
                 _pressed={{ bg: "transparent" }}
+                mr={2}
             >
-              <Text fontSize="16" color={planData ? "#999999" : "#37C4B9"}>
-                🔽
-              </Text>
+              <Image source={require('../../../../assets/img/down.png')}/>
             </Button>
           </HStack>
         </HStack>
