@@ -1,4 +1,4 @@
-// src/components/page/reading/index.tsx - 빌드 오류 해결된 완전한 코드
+// src/components/page/reading/index.tsx - 일독 진행 현황 섹션 수정
 
 import {useFocusEffect, useIsFocused} from "@react-navigation/native";
 import { useCallback, useEffect, useState } from "react";
@@ -25,6 +25,7 @@ import { defaultStorage } from "../../../utils/mmkv";
 import Tabs from "../../layout/tab/tabs";
 import BackHeaderLayout from "../../layout/header/backHeader";
 import ProgressScreen from "../progs";
+import dayjs from 'dayjs';
 
 export default function ReadingBibleScreen() {
   const [menuIndex, setMenuIndex] = useState<number>(2);
@@ -60,6 +61,24 @@ export default function ReadingBibleScreen() {
       case 'pentateuch': return '모세오경';
       case 'psalms': return '시편';
       default: return '성경';
+    }
+  }, []);
+
+  // 일독 타입별 설명 가져오기
+  const getPlanTypeDescription = useCallback((planType: string): string => {
+    switch (planType) {
+      case 'full_bible':
+        return '창세기 1장 ~ 요한계시록 22장';
+      case 'old_testament':
+        return '창세기 1장 ~ 말라기 4장';
+      case 'new_testament':
+        return '마태복음 1장 ~ 요한계시록 22장';
+      case 'pentateuch':
+        return '창세기 1장 ~ 신명기 34장';
+      case 'psalms':
+        return '시편 1장 ~ 시편 150장';
+      default:
+        return '창세기 1장 ~ 요한계시록 22장';
     }
   }, []);
 
@@ -448,15 +467,50 @@ export default function ReadingBibleScreen() {
     }
 
     if (planData && menuIndex === 0) {
+      // 🆕 첨부 이미지와 동일한 일독 진행 현황 박스
       const progressIndicator = (
-          <Box bg="#E8F8F7" p={4} mx={4} mt={4} borderRadius="md">
-            <VStack alignItems="center" space={2}>
-              <Text fontSize="20" fontWeight="600" color="#37C4B9">
-                📖 {getPlanTypeName(planData.planType)} 일독 진행중
-              </Text>
+          <Box bg="#E8F8F7" mx={4} mt={4} p={4} borderRadius="md">
+            <VStack space={3}>
+              {/* 상단 설명 */}
+
               <Text fontSize="16" color="#666" textAlign="center">
-                하루 {planData.chaptersPerDay}장씩 • 예상시간 {planData.minutesPerDay || Math.round(planData.chaptersPerDay * 4.5)}분
+                {getPlanTypeDescription(planData.planType)}
               </Text>
+
+              {/* 중앙 일독 진행중 텍스트 */}
+              <HStack justifyContent="center" alignItems="center" space={2}>
+                <Text fontSize="19" color="#37C4B9">📖</Text>
+                <Text fontSize="19" color="#37C4B9" fontWeight="600">
+                  {getPlanTypeName(planData.planType)} 일독 진행중
+                </Text>
+              </HStack>
+
+              {/* 하단 기간 정보 */}
+              <VStack space={1}>
+                <HStack justifyContent="space-between" alignItems="center">
+                  <Text fontSize="18" color="#666">총 기간 :</Text>
+                  <HStack alignItems="baseline">
+                    <Text fontSize="16" color="#666">
+                      {dayjs(planData.startDate).format('YY.MM.DD')} ~ {dayjs(planData.targetDate).format('YY.MM.DD')}
+                    </Text>
+                    <Text fontSize="18" color="#37C4B9" fontWeight="600" ml={2}>
+                      {planData.totalDays}일
+                    </Text>
+                  </HStack>
+                </HStack>
+
+                <HStack justifyContent="space-between" alignItems="center">
+                  <Text fontSize="18" color="#666">하루목표 :</Text>
+                  <HStack alignItems="baseline">
+                    <Text fontSize="18" color="#37C4B9" fontWeight="700">
+                      {planData.chaptersPerDay}장
+                    </Text>
+                    <Text fontSize="18" color="#37C4B9" ml={1} fontWeight="700">
+                      / {planData.minutesPerDay}분
+                    </Text>
+                  </HStack>
+                </HStack>
+              </VStack>
             </VStack>
           </Box>
       );
@@ -604,7 +658,7 @@ export default function ReadingBibleScreen() {
     }
 
     return null;
-  }, [isLoading, safeMenuList, menuIndex, mark, planData, forceUpdateKey, color.white, handleChangeUpdateData, isFocused, ProgressView, getPlanTypeName]);
+  }, [isLoading, safeMenuList, menuIndex, mark, planData, forceUpdateKey, color.white, handleChangeUpdateData, isFocused, ProgressView, getPlanTypeName, getPlanTypeDescription]);
 
   // 컴포넌트 마운트 시 전역 새로고침 콜백 등록
   useEffect(() => {

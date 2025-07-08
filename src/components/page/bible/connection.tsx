@@ -111,13 +111,6 @@ export default function BibleConectionScreen() {
 
         try {
             // 1. 재생 완료 알림 (즉시 표시)
-            Toast.show({
-                type: "success",
-                text1: "🎵 오디오 재생 완료",
-                text2: "자동으로 읽었음 체크 후 다음 장으로 이동합니다.",
-                visibilityTime: 2000,
-                position: "top",
-            });
 
             // 2. 짧은 대기 (사용자가 메시지를 확인할 수 있도록)
             await new Promise(resolve => setTimeout(resolve, 800));
@@ -133,14 +126,6 @@ export default function BibleConectionScreen() {
             updateReadingTableCache(BOOK, JANG, true);
             console.log('🔄 Connection: Re-updated cache for safety');
 
-            // 5. 읽었음 체크 완료 알림
-            Toast.show({
-                type: "info",
-                text1: "✅ 읽었음 체크 완료",
-                text2: "잠시 후 다음 장으로 이동합니다.",
-                visibilityTime: 1500,
-                position: "top",
-            });
 
             // 6. 추가 대기 후 다음 장으로 이동
             await new Promise(resolve => setTimeout(resolve, 1000));

@@ -1,3 +1,4 @@
+// src/components/page/reading/_side/setting.tsx
 import { Box, Button, HStack, Text, VStack, Actionsheet, useDisclose, Badge } from 'native-base';
 import { useBaseStyle, useNativeNavigation } from '../../../../hooks';
 import Calender from '../../../section/calendar';
@@ -29,6 +30,112 @@ interface Props {
   readState: any;
   onTrigger: () => void;
 }
+
+// 🆕 총기간 컨트롤 컴포넌트
+const DurationControlComponent = ({ startDate, endDate, onEndDateChange, planData }: any) => {
+  // 문자열 날짜를 dayjs 객체로 변환
+  const convertStringToDate = (dateString: string) => {
+    const cleaned = dateString.replace(/년|월/g, '-').replace(/일/g, '');
+    return dayjs(cleaned);
+  };
+
+  // 총 기간 계산
+  const calculateTotalDays = () => {
+    if (!startDate || !endDate) return 0;
+
+    const start = convertStringToDate(startDate);
+    const end = convertStringToDate(endDate);
+
+    return end.diff(start, 'day') + 1; // 시작일 포함
+  };
+
+  // 종료일 조정
+  const adjustEndDate = (direction: 'up' | 'down') => {
+    if (!endDate || planData) return; // 기존 플랜이 있으면 수정 불가
+
+    const currentEnd = convertStringToDate(endDate);
+    const start = convertStringToDate(startDate);
+
+    let newEndDate;
+    if (direction === 'up') {
+      newEndDate = currentEnd.add(1, 'day');
+    } else {
+      newEndDate = currentEnd.subtract(1, 'day');
+    }
+
+    // 시작일보다 이전으로 갈 수 없게 제한
+    if (newEndDate.isBefore(start)) {
+      return;
+    }
+
+    // 새로운 종료일을 원래 형태로 변환
+    const formattedDate = newEndDate.format('YYYY년MM월DD일');
+    onEndDateChange(formattedDate);
+  };
+
+  const totalDays = calculateTotalDays();
+
+  // 종료일이 선택되었을 때만 렌더링
+  if (!startDate || !endDate) {
+    return null;
+  }
+
+  return (
+      /* 이미지와 동일한 총기간 섹션 */
+      <HStack
+          h={70}
+          alignItems="center"
+          justifyContent="space-between"
+          px={4}
+          borderBottomColor="#F0F0F0"
+          borderBottomWidth={1}
+          bg="white"
+      >
+        <VStack>
+          <Text fontSize={18} fontWeight={600}>총 기간</Text>
+        </VStack>
+
+        <HStack alignItems="center" space={3}>
+          <Text fontSize={16} color="#37C4B9" fontWeight={600}>
+            {totalDays}일
+          </Text>
+
+          {/* 기간 조정 버튼들 - 기존 플랜이 없을 때만 활성화 */}
+          <HStack space={1}>
+            <Button
+                w={10}
+                h={10}
+                bg="transparent"
+                borderRadius="sm"
+                p={0}
+                onPress={() => !planData && adjustEndDate('up')}
+                isDisabled={!!planData}
+                _pressed={{ bg: "transparent" }}
+            >
+              <Text fontSize="16" color={planData ? "#999999" : "#37C4B9"}>
+                🔼
+              </Text>
+            </Button>
+
+            <Button
+                w={10}
+                h={10}
+                bg="transparent"
+                borderRadius="sm"
+                p={0}
+                onPress={() => !planData && adjustEndDate('down')}
+                isDisabled={!!planData}
+                _pressed={{ bg: "transparent" }}
+            >
+              <Text fontSize="16" color={planData ? "#999999" : "#37C4B9"}>
+                🔽
+              </Text>
+            </Button>
+          </HStack>
+        </HStack>
+      </HStack>
+  );
+};
 
 export default function SettingSidePage({ readState, onTrigger }: Props) {
   const { color } = useBaseStyle();
@@ -171,6 +278,33 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
           </Text>
         </Button>
     );
+  };
+
+  // 🆕 종료일 변경 핸들러 추가
+  const handleEndDateChange = (newEndDate: string) => {
+    setCalenderState(prev => ({
+      ...prev,
+      end: newEndDate
+    }));
+
+    // 로컬 스토리지도 업데이트
+    const convertStringToDate = (dateString: string) => {
+      const cleaned = dateString.replace(/년|월/g, '-').replace(/일/g, '');
+      return dayjs(cleaned);
+    };
+
+    if (mmkv) {
+      const parsed = JSON.parse(mmkv);
+      const result = Object.assign(parsed, {
+        end: convertStringToDate(newEndDate).toDate()
+      });
+      defaultStorage.set('calender', JSON.stringify(result));
+    } else {
+      const result = {
+        end: convertStringToDate(newEndDate).toDate()
+      };
+      defaultStorage.set('calender', JSON.stringify(result));
+    }
   };
 
   useEffect(() => {
@@ -362,47 +496,39 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   autoHide: false
                 });
 
-                // 🔥 1. 직접 초기화 작업 수행 (resetAllData 의존하지 않음)
-                console.log('🔄 직접 초기화 작업 시작');
-
-                // 1-1. MMKV 스토리지 완전 정리
+                // 🔥 1. MMKV 스토리지 초기화
                 try {
-                  const allKeys = defaultStorage.getAllKeys();
-                  console.log('삭제 전 MMKV 키들:', allKeys);
-
-                  const keysToDelete = allKeys.filter(key =>
-                      key.startsWith('bible_') ||
-                      key.startsWith('reading_') ||
-                      key.includes('plan') ||
-                      key === 'calender' ||
-                      key === 'bible_reading_plan'
-                  );
+                  // 일독 관련 MMKV 키들 삭제
+                  const keysToDelete = [
+                    'bible_plan_data',
+                    'bible_reading_cache',
+                    'reading_progress',
+                    'calender'
+                  ];
 
                   keysToDelete.forEach(key => {
-                    defaultStorage.delete(key);
-                    console.log('MMKV 키 삭제:', key);
+                    try {
+                      defaultStorage.delete(key);
+                      console.log(`MMKV 키 삭제 완료: ${key}`);
+                    } catch (keyError) {
+                      console.warn(`MMKV 키 삭제 실패 (무시 가능): ${key}`, keyError);
+                    }
                   });
 
-                  console.log('MMKV 정리 완료');
+                  console.log('MMKV 초기화 완료');
                 } catch (mmkvError) {
-                  console.error('MMKV 정리 오류:', mmkvError);
+                  console.error('MMKV 초기화 오류 (계속 진행):', mmkvError);
                 }
 
-                // 1-2. SQLite reading_table 완전 삭제
+                // 🔥 2. SQLite 데이터 초기화
                 try {
-                  const deleteSql = 'DELETE FROM reading_table';
-                  await fetchSql(bibleSetting, deleteSql, []);
-                  console.log('SQLite reading_table 데이터 삭제 완료');
-
-                  // 삭제 확인
-                  const checkSql = 'SELECT COUNT(*) as count FROM reading_table';
-                  const result = await fetchSql(bibleSetting, checkSql, []);
-                  console.log('삭제 후 reading_table 행 수:', result?.count || 0);
+                  await bibleSetting('UPDATE reading_table SET read = "F"');
+                  console.log('SQLite reading_table 초기화 완료');
                 } catch (sqlError) {
-                  console.error('SQLite 삭제 오류:', sqlError);
+                  console.error('SQLite 초기화 오류 (계속 진행):', sqlError);
                 }
 
-                // 🔥 2. Redux 상태 초기화
+                // 🔥 3. Redux 상태 초기화
                 try {
                   if (typeof store !== 'undefined' && store.dispatch) {
                     store.dispatch(bibleSelectSlice.actions.reset());
@@ -414,7 +540,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   console.error('Redux 초기화 오류 (무시 가능):', reduxError);
                 }
 
-                // 🔥 3. 로컬 컴포넌트 상태 초기화
+                // 🔥 4. 로컬 컴포넌트 상태 초기화
                 try {
                   setPlanData(null);
                   setMissedCount(0);
@@ -432,7 +558,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   console.error('로컬 상태 초기화 오류:', stateError);
                 }
 
-                // 🔥 4. 바텀시트 닫기
+                // 🔥 5. 바텀시트 닫기
                 try {
                   if (isOpen && typeof onClose === 'function') {
                     onClose();
@@ -441,7 +567,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   console.warn('바텀시트 닫기 오류 (무시 가능):', closeError);
                 }
 
-                // 🔥 5. 상위 컴포넌트 새로고침 (강화된 버전)
+                // 🔥 6. 상위 컴포넌트 새로고침 (강화된 버전)
                 const triggerRefresh = () => {
                   try {
                     if (typeof onTrigger === 'function') {
@@ -465,7 +591,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   }, delay);
                 });
 
-                // 🔥 6. 성공 메시지 표시
+                // 🔥 7. 성공 메시지 표시
                 setTimeout(() => {
                   Toast.hide();
                   Toast.show({
@@ -644,7 +770,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
               </Button>
             </HStack>
 
-            {/* 목표일 섹션 */}
+            {/* 종료일 섹션 */}
             <HStack
                 h={70}
                 alignItems="center"
@@ -677,6 +803,14 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 <Text color={color.white} fontSize={16} fontWeight={500}>종료일 선택</Text>
               </Button>
             </HStack>
+
+            {/* 🆕 총기간 섹션 - 이미지와 동일한 디자인 */}
+            <DurationControlComponent
+                startDate={calendarState.start}
+                endDate={calendarState.end}
+                onEndDateChange={handleEndDateChange}
+                planData={planData}
+            />
 
             {/* 계산 결과 표시 */}
             {!planData && selectedPlanType && calculationResult && (
@@ -716,147 +850,205 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 }}
             >
               {!planData ? (
-                  // 🔥 수정된 일독 설정하기 버튼 (날짜 완료 여부에 따라 활성화)
-                  renderSetupButton()
+                  <VStack space={3}>
+                    {renderSetupButton()}
+                    <Button
+                        w="100%"
+                        h={55}
+                        bg="transparent"
+                        borderWidth={2}
+                        borderColor="#37C4B9"
+                        borderRadius="md"
+                        onPress={onReset}
+                        _pressed={{ bg: "#F0F9FF" }}
+                    >
+                      <Text color="#37C4B9" fontSize={16} fontWeight={600}>
+                        설정 초기화
+                      </Text>
+                    </Button>
+                  </VStack>
               ) : (
-                  <Button
-                      w="100%"
-                      h={55}
-                      bg="#4CAF50"
-                      borderRadius="md"
-                      mb={3}
-                      _pressed={{
-                        bg: "#45A049"
-                      }}
-                      onPress={() => {
-                        // 현재 화면에서 첫 번째 탭으로 이동
-                        onTrigger();
-                      }}
-                  >
-                    <Text color={color.white} fontSize={16} fontWeight={500}>일독 계속하기</Text>
-                  </Button>
+                  <VStack space={3}>
+                    <Button
+                        w="100%"
+                        h={55}
+                        bg="#37C4B9"
+                        borderRadius="md"
+                        onPress={onNavigate}
+                        _pressed={{ bg: "#2BA89E" }}
+                    >
+                      <Text color={color.white} fontSize={16} fontWeight={700}>
+                        일독 진행 보기
+                      </Text>
+                    </Button>
+                    <Button
+                        w="100%"
+                        h={55}
+                        bg="transparent"
+                        borderWidth={2}
+                        borderColor="#FF6B6B"
+                        borderRadius="md"
+                        onPress={onReset}
+                        _pressed={{ bg: "#FFF5F5" }}
+                    >
+                      <Text color="#FF6B6B" fontSize={16} fontWeight={600}>
+                        일독 설정 초기화
+                      </Text>
+                    </Button>
+                  </VStack>
               )}
-
-              <Button
-                  w="100%"
-                  h={55}
-                  bg="white"
-                  borderWidth={1}
-                  borderColor="#37C4B9"
-                  borderRadius="md"
-                  _pressed={{
-                    bg: "#F5F5F5"
-                  }}
-                  onPress={onReset}
-              >
-                <Text color="#37C4B9" fontSize={16} fontWeight={700}>설정초기화</Text>
-              </Button>
             </View>
           </Box>
         </ScrollView>
 
-        {/* 바텀시트 컴포넌트 */}
+        {/* 성경일독 타입 선택 바텀시트 */}
         <Actionsheet isOpen={isOpen} onClose={onClose}>
           <Actionsheet.Content borderTopRadius="15" bg="white">
-            <Box w="100%" h={60} px={4} justifyContent="center" alignItems="center" borderBottomWidth={1} borderBottomColor="#F0F0F0">
-              <Text fontSize={18} fontWeight="600" color="#333333">
-                성경 일독 선택
-              </Text>
-              {selectedPlanType && (
-                  <Text fontSize={14} color="#37C4B9" mt={1}>
-                    {DETAILED_BIBLE_PLAN_TYPES.find(t => t.id === selectedPlanType)?.name} 선택됨
-                  </Text>
-              )}
-            </Box>
-
-            <View style={{ width: '100%', padding: 16 }}>
-              {/* 카테고리 버튼들 - 3x2 그리드 */}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                {DETAILED_BIBLE_PLAN_TYPES.map((planType) => (
-                    <Button
-                        key={planType.id}
-                        w="48%"
-                        h={65}
-                        mb={3}
-                        bg={selectedPlanType === planType.id ? "#37C4B9" : "#F8F9FA"}
-                        borderRadius="md"
-                        borderWidth={selectedPlanType === planType.id ? 0 : 1}
-                        borderColor="#E0E0E0"
-                        _pressed={{
-                          bg: selectedPlanType === planType.id ? "#2BA89E" : "#F0F0F0"
-                        }}
-                        onPress={() => handleSelectBibleCategory(planType.name)}
-                    >
-                      <HStack w="100%" justifyContent="space-between" alignItems="center" px={4}>
-                        <VStack alignItems="flex-start" space={1}>
-                          <Text
-                              color={selectedPlanType === planType.id ? "white" : "#333333"}
-                              fontWeight="600"
-                              fontSize="16"
-                          >
-                            {planType.name}
-                          </Text>
-                          <Text
-                              color={selectedPlanType === planType.id ? "#E8F8F7" : "#666666"}
-                              fontSize="12"
-                          >
-                            {planType.totalChapters}장
-                          </Text>
-                        </VStack>
-                      </HStack>
-                    </Button>
-                ))}
-              </View>
-
-              {/* 선택된 타입의 상세 정보 */}
-              {selectedPlanType && (
-                  <Box bg="#F0F9FF" p={3} borderRadius="md" mt={2}>
-                    <Text fontSize={20} color="#666" textAlign="center">
-                      {DETAILED_BIBLE_PLAN_TYPES.find(t => t.id === selectedPlanType)?.description}
+            {!selectedPlanType ? (
+                // 첫 번째 단계: 타입 선택 화면
+                <>
+                  <Box w="100%" h={60} px={4} justifyContent="center" alignItems="center" borderBottomWidth={1} borderBottomColor="#F0F0F0">
+                    <Text fontSize={18} fontWeight="600" color="#333333">
+                      성경 일독 선택
                     </Text>
-
-                    {/* 실시간 계산 결과 */}
-                    {calculationResult && (
-                        <VStack mt={2} pt={2} borderTopWidth={1} borderTopColor="#37C4B9">
-                          <Text fontSize={22} color="#37C4B9" textAlign="center" fontWeight="600">
-                            🎯 계산 결과
-                          </Text>
-                          <HStack justifyContent="space-between" mt={1}>
-                            <Text fontSize={20} color="#666">하루 목표:</Text>
-                            <Text fontSize={20} color="#37C4B9" fontWeight="500">
-                              {calculationResult.chaptersPerDay}장 / {calculationResult.minutesPerDay}분
-                            </Text>
-                          </HStack>
-                          <HStack justifyContent="space-between">
-                            <Text fontSize={20} color="#666">총 기간:</Text>
-                            <Text fontSize={20} color="#37C4B9" fontWeight="500">
-                              {calculationResult.totalDays}일
-                            </Text>
-                          </HStack>
-                        </VStack>
-                    )}
                   </Box>
-              )}
-            </View>
 
-            <Box w="100%" p={4}>
-              <Button
-                  w="100%"
-                  h={55}
-                  bg={selectedPlanType && calculationResult ? "#37C4B9" : "#CCCCCC"}
-                  borderRadius="md"
-                  _pressed={{ bg: selectedPlanType && calculationResult ? "#2BA89E" : "#CCCCCC" }}
-                  onPress={handleCompletePlanSetup}
-                  isDisabled={!selectedPlanType || !calculationResult}
-              >
-                <Text color="white" fontSize={16} fontWeight={500}>
-                  {calculationResult ?
-                      `일독 설정 완료 (${calculationResult.totalDays}일간)` :
-                      "일독 설정 완료"
-                  }
-                </Text>
-              </Button>
-            </Box>
+                  <View style={{ width: '100%', padding: 16 }}>
+                    {/* 카테고리 버튼들 - 3x2 그리드 */}
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                      {DETAILED_BIBLE_PLAN_TYPES.map((planType) => (
+                          <Button
+                              key={planType.id}
+                              w="48%"
+                              h={65}
+                              mb={3}
+                              bg="#F8F9FA"
+                              borderRadius="md"
+                              borderWidth={1}
+                              borderColor="#E0E0E0"
+                              _pressed={{ bg: "#F0F0F0" }}
+                              onPress={() => handleSelectBibleCategory(planType.name)}
+                          >
+                            <VStack alignItems="center" space={1}>
+                              <Text color="#333333" fontSize="15" fontWeight="600" textAlign="center">
+                                {planType.name}
+                              </Text>
+                              <Text color="#666666" fontSize="11" textAlign="center" numberOfLines={2}>
+                                {planType.description}
+                              </Text>
+                            </VStack>
+                          </Button>
+                      ))}
+                    </View>
+                  </View>
+                </>
+            ) : (
+                // 두 번째 단계: 선택된 타입의 상세 정보 화면
+                <>
+                  <Box w="100%" h={60} px={4} justifyContent="center" alignItems="center" borderBottomWidth={1} borderBottomColor="#F0F0F0">
+                    <Text fontSize={18} fontWeight="600" color="#333333">
+                      성경 일독 설정
+                    </Text>
+                  </Box>
+
+                  <ScrollView style={{ width: '100%', maxHeight: 500 }}>
+                    <View style={{ padding: 16 }}>
+                      {/* 선택된 타입 정보 */}
+                      <VStack space={3} mb={4}>
+                        {/* 성경/구약/신약/모세오경/시편 박스들 */}
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                          {DETAILED_BIBLE_PLAN_TYPES.map((planType) => (
+                              <Box
+                                  key={planType.id}
+                                  w="48%"
+                                  h={20}
+                                  bg={selectedPlanType === planType.id ? "#37C4B9" : "#F0F0F0"}
+                                  borderRadius="md"
+                                  justifyContent="center"
+                                  alignItems="center"
+                                  mb={2}
+                              >
+                                <Text
+                                    color={selectedPlanType === planType.id ? "white" : "#999999"}
+                                    fontSize="19"
+                                    fontWeight="600"
+                                >
+                                  {planType.name}
+                                </Text>
+                                <Text
+                                    color={selectedPlanType === planType.id ? "white" : "#999999"}
+                                    fontSize="19"
+                                >
+                                  {planType.totalChapters}장
+                                </Text>
+                              </Box>
+                          ))}
+                        </View>
+
+                        {/* 선택된 타입의 상세 설명 */}
+                        <Box bg="#F8F9FA" p={3} borderRadius="md">
+                          <Text fontSize="16" color="#666" textAlign="center">
+                            {DETAILED_BIBLE_PLAN_TYPES.find(t => t.id === selectedPlanType)?.description}
+                          </Text>
+                        </Box>
+
+                        {/* 예상 계산결과 */}
+                        {calculationResult && (
+                            <Box bg="#F0F9FF" p={4} borderRadius="md">
+                              <HStack alignItems="center" justifyContent="center" mb={3}>
+                                <Text fontSize="19" color="#37C4B9" fontWeight="600">
+                                  📊 예상 계산결과
+                                </Text>
+                              </HStack>
+
+                              <VStack space={2}>
+                                <HStack justifyContent="space-between" alignItems="center">
+                                  <Text fontSize="18" color="#666">총 기간 :</Text>
+                                  <HStack alignItems="baseline">
+                                    <Text fontSize="16" color="#666">
+                                      {calendarState.start?.replace(/년|월/g, '.').replace(/일/g, '')} ~ {calendarState.end?.replace(/년|월/g, '.').replace(/일/g, '')}
+                                    </Text>
+                                    <Text fontSize="18" color="#37C4B9" fontWeight="600" ml={2}>
+                                      {calculationResult.totalDays}일
+                                    </Text>
+                                  </HStack>
+                                </HStack>
+
+                                <HStack justifyContent="space-between" alignItems="center">
+                                  <Text fontSize="18" color="#666">하루목표 :</Text>
+                                  <HStack alignItems="baseline">
+                                    <Text fontSize="18" color="#37C4B9" fontWeight="600">
+                                      {calculationResult.chaptersPerDay}장
+                                    </Text>
+                                    <Text fontSize="18" color="#37C4B9" ml={1}>
+                                      / {calculationResult.minutesPerDay}분
+                                    </Text>
+                                  </HStack>
+                                </HStack>
+                              </VStack>
+                            </Box>
+                        )}
+                      </VStack>
+                    </View>
+                  </ScrollView>
+
+                  {/* 하단 버튼 */}
+                  <Box w="100%" p={4}>
+                    <Button
+                        w="100%"
+                        h={55}
+                        bg="#37C4B9"
+                        borderRadius="md"
+                        _pressed={{ bg: "#2BA89E" }}
+                        onPress={handleCompletePlanSetup}
+                    >
+                      <Text color="white" fontSize={16} fontWeight="600">
+                        일독 설정 완료
+                      </Text>
+                    </Button>
+                  </Box>
+                </>
+            )}
           </Actionsheet.Content>
         </Actionsheet>
       </>
