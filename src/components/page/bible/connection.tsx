@@ -53,7 +53,29 @@ export default function BibleConectionScreen() {
         isChapterReadSync: isChapterReadSyncHook,
         planData,
         updateReadingTableCache,
+        forceRefresh,  // 기존
+        registerGlobalRefreshCallback,  // 🆕 추가
+        unregisterGlobalRefreshCallback
     } = useBibleReading();
+
+    const handleGlobalRefresh = useCallback(() => {
+        console.log('🔄 BibleConectionScreen 전역 새로고침 실행');
+
+        // 현재 페이지 데이터 새로고침
+        handleUpdateData();
+
+        // 추가적인 상태 업데이트가 필요하다면 여기에 추가
+    }, [handleUpdateData]);
+
+    useEffect(() => {
+        console.log('🔄 BibleConectionScreen 전역 새로고침 콜백 등록');
+        registerGlobalRefreshCallback(handleGlobalRefresh);
+
+        return () => {
+            console.log('🔄 BibleConectionScreen 전역 새로고침 콜백 해제');
+            unregisterGlobalRefreshCallback();
+        };
+    }, [registerGlobalRefreshCallback, unregisterGlobalRefreshCallback, handleGlobalRefresh]);
 
     // 컴포넌트 마운트 시 자동 진행 기능 기본 활성화
     useEffect(() => {
@@ -210,17 +232,17 @@ export default function BibleConectionScreen() {
                 console.log('✅ Connection: Updated plan data');
             }
 
-            // 🆕 useBibleReading 훅의 강제 새로고침 실행
-            console.log('🔄 Connection: Triggering useBibleReading forceRefresh');
-
-            // 여러 번 실행하여 확실한 동기화
+            // 🔥 핵심: updateReadingTableCache 호출 시 자동으로 전역 새로고침이 트리거됨
+            // 추가적인 동기화를 위해 여러 번 호출
             setTimeout(() => {
                 updateReadingTableCache(BOOK, JANG, true);
-            }, 50);
+                console.log('🔄 Connection: Additional cache update for sync');
+            }, 100);
 
             setTimeout(() => {
                 updateReadingTableCache(BOOK, JANG, true);
-            }, 150);
+                console.log('🔄 Connection: Final cache update for sync');
+            }, 300);
 
             // 상위 컴포넌트에 읽기 상태 변경 알림
             if (handleReadStatusChange) {

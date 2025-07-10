@@ -163,14 +163,6 @@ const ConectionContainerFlatList = ({
         autoProcessingRef.current = true;
 
         try {
-            // 1. 토스트 메시지 표시 (즉시)
-            Toast.show({
-                type: "success",
-                text1: "🎵 재생 완료",
-                text2: "자동으로 읽었음 표시 후 다음 장으로 이동합니다.",
-                visibilityTime: 2000,
-                position: "top",
-            });
 
             // 2. 짧은 대기 (사용자가 메시지를 볼 수 있도록)
             await new Promise(resolve => setTimeout(resolve, 800));
@@ -178,15 +170,7 @@ const ConectionContainerFlatList = ({
             // 3. 현재 장을 읽었음으로 자동 체크
             console.log('📖 ConectionContainer: Marking chapter as read...');
             await markCurrentChapterAsRead();
-
-            // 4. 읽었음 체크 완료 알림
-            Toast.show({
-                type: "info",
-                text1: "✅ 읽었음 체크 완료",
-                text2: "다음 장으로 이동합니다.",
-                visibilityTime: 1500,
-                position: "top",
-            });
+            
 
             // 5. 잠시 대기 후 다음 장으로 이동
             await new Promise(resolve => setTimeout(resolve, 600));

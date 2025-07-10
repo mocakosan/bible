@@ -632,11 +632,16 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
   };
 
   const handleSelectBibleCategory = (category: string) => {
+    console.log("🔥 성경 카테고리 선택:", category);
+
     const selectedType = DETAILED_BIBLE_PLAN_TYPES.find(type => type.name === category);
     if (selectedType) {
       setSelectedPlanType(selectedType.id);
+      console.log("✅ 선택된 타입 ID:", selectedType.id);
+
+    } else {
+      console.error("❌ 선택된 타입을 찾을 수 없음:", category);
     }
-    console.log("선택된 카테고리:", category);
   };
 
   const handleCompletePlanSetup = () => {
@@ -903,7 +908,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
         <Actionsheet isOpen={isOpen} onClose={onClose}>
           <Actionsheet.Content borderTopRadius="15" bg="white">
             {!selectedPlanType ? (
-                // 첫 번째 단계: 타입 선택 화면
+                // 첫 번째 단계: 타입 선택 화면 (기존 디자인 유지)
                 <>
                   <Box w="100%" h={60} px={4} justifyContent="center" alignItems="center" borderBottomWidth={1} borderBottomColor="#F0F0F0">
                     <Text fontSize={18} fontWeight="600" color="#333333">
@@ -912,7 +917,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   </Box>
 
                   <View style={{ width: '100%', padding: 16 }}>
-                    {/* 카테고리 버튼들 - 3x2 그리드 */}
+                    {/* 🔥 카테고리 버튼들 - 기존 디자인에 선택 상태만 추가 */}
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                       {DETAILED_BIBLE_PLAN_TYPES.map((planType) => (
                           <Button
@@ -920,18 +925,28 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                               w="48%"
                               h={65}
                               mb={3}
-                              bg="#F8F9FA"
+                              bg={selectedPlanType === planType.id ? "#37C4B9" : "#F8F9FA"}  // 🔥 선택된 상태만 색상 변경
                               borderRadius="md"
-                              borderWidth={1}
-                              borderColor="#E0E0E0"
-                              _pressed={{ bg: "#F0F0F0" }}
-                              onPress={() => handleSelectBibleCategory(planType.name)}
+                              borderWidth={selectedPlanType === planType.id ? 2 : 1}  // 🔥 선택된 상태 테두리 강화
+                              borderColor={selectedPlanType === planType.id ? "#37C4B9" : "#E0E0E0"}
+                              _pressed={{ bg: selectedPlanType === planType.id ? "#2BA89E" : "#F0F0F0" }}
+                              onPress={() => handleSelectBibleCategory(planType.name)}  // 🔥 기존 함수 사용
                           >
                             <VStack alignItems="center" space={1}>
-                              <Text color="#333333" fontSize="15" fontWeight="600" textAlign="center">
+                              <Text
+                                  color={selectedPlanType === planType.id ? "#FFFFFF" : "#333333"}  // 🔥 선택된 상태 텍스트 색상
+                                  fontSize="15"
+                                  fontWeight="600"
+                                  textAlign="center"
+                              >
                                 {planType.name}
                               </Text>
-                              <Text color="#666666" fontSize="11" textAlign="center" numberOfLines={2}>
+                              <Text
+                                  color={selectedPlanType === planType.id ? "#F0F9FF" : "#666666"}  // 🔥 선택된 상태 설명 색상
+                                  fontSize="11"
+                                  textAlign="center"
+                                  numberOfLines={2}
+                              >
                                 {planType.description}
                               </Text>
                             </VStack>
@@ -941,7 +956,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   </View>
                 </>
             ) : (
-                // 두 번째 단계: 선택된 타입의 상세 정보 화면
+                // 두 번째 단계: 선택된 타입의 상세 정보 화면 (기존 디자인 완전 유지)
                 <>
                   <Box w="100%" h={60} px={4} justifyContent="center" alignItems="center" borderBottomWidth={1} borderBottomColor="#F0F0F0">
                     <Text fontSize={18} fontWeight="600" color="#333333">
@@ -951,12 +966,12 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
 
                   <ScrollView style={{ width: '100%', maxHeight: 500 }}>
                     <View style={{ padding: 16 }}>
-                      {/* 선택된 타입 정보 */}
+                      {/* 선택된 타입 정보 - 기존과 동일 */}
                       <VStack space={3} mb={4}>
-                        {/* 성경/구약/신약/모세오경/시편 박스들 */}
+                        {/* 🔥 성경/구약/신약/모세오경/시편 박스들 - 클릭 가능하도록 수정 */}
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                           {DETAILED_BIBLE_PLAN_TYPES.map((planType) => (
-                              <Box
+                              <Button  // 🔥 Box를 Button으로 변경하여 클릭 가능하게
                                   key={planType.id}
                                   w="48%"
                                   h={20}
@@ -965,32 +980,39 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                                   justifyContent="center"
                                   alignItems="center"
                                   mb={2}
+                                  _pressed={{ bg: selectedPlanType === planType.id ? "#2BA89E" : "#E0E0E0" }}
+                                  onPress={() => {
+                                    console.log("🔄 타입 변경:", planType.name);
+                                    setSelectedPlanType(planType.id);  // 🔥 직접 상태 변경
+                                  }}
                               >
-                                <Text
-                                    color={selectedPlanType === planType.id ? "white" : "#999999"}
-                                    fontSize="19"
-                                    fontWeight="600"
-                                >
-                                  {planType.name}
-                                </Text>
-                                <Text
-                                    color={selectedPlanType === planType.id ? "white" : "#999999"}
-                                    fontSize="19"
-                                >
-                                  {planType.totalChapters}장
-                                </Text>
-                              </Box>
+                                <VStack alignItems="center">
+                                  <Text
+                                      color={selectedPlanType === planType.id ? "white" : "#999999"}
+                                      fontSize="19"
+                                      fontWeight="600"
+                                  >
+                                    {planType.name}
+                                  </Text>
+                                  <Text
+                                      color={selectedPlanType === planType.id ? "white" : "#999999"}
+                                      fontSize="19"
+                                  >
+                                    {planType.totalChapters}장
+                                  </Text>
+                                </VStack>
+                              </Button>
                           ))}
                         </View>
 
-                        {/* 선택된 타입의 상세 설명 */}
+                        {/* 선택된 타입의 상세 설명 - 기존과 동일 */}
                         <Box bg="#F8F9FA" p={3} borderRadius="md">
                           <Text fontSize="16" color="#666" textAlign="center">
                             {DETAILED_BIBLE_PLAN_TYPES.find(t => t.id === selectedPlanType)?.description}
                           </Text>
                         </Box>
 
-                        {/* 예상 계산결과 */}
+                        {/* 예상 계산결과 - 기존과 동일 */}
                         {calculationResult && (
                             <Box bg="#F0F9FF" p={4} borderRadius="md">
                               <HStack alignItems="center" justifyContent="center" mb={3}>
@@ -1030,7 +1052,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                     </View>
                   </ScrollView>
 
-                  {/* 하단 버튼 */}
+                  {/* 하단 버튼 - 기존과 동일 */}
                   <Box w="100%" p={4}>
                     <Button
                         w="100%"
