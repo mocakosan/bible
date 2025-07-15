@@ -2,7 +2,7 @@
 // 🔥 완전한 시간 기반 성경 읽기 시스템 - 음성파일 길이 기반
 
 import { BibleStep } from './define';
-
+import { calculateTotalPsalmsTime, optimizePsalmsFor25Days } from './psalmsCalculationFix';
 // === 타입 정의 ===
 export interface TimeBasedBiblePlan {
     planType: string;
@@ -212,9 +212,53 @@ export const divideChaptersByPeriod = (
     const end = new Date(endDate);
     const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    const bookRange = getBookRangeForPlan(planType);
+    // 🔥 시편 전용 처리
+    if (planType === 'psalms') {
+        const totalTime = calculateTotalPsalmsTime(); // 375분
+        const calculatedMinutesPerDay = Math.round((totalTime / totalDays) * 10) / 10;
 
-    // 총 시간과 장수 계산
+        // 25일 계획의 경우 최적화 적용
+        if (totalDays === 25) {
+            const optimized = optimizePsalmsFor25Days();
+            return {
+                planType,
+                planName: '시편',
+                startDate,
+                endDate,
+                totalDays,
+                calculatedMinutesPerDay: optimized.recommendedTimePerDay, // 정확한 15분
+                totalMinutes: Math.round(totalTime),
+                totalChapters: 150,
+                isTimeBasedCalculation: true,
+                currentDay: 1,
+                readChapters: [],
+                dailyReadingSchedule: optimized.dailySchedule,
+                createdAt: new Date().toISOString(),
+                version: '2.1_psalms_optimized'
+            };
+        }
+
+        // 다른 기간의 시편 계획
+        return {
+            planType,
+            planName: '시편',
+            startDate,
+            endDate,
+            totalDays,
+            calculatedMinutesPerDay,
+            totalMinutes: Math.round(totalTime),
+            totalChapters: 150,
+            isTimeBasedCalculation: true,
+            currentDay: 1,
+            readChapters: [],
+            dailyReadingSchedule: [],
+            createdAt: new Date().toISOString(),
+            version: '2.1_psalms_optimized'
+        };
+    }
+
+    // 기존 로직 유지 (다른 계획들)
+    const bookRange = getBookRangeForPlan(planType);
     let totalMinutes = 0;
     let totalChapters = 0;
 
@@ -228,18 +272,13 @@ export const divideChaptersByPeriod = (
         }
     }
 
-    // 🔥 하루 읽을 시간 자동 계산 (총 시간 ÷ 총 일수)
     const calculatedMinutesPerDay = Math.round((totalMinutes / totalDays) * 10) / 10;
-
-    // 🔥 시간 기준으로 매일 읽을 장 나누기
     const dailyReadingSchedule = createDailyScheduleByTime(
         bookRange,
         calculatedMinutesPerDay,
         totalDays,
         startDate
     );
-
-    console.log(`📊 계산 결과: 총 ${totalDays}일, 하루 ${calculatedMinutesPerDay}분, 총 ${totalChapters}장`);
 
     const planNames: { [key: string]: string } = {
         'full_bible': '성경',
@@ -263,7 +302,7 @@ export const divideChaptersByPeriod = (
         readChapters: [],
         dailyReadingSchedule,
         createdAt: new Date().toISOString(),
-        version: '2.0'
+        version: '2.1'
     };
 };
 

@@ -13,6 +13,7 @@ import {
     ReadChapterStatus
 } from './timeBasedBibleSystem';
 import { defaultStorage } from './mmkv';
+import {getPsalmReadingTime} from "./psalmsCalculationFix";
 
 // === 타입 정의 ===
 export interface BiblePlanData {
@@ -112,28 +113,46 @@ export const createTimeBasedPlan = (
 /**
  * 🔥 통합된 진행률 계산
  */
-export const calculateProgress = (planData: BiblePlanData | TimeBasedBiblePlan | null): any => {
-    if (!planData) return {
-        totalChapters: 0,
-        readChapters: 0,
-        progressPercentage: 0,
-        currentDay: 1,
-        missedChapters: 0
-    };
-
-    // 시간 기반 계획인지 확인
-    if ((planData as TimeBasedBiblePlan).isTimeBasedCalculation) {
-        const progress = calculatePeriodBasedProgress(planData as TimeBasedBiblePlan);
-        return {
-            ...progress,
-            formattedReadTime: formatReadingTime(progress.readMinutes),
-            formattedTotalTime: formatReadingTime(progress.totalMinutes),
-            missedChapters: calculateMissedChapters(planData as TimeBasedBiblePlan)
-        };
+export const calculateProgress = (planData: any) => {
+    if (!planData) {
+        return { progressPercentage: 0 };
     }
 
-    // 기존 장 기반 계산
-    return calculateLegacyProgress(planData as BiblePlanData);
+    if (planData.isTimeBasedCalculation) {
+        return calculateTimeBasedProgress(planData);
+    }
+
+    return calculateLegacyProgress(planData);
+};
+
+const calculateTimeBasedProgress = (planData: any) => {
+    const currentDay = getCurrentDay(planData.startDate);
+    const targetTime = planData.calculatedMinutesPerDay || planData.targetMinutesPerDay || 15;
+
+    // 🔥 시편의 경우 정확한 시간 계산 사용
+    const totalReadTime = planData.readChapters
+        ?.filter((r: any) => r.isRead)
+        ?.reduce((sum: number, r: any) => {
+            if (r.book === 19) {
+                // 시편의 경우 정확한 시간 사용
+                return sum + getPsalmReadingTime(r.chapter);
+            }
+            return sum + (r.estimatedMinutes || 0);
+        }, 0) || 0;
+
+    const totalTargetTime = planData.totalDays * targetTime;
+    const currentTargetTime = currentDay * targetTime;
+
+    const progressPercentage = Math.min(100, (totalReadTime / totalTargetTime) * 100);
+    const schedulePercentage = Math.min(100, (totalReadTime / currentTargetTime) * 100);
+
+    return {
+        progressPercentage,
+        schedulePercentage,
+        readMinutes: totalReadTime,
+        targetMinutes: currentTargetTime,
+        behindSchedule: totalReadTime < currentTargetTime
+    };
 };
 
 /**

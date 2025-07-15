@@ -1,6 +1,6 @@
 // utils/timeBasedChapterCalculator.ts
 // 시간 목표를 장수로 변환하는 계산기
-
+import { getPsalmReadingTime, calculateTotalPsalmsTime } from './psalmsCalculationFix';
 import { BibleStep } from './define';
 
 // 🔥 시간 기반 장수 계산을 위한 확장된 BiblePlanData
@@ -89,8 +89,8 @@ export const getChapterReadingTime = (book: number, chapter: number): number => 
         return Math.round(actualTime);
     }
 
-    // 기본 추정치
-    if (book === 19) return 2.5;      // 시편
+    // 🔥 시편 정확한 시간 사용
+    if (book === 19) return getPsalmReadingTime(chapter);
     if (book === 20) return 3.5;      // 잠언
     if (book <= 39) return 4.0;       // 구약
     return 4.2;                       // 신약
@@ -104,9 +104,15 @@ export const calculateChaptersFromTimeGoal = (
     targetMinutesPerDay: number
 ): number => {
     try {
-        const bookRange = getBookRangeForPlan(planType);
+        // 🔥 시편 전용 처리 추가
+        if (planType === 'psalms') {
+            const totalTime = calculateTotalPsalmsTime(); // 375분
+            const avgTimePerChapter = totalTime / 150; // 2.5분
+            const calculatedChapters = Math.round(targetMinutesPerDay / avgTimePerChapter);
+            return Math.max(1, Math.min(calculatedChapters, 15));
+        }
 
-        // 해당 계획의 평균 장당 시간 계산
+        const bookRange = getBookRangeForPlan(planType);
         let totalTime = 0;
         let totalChapters = 0;
 
@@ -121,21 +127,15 @@ export const calculateChaptersFromTimeGoal = (
         }
 
         if (totalChapters === 0) {
-            // 기본값 반환
             return Math.max(1, Math.round(targetMinutesPerDay / 4));
         }
 
         const avgTimePerChapter = totalTime / totalChapters;
-
-        // 목표 시간으로 읽을 수 있는 장수 계산
         const chaptersForTargetTime = Math.round(targetMinutesPerDay / avgTimePerChapter);
-
-        // 최소 1장, 최대 합리적인 범위로 제한
         return Math.max(1, Math.min(chaptersForTargetTime, 15));
 
     } catch (error) {
         console.warn('시간 기반 장수 계산 오류:', error);
-        // 에러 발생 시 기본값 반환
         return Math.max(1, Math.round(targetMinutesPerDay / 4));
     }
 };

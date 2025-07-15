@@ -1,6 +1,3 @@
-// src/components/page/reading/_side/setting.tsx
-// 🔥 기존 UI 완전 유지, 내부 로직만 시간 기반으로 변경
-
 import { Box, Button, HStack, Text, VStack, Actionsheet, useDisclose, Badge } from 'native-base';
 import { useBaseStyle, useNativeNavigation } from '../../../../hooks';
 import Calender from '../../../section/calendar';
@@ -33,6 +30,10 @@ import {
   calculateReadingPlan,
   type BiblePlanTypeDetail
 } from '../../../../utils/biblePlanCalculator';
+
+// 🔥 시편 최적화 계산 추가
+import { optimizePsalmsFor25Days } from '../../../../utils/psalmsCalculationFix';
+
 import {useBibleReading} from "../../../../utils/useBibleReading";
 import {bibleSelectSlice, bibleTextSlice, illdocSelectSlice} from "../../../../provider/redux/slice";
 import {store} from "../../../../provider/redux/store";
@@ -701,7 +702,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     }
   };
 
-  // 🔥 계획 설정 완료 (시간 기반 데이터 생성)
+  // 🔥 계획 설정 완료 (시간 기반 데이터 생성) - 시편 최적화 적용
   const handleCompletePlanSetup = () => {
     if (!selectedPlanType) {
       Toast.show({
@@ -723,41 +724,85 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     if (!selectedPlan) return;
 
     try {
-      // 🔥 시간 기반 계획 생성
-      const startDate = convertDate('start').format('YYYY-MM-DD');
-      const endDate = convertDate('end').format('YYYY-MM-DD');
+      // 🔥 시편 25일 계획의 경우 최적화된 계산 사용
+      if (selectedPlanType === 'psalms' && calculationResult.totalDays === 25) {
+        const optimized = optimizePsalmsFor25Days();
 
-      const timeBasedPlan = createTimeBasedPlan(selectedPlanType, startDate, endDate);
+        const timeBasedPlan = {
+          planType: selectedPlanType,
+          planName: selectedPlan.name,
+          startDate: convertDate('start').toISOString(),
+          targetDate: convertDate('end').toISOString(),
+          endDate: convertDate('end').toISOString(),
+          totalDays: 25,
+          totalChapters: 150,
+
+          // 🔥 정확한 시편 계산값
+          chaptersPerDay: 6, // 정확히 6장
+          calculatedMinutesPerDay: optimized.recommendedTimePerDay, // 약 15분
+          minutesPerDay: optimized.recommendedTimePerDay,
+
+          // 실제 시간 데이터
+          totalMinutes: Math.round(optimized.recommendedTimePerDay * 25),
+          dailyReadingSchedule: optimized.dailySchedule,
+
+          isTimeBasedCalculation: true,
+          currentDay: 1,
+          readChapters: [],
+          createdAt: new Date().toISOString(),
+          version: '2.1_psalms_optimized'
+        };
+
+        // 데이터 저장
+        saveBiblePlanData(timeBasedPlan);
+
+        // 로컬 상태 업데이트
+        setPlanData(timeBasedPlan);
+        setSelectedPlanType('');
+        setCalculationResult(null);
+        onClose();
+
+        // 성공 메시지
+        Toast.show({
+          type: 'success',
+          text1: `${selectedPlan.name} 일독이 설정되었습니다`,
+          text2: `하루 6장 / ${optimized.recommendedTimePerDay}분씩 25일간 진행`
+        });
+
+        onTrigger();
+        console.log('🔥 시편 최적화 계획 저장 완료:', timeBasedPlan);
+        return;
+      }
+
+      // 🔥 기존 로직 (다른 계획들은 그대로)
+      const timeBasedPlan = createTimeBasedPlan(selectedPlanType,
+          convertDate('start').format('YYYY-MM-DD'),
+          convertDate('end').format('YYYY-MM-DD')
+      );
 
       // 🔥 기존 UI 호환성을 위한 데이터 형식 유지
       const newPlanData = {
         ...timeBasedPlan,
-        // 기존 UI에서 사용하는 필드들 추가
         planName: selectedPlan.name,
-        targetDate: timeBasedPlan.endDate, // 호환성을 위해 추가
+        targetDate: timeBasedPlan.endDate,
         chaptersPerDay: Math.round(timeBasedPlan.totalChapters / timeBasedPlan.totalDays),
         minutesPerDay: Math.round(timeBasedPlan.calculatedMinutesPerDay),
         dailySchedule: timeBasedPlan.dailyReadingSchedule,
-        weeklyBreakdown: null // UI에서 사용하지 않음
+        weeklyBreakdown: null
       };
 
-      // 데이터 저장
       saveBiblePlanData(newPlanData);
-
-      // 로컬 상태 업데이트
       setPlanData(newPlanData);
       setSelectedPlanType('');
       setCalculationResult(null);
       onClose();
 
-      // 성공 메시지 (기존과 동일)
       Toast.show({
         type: 'success',
         text1: `${selectedPlan.name} 일독이 설정되었습니다`,
         text2: `하루 ${formatReadingTime(timeBasedPlan.calculatedMinutesPerDay)}씩 ${timeBasedPlan.totalDays}일간 진행`
       });
 
-      // 상위 컴포넌트에 즉시 변경사항 알림
       onTrigger();
 
       console.log('🔥 시간 기반 계획 저장 완료:', newPlanData);
@@ -781,23 +826,18 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
         weeklyBreakdown: calculationResult.weeklyBreakdown
       };
 
-      // 데이터 저장
       saveBiblePlanData(newPlanData);
-
-      // 로컬 상태 업데이트
       setPlanData(newPlanData);
       setSelectedPlanType('');
       setCalculationResult(null);
       onClose();
 
-      // 성공 메시지
       Toast.show({
         type: 'success',
         text1: `${selectedPlan.name} 일독이 설정되었습니다`,
         text2: `하루 ${calculationResult.chaptersPerDay}장씩 ${calculationResult.totalDays}일간 진행`
       });
 
-      // 상위 컴포넌트에 즉시 변경사항 알림
       onTrigger();
     }
   };
