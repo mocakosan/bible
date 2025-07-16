@@ -59,19 +59,10 @@ const loadTrack = async (book, jang) => {
   }
 };
 
-// 안전한 타임아웃 설정
-const safeSetTimeout = (callback, delay) => {
-  if (processingTimer) {
-    clearTimeout(processingTimer);
-  }
-  processingTimer = setTimeout(() => {
-    callback();
-    processingTimer = null;
-  }, delay);
-};
-
-// 다음 장으로 이동하는 함수
+// 다음 장으로 이동하는 함수 - 백그라운드에서도 작동
 const moveToNextChapter = async () => {
+  // 백그라운드에서도 다음 장 재생 허용
+
   const now = Date.now();
 
   if (processingChapter && now - lastProcessTimestamp > 5000) {
@@ -169,10 +160,33 @@ const moveToNextChapter = async () => {
   }
 };
 
+// 백그라운드 전환 처리 - 계속 재생 유지
+const handleBackgroundTransition = async () => {
+  try {
+    console.log('App moved to background - continuing playback');
+
+    // 백그라운드에서도 계속 재생 유지 (앱 종료 시에만 정지)
+    await TrackPlayer.updateOptions({
+      android: {
+        appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+        alwaysPauseOnInterruption: false, // 인터럽션 시에도 재생 유지
+        stoppingAppPausesPlayback: false, // 앱 정지 시에도 재생 유지
+      },
+      notification: {
+        stopWithApp: true, // 앱 종료 시에만 알림 제거
+      }
+    });
+
+    console.log("Background playback enabled - music continues in background");
+  } catch (error) {
+    console.error("Error in background transition:", error);
+  }
+};
+
 // 노드 스타일로 export
 module.exports = async function() {
   try {
-    console.log("PlaybackService started");
+    console.log("PlaybackService started - background playback enabled, stops only when app is killed");
 
     clearProcessingFlags();
     lastChapterInfo = { book: 0, jang: 0 };
@@ -180,102 +194,67 @@ module.exports = async function() {
     appState = 'active';
 
     try {
+      // 백그라운드 재생 허용하되 앱 종료 시에만 음악 정지 설정
       await TrackPlayer.updateOptions({
         repeatMode: RepeatMode.Off,
         android: {
           appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+          alwaysPauseOnInterruption: false, // 인터럽션 시에도 재생 유지
+          stoppingAppPausesPlayback: false, // 앱 정지 시에도 재생 유지
         },
         notification: {
-          stopWithApp: true,
+          stopWithApp: true, // 앱 종료 시에만 알림 제거
         }
       });
-      console.log("RepeatMode disabled");
+      console.log("Background playback enabled - music continues until app is killed");
       await TrackPlayer.setRepeatMode(RepeatMode.Off);
     } catch (error) {
-      console.error("Error setting repeat mode:", error);
+      console.error("Error setting playback options:", error);
     }
 
-    // 앱 상태 관찰
+    // 앱 상태 관찰 - 백그라운드에서도 재생 유지
     const appStateSubscription = AppState.addEventListener('change', async (nextAppState) => {
       console.log('App state changed from', appState, 'to', nextAppState);
 
       if (appState === 'active' && nextAppState === 'background') {
-        console.log('App moved to background');
-
-        try {
-          await TrackPlayer.setRepeatMode(RepeatMode.Off);
-          await TrackPlayer.updateOptions({
-            android: {
-              appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
-            },
-            notification: {
-              stopWithApp: true,
-            }
-          });
-          console.log("Kill behavior set on background transition");
-
-          if (Platform.OS === 'android') {
-            try {
-              setTimeout(() => {
-                if (AppState.currentState === 'background') {
-                  console.log("Still in background - preparing for possible kill");
-                  TrackPlayer.pause().catch(() => {});
-                }
-              }, 1000);
-            } catch (error) {
-              console.error("Error in background kill handler:", error);
-            }
-          }
-
-          backgroundEventCount = 0;
-        } catch (error) {
-          console.error("Error setting options on background:", error);
-        }
+        await handleBackgroundTransition();
+        console.log('Background playback will continue normally');
+      } else if (appState === 'background' && nextAppState === 'active') {
+        console.log('App returned to foreground');
+        backgroundEventCount = 0;
       }
 
       appState = nextAppState;
     });
 
-    // 재생 완료 이벤트 리스너
+    // 재생 완료 이벤트 리스너 - 백그라운드에서도 다음 장 재생
     const queueEndListener = TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
       console.log("PlaybackQueueEnded event");
 
-      // 성경일독 플레이어인지 확인
       const isIlldocPlayer = defaultStorage.getBoolean("is_illdoc_player") ?? false;
 
-      console.log("Player type:", isIlldocPlayer ? "IllDoc" : "Bible");
-
       if (isIlldocPlayer) {
-        console.log("🎯 IllDoc player - auto progress handled by component");
-        // 성경일독에서는 컴포넌트 레벨에서 자동 진행 처리
+        console.log("일독 플레이어에서는 자동 다음 장 기능 비활성화");
         return;
       }
 
-      // 일반 성경 플레이어의 경우 기존 로직 유지
       const autoNextEnabled = defaultStorage.getBoolean("auto_next_chapter_enabled") ?? false;
+
       if (!autoNextEnabled) {
-        console.log("Auto next chapter disabled");
+        console.log("자동 다음 장 기능이 비활성화됨");
         return;
       }
 
-      if (appState === 'background') {
-        backgroundEventCount++;
-        if (backgroundEventCount > 1) {
-          console.log(`Ignoring duplicate background event #${backgroundEventCount}`);
-          return;
-        }
-      }
-
-      moveToNextChapter();
-
-      if (appState === 'background') {
-        setTimeout(() => {
-          backgroundEventCount = 0;
-        }, 3000);
+      // 백그라운드/포그라운드 관계없이 다음 장으로 이동
+      try {
+        console.log(`Auto next chapter - App state: ${AppState.currentState}`);
+        await moveToNextChapter();
+      } catch (error) {
+        console.error("Error in auto next chapter:", error);
       }
     });
 
-    // 트랙 진행 상태 모니터링
+    // 트랙 진행 상태 모니터링 - 백그라운드/포그라운드 동일하게 처리
     const progressListener = TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, async (info) => {
       const isIlldocPlayer = defaultStorage.getBoolean("is_illdoc_player") ?? false;
       const autoNextEnabled = defaultStorage.getBoolean("auto_next_chapter_enabled") ?? false;
@@ -284,16 +263,15 @@ module.exports = async function() {
         return;
       }
 
-      if (AppState.currentState !== 'active') {
-        if (
-            info.position > 0 &&
-            info.duration > 0 &&
-            info.position >= info.duration - 0.5 &&
-            !processingChapter
-        ) {
-          console.log(`Background mode - Progress near end: ${info.position}/${info.duration}`);
-          moveToNextChapter();
-        }
+      // 백그라운드/포그라운드 관계없이 동일하게 처리
+      if (
+          info.position > 0 &&
+          info.duration > 0 &&
+          info.position >= info.duration - 0.5 &&
+          !processingChapter
+      ) {
+        console.log(`Progress near end: ${info.position}/${info.duration} (App state: ${AppState.currentState})`);
+        moveToNextChapter();
       }
     });
 
@@ -321,7 +299,7 @@ module.exports = async function() {
       stateListener.remove();
       errorListener.remove();
       progressListener.remove();
-      appStateSubscription.remove();
+      appStateSubscription?.remove();
       clearProcessingFlags();
     };
 

@@ -2,7 +2,6 @@
 
 // 성경일독 타입별 상세 데이터
 import {NewBibleStep, OldBibleStep} from "./define";
-import { calculateTotalPsalmsTime } from './psalmsCalculationFix';
 
 export interface BiblePlanTypeDetail {
     id: string;
@@ -89,20 +88,6 @@ export const DETAILED_BIBLE_PLAN_TYPES: BiblePlanTypeDetail[] = [
             name: '시편',
             chapters: 150,
             estimatedMinutes: 326
-        }]
-    },
-    {
-        id: 'psalms',
-        name: '시편',
-        description: '시편 1장 ~ 시편 150장',
-        totalChapters: 150,
-        totalMinutes: Math.round(calculateTotalPsalmsTime()), // 🔥 정확한 375분
-        totalSeconds: 0, // 초 단위는 0으로 설정
-        books: [{
-            index: 19,
-            name: '시편',
-            chapters: 150,
-            estimatedMinutes: Math.round(calculateTotalPsalmsTime())
         }]
     }
 ];

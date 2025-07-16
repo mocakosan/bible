@@ -1,12 +1,12 @@
+// utils/biblePlanCompatibility.ts
+// 기존 코드와 새로운 시간 기반 계산의 호환성을 위한 래퍼 함수들
+
 import {
     getTodayChapters as getTimeBasedTodayChapters,
     getChapterStatus as getTimeBasedChapterStatus,
     createTimeBasedPlan,
     initializeChapterTimes
 } from './timeBasedChapterCalculator';
-
-// 🔥 시편 계산 유틸리티 추가
-import { calculateTotalPsalmsTime, getPsalmReadingTime } from './psalmsCalculationFix';
 
 /**
  * 🔥 기존 biblePlanUtils.ts의 함수들을 대체하는 통합 함수들
@@ -150,21 +150,15 @@ export const initializeBiblePlanSystem = async () => {
 
 // === 내부 구현 함수들 ===
 
-// 🔥 시간 기반 진행률 계산 - 시편 정확한 시간 반영
+// 시간 기반 진행률 계산
 const calculateTimeBasedProgress = (planData: any) => {
     const currentDay = getCurrentDay(planData.startDate);
-    const targetTime = planData.targetMinutesPerDay || planData.calculatedMinutesPerDay;
+    const targetTime = planData.targetMinutesPerDay;
 
-    // 🔥 읽은 총 시간 계산 - 시편 정확한 시간 사용
+    // 읽은 총 시간 계산
     const totalReadTime = (planData.readChapters || [])
         .filter((r: any) => r.isRead)
-        .reduce((sum: number, r: any) => {
-            if (r.book === 19) {
-                // 시편의 경우 정확한 시간 사용
-                return sum + getPsalmReadingTime(r.chapter);
-            }
-            return sum + (r.estimatedMinutes || 0);
-        }, 0);
+        .reduce((sum: number, r: any) => sum + (r.estimatedMinutes || 0), 0);
 
     // 전체 목표 시간
     const totalTargetTime = planData.totalDays * targetTime;
@@ -191,7 +185,7 @@ const calculateTimeBasedMissedChapters = (planData: any): number => {
     if (!progress.behindSchedule) return 0;
 
     // 뒤처진 시간을 평균 장 시간으로 나누어 대략적인 장수 계산
-    const avgChapterTime = planData.planType === 'psalms' ? 2.5 : 4; // 시편은 2.5분, 다른 성경은 4분
+    const avgChapterTime = 4; // 평균 4분/장
     const missedTime = progress.targetMinutes - progress.readMinutes;
 
     return Math.ceil(missedTime / avgChapterTime);
@@ -272,10 +266,9 @@ const getCurrentDay = (startDate: string): number => {
     return Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 };
 
-// 🔥 시편 정확한 시간 계산 반영
 const getChapterReadingTime = (book: number, chapter: number): number => {
-    // 시편인 경우 정확한 시간 사용
-    if (book === 19) return getPsalmReadingTime(chapter);
+    // 간단한 추정치 (실제로는 timeBasedChapterCalculator에서 가져옴)
+    if (book === 19) return 2.5;
     if (book === 20) return 3.5;
     if (book <= 39) return 4.0;
     return 4.2;
@@ -310,7 +303,7 @@ export {
     initializeChapterTimes
 };
 
-// 🔥 시편 정확한 시간으로 업데이트된 타입들
+// 기존 타입들도 그대로 export
 export const BIBLE_PLAN_TYPES = [
     {
         id: 'full_bible',
@@ -349,8 +342,8 @@ export const BIBLE_PLAN_TYPES = [
         name: '시편',
         description: '시편 1장 ~ 시편 150장',
         totalChapters: 150,
-        totalMinutes: Math.round(calculateTotalPsalmsTime()), // 🔥 정확한 375분
-        totalSeconds: 0
+        totalMinutes: 326,
+        totalSeconds: 29
     }
 ];
 

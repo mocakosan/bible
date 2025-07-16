@@ -34,16 +34,29 @@ export const bibleAudioList: string[] = [
 // 플레이어 초기화 함수 - 단순화
 const setupPlayer = async (): Promise<boolean> => {
   try {
+    // 앱이 활성 상태가 아니면 설정하지 않음
+    if (AppState.currentState !== 'active') {
+      console.log('App is not active, skipping player setup');
+      return false;
+    }
+
     let isSetup = false;
     try {
       isSetup = await TrackPlayer.isServiceRunning();
     } catch (error) {
+      console.log('Service running check failed:', error);
       isSetup = false;
     }
 
     if (!isSetup) {
+      // 다시 한 번 앱 상태 확인
+      if (AppState.currentState !== 'active') {
+        console.log('App became inactive during setup, aborting');
+        return false;
+      }
+
       await TrackPlayer.setupPlayer({
-        autoHandleInterruptions: false, // 자동 인터럽션 처리 비활성화
+        autoHandleInterruptions: false, // 수동 제어
         waitForBuffer: true,
       });
     }
@@ -59,24 +72,39 @@ const setupPlayer = async (): Promise<boolean> => {
         Capability.Play,
         Capability.Pause,
       ],
-      progressUpdateEventInterval: 1, // 1초마다 업데이트
+      progressUpdateEventInterval: 1,
       android: {
+        // 중요: 앱 종료 시 재생 중지 및 알림 제거
         appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
         alwaysPauseOnInterruption: true,
         stoppingAppPausesPlayback: true,
       },
-      // 명시적으로 단일 트랙만 재생하도록 설정
+      notification: {
+        stopWithApp: true, // 앱과 함께 알림도 제거
+      },
+      // 반복 모드 비활성화
       repeatMode: RepeatMode.Off,
     });
 
+    // 성경 플레이어 설정
     defaultStorage.set("is_illdoc_player", false);
     defaultStorage.set("auto_next_chapter_enabled", true);
+
+    // 반복 모드 명시적 비활성화
     await TrackPlayer.setRepeatMode(RepeatMode.Off);
 
-    console.log("TrackPlayer initialized successfully - PlayFooterLayout (Simplified)");
+    console.log("TrackPlayer initialized successfully - PlayFooterLayout (Enhanced)");
     return true;
   } catch (error) {
     console.error('TrackPlayer 초기화 실패:', error);
+
+    // 초기화 실패 시 완전히 정리
+    try {
+      await TrackPlayer.reset();
+    } catch (resetError) {
+      console.error('Reset 중 오류:', resetError);
+    }
+
     return false;
   }
 };
@@ -925,9 +953,14 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
           (nextAppState === 'background' || nextAppState === 'inactive')) {
         console.log('App moved to background');
 
-        // 백그라운드 진입 시 반복 모드 및 종료 설정 확인
         try {
-          // 추가 안전장치: 반복 모드 다시 비활성화 및 앱 종료 시 오디오 종료 설정
+          // 재생 중지 및 정리
+          const state = await TrackPlayer.getState();
+          if (state === State.Playing) {
+            await TrackPlayer.pause();
+          }
+
+          // 백그라운드 설정 강화
           await TrackPlayer.setRepeatMode(RepeatMode.Off);
           await TrackPlayer.updateOptions({
             android: {
@@ -937,9 +970,10 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
               stopWithApp: true,
             }
           });
-          console.log("Kill behavior set on background transition");
+
+          console.log("Background settings applied successfully");
         } catch (error) {
-          console.error("Error setting options on background:", error);
+          console.error("Error applying background settings:", error);
         }
       }
 
@@ -947,7 +981,21 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
       if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
         console.log("App returned to foreground");
 
-        // 성경 플레이어임을 표시 (성경일독과 구분)
+        // 안전한 재초기화
+        try {
+          const isRunning = await TrackPlayer.isServiceRunning();
+          if (!isRunning) {
+            console.log("Service not running, reinitializing...");
+            const success = await setupPlayer();
+            if (success) {
+              setIsPlayerInitialized(true);
+            }
+          }
+        } catch (error) {
+          console.error("Error checking service on foreground return:", error);
+        }
+
+        // 플레이어 설정 재확인
         defaultStorage.set("is_illdoc_player", false);
         defaultStorage.set("auto_next_chapter_enabled", enableAutoNext);
       }

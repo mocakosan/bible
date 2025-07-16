@@ -83,216 +83,6 @@ export default function BibleConectionScreen() {
         saveAutoProgressSetting(true);
     }, []);
 
-    dispatch(illdocSelectSlice.actions.changePage({ book, jang }));
-    const BOOK = useSelector(
-        (state: any) => state.illDoc.book,
-        (left, right) => left.book !== right.book
-    );
-    const JANG = useSelector(
-        (state: any) => state.illDoc.jang,
-        (left, right) => left.jang !== right.jang
-    );
-
-    const selectSql = `SELECT type, color, jul FROM 'bible_setting'
-                       WHERE book = ${BOOK} and jang = ${JANG}`;
-
-    const bibleName = `${BibleStep?.[BOOK - 1]?.name} ${JANG}장` ?? "";
-
-    const fetcher = async (url: string) => {
-        const data = await fetchSql(bibleSetting, url, []);
-        return data;
-    };
-
-    const { data: markData, mutate } = useSWR(selectSql, fetcher);
-
-    const handleUpdateData = useCallback(async () => {
-        const data = await fetchSql(bibleSetting, selectSql, []);
-        return mutate(selectSql, data);
-    }, [BOOK, JANG]);
-
-    const handleReadStatusChange = useCallback((book: number, chapter: number, isRead: boolean) => {
-        handleUpdateData();
-        loadPlan();
-    }, [handleUpdateData, loadPlan]);
-
-    // 🔥 안전한 markCurrentChapterAsRead 함수로 교체
-    const markCurrentChapterAsRead = useCallback(async () => {
-        try {
-            console.log(`📝 Connection: Marking chapter ${BOOK}:${JANG} as read`);
-
-            // 🔥 가장 안전한 방법: 직접 SQLite 업데이트
-            const settingUpdateSql = `UPDATE reading_table SET read = ?, time = ? WHERE book = ? AND jang = ?`;
-            const settingInsertSql = `INSERT OR REPLACE INTO reading_table (book, jang, read, time) VALUES (?, ?, ?, ?)`;
-
-            try {
-                // 기존 데이터 확인
-                const checkSql = `SELECT read FROM reading_table WHERE book = ? AND jang = ?`;
-                const result = await fetchSql(bibleSetting, checkSql, [BOOK, JANG]);
-
-                const currentTime = new Date().toISOString();
-
-                if (result && result.length > 0) {
-                    // 기존 데이터 업데이트
-                    await fetchSql(bibleSetting, settingUpdateSql, ['TRUE', currentTime, BOOK, JANG]);
-                    console.log('✅ Connection: Updated existing reading record');
-                } else {
-                    // 새 데이터 삽입
-                    await fetchSql(bibleSetting, settingInsertSql, [BOOK, JANG, 'TRUE', currentTime]);
-                    console.log('✅ Connection: Created new reading record');
-                }
-
-            } catch (sqlError) {
-                console.error('SQLite 오류, 대체 방법 시도:', sqlError);
-
-                // 🔥 fallback: 더 간단한 방법
-                const simpleSql = `INSERT OR REPLACE INTO reading_table (book, jang, read, time) VALUES (${BOOK}, ${JANG}, 'TRUE', '${new Date().toISOString()}')`;
-                await fetchSql(bibleSetting, simpleSql, []);
-                console.log('✅ Connection: Fallback insert completed');
-            }
-
-            // 🔥 2. 캐시 업데이트 (안전하게)
-            try {
-                if (typeof updateReadingTableCache === 'function') {
-                    updateReadingTableCache(BOOK, JANG, true);
-                    console.log('✅ Connection: Updated reading table cache');
-                }
-            } catch (cacheError) {
-                console.warn('캐시 업데이트 실패 (무시 가능):', cacheError);
-            }
-
-            // 🔥 3. 일독 계획 데이터 업데이트 (안전하게)
-            try {
-                if (planData && typeof markChapterAsReadHook === 'function') {
-                    await markChapterAsReadHook(BOOK, JANG);
-                    console.log('✅ Connection: Updated plan data');
-                }
-            } catch (planError) {
-                console.warn('계획 데이터 업데이트 실패 (무시 가능):', planError);
-            }
-
-            // 🔥 4. 추가 동기화 (안전하게)
-            try {
-                // 추가적인 캐시 업데이트로 확실한 동기화
-                setTimeout(() => {
-                    if (typeof updateReadingTableCache === 'function') {
-                        updateReadingTableCache(BOOK, JANG, true);
-                        console.log('🔄 Connection: Additional cache update for sync');
-                    }
-                }, 100);
-
-                setTimeout(() => {
-                    if (typeof updateReadingTableCache === 'function') {
-                        updateReadingTableCache(BOOK, JANG, true);
-                        console.log('🔄 Connection: Final cache update for sync');
-                    }
-                }, 300);
-
-                // 상위 컴포넌트 알림
-                if (typeof handleReadStatusChange === 'function') {
-                    handleReadStatusChange(BOOK, JANG, true);
-                    console.log('✅ Connection: Notified parent component');
-                }
-            } catch (syncError) {
-                console.warn('동기화 작업 일부 실패 (무시 가능):', syncError);
-            }
-
-            console.log(`✅ Connection: Successfully marked chapter ${BOOK}:${JANG} as read`);
-            return true;
-
-        } catch (error) {
-            console.error('❌ Connection: Error marking chapter as read:', error);
-
-            // 🔥 최후의 수단: 가장 간단한 방법
-            try {
-                console.log('🔄 Connection: Attempting final fallback method');
-                const fallbackSql = `UPDATE reading_table SET read = 'TRUE' WHERE book = ${BOOK} AND jang = ${JANG}`;
-                await fetchSql(bibleSetting, fallbackSql, []);
-                console.log('✅ Connection: Fallback method succeeded');
-                return true;
-            } catch (fallbackError) {
-                console.error('❌ Connection: All methods failed:', fallbackError);
-                throw error;
-            }
-        }
-    }, [BOOK, JANG, planData, markChapterAsReadHook, updateReadingTableCache, handleReadStatusChange]);
-
-    // 🔥 자동 진행 함수 개선
-    const handleAutoProgress = useCallback(async () => {
-        // 중복 실행 방지
-        if (isAutoProcessing) {
-            console.log('⚠️ Connection: Auto progress already in progress, skipping');
-            return;
-        }
-
-        console.log(`🚀 Connection: Starting auto progress for ${BOOK}:${JANG}`);
-        setIsAutoProcessing(true);
-
-        try {
-            // 1. 재생 완료 알림 (즉시 표시)
-            // 여기에 기존 알림 코드가 있다면 유지
-
-            // 2. 짧은 대기 (사용자가 메시지를 확인할 수 있도록)
-            await new Promise(resolve => setTimeout(resolve, 800));
-
-            // 3. 현재 장을 읽었음으로 자동 체크 (안전한 함수 사용)
-            console.log(`📖 Connection: Marking chapter ${BOOK}:${JANG} as read`);
-
-            const success = await markCurrentChapterAsRead();
-
-            if (!success) {
-                throw new Error('Failed to mark chapter as read');
-            }
-
-            // 4. 추가 대기 및 상태 재확인 (동기화 보장)
-            await new Promise(resolve => setTimeout(resolve, 200));
-
-            // 5. 추가 대기 후 다음 장으로 이동
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            console.log(`⏭️ Connection: Moving to next chapter from ${BOOK}:${JANG}`);
-            onPressNext(JANG);
-
-            console.log('✅ Connection: Auto progress completed successfully');
-
-        } catch (error) {
-            console.error('❌ Connection: Auto progress error:', error);
-
-            // 🔥 사용자 친화적인 오류 메시지로 변경
-            Toast.show({
-                type: "info",
-                text1: "자동 진행 일시 중단",
-                text2: "수동으로 읽기 완료를 체크해주세요.",
-                visibilityTime: 2500,
-                position: "top",
-            });
-        } finally {
-            // 처리 상태 초기화
-            setIsAutoProcessing(false);
-            if (autoProgressTimeoutRef.current) {
-                clearTimeout(autoProgressTimeoutRef.current);
-                autoProgressTimeoutRef.current = null;
-            }
-            console.log('🔄 Connection: Resetting auto progress states');
-        }
-    }, [BOOK, JANG, isAutoProcessing, markCurrentChapterAsRead, onPressNext]);
-
-    // 🔥 추가 안전 장치
-    const safeHandleAutoProgress = useCallback(async () => {
-        try {
-            await handleAutoProgress();
-        } catch (error) {
-            console.error('❌ ConectionContainer: Auto progress error:', error);
-            console.log('🔄 ConectionContainer: Resetting auto progress states');
-
-            // 상태 초기화
-            setIsAutoProcessing(false);
-            if (autoProgressTimeoutRef.current) {
-                clearTimeout(autoProgressTimeoutRef.current);
-                autoProgressTimeoutRef.current = null;
-            }
-        }
-    }, [handleAutoProgress]);
-
     // TrackPlayer 이벤트 리스너 - 오디오 재생 완료 감지
     useTrackPlayerEvents([
         Event.PlaybackQueueEnded,
@@ -314,7 +104,7 @@ export default function BibleConectionScreen() {
         // 재생 완료 이벤트 처리
         if (event.type === Event.PlaybackQueueEnded) {
             console.log('🏁 Audio playback completed - starting auto progress');
-            await safeHandleAutoProgress(); // 🔥 안전한 함수 사용
+            await handleAutoProgress();
         }
 
         // 재생 상태가 종료로 변경된 경우도 처리
@@ -325,10 +115,148 @@ export default function BibleConectionScreen() {
                 clearTimeout(autoProgressTimeoutRef.current);
             }
             autoProgressTimeoutRef.current = setTimeout(async () => {
-                await safeHandleAutoProgress(); // 🔥 안전한 함수 사용
+                await handleAutoProgress();
             }, 500);
         }
     });
+
+    // 자동 진행 메인 로직
+    const handleAutoProgress = useCallback(async () => {
+        // 중복 실행 방지
+        if (isAutoProcessing) {
+            console.log('⚠️ Connection: Auto progress already in progress, skipping');
+            return;
+        }
+
+        console.log(`🚀 Connection: Starting auto progress for ${BOOK}:${JANG}`);
+        setIsAutoProcessing(true);
+
+        try {
+            // 1. 재생 완료 알림 (즉시 표시)
+
+            // 2. 짧은 대기 (사용자가 메시지를 확인할 수 있도록)
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            // 3. 현재 장을 읽었음으로 자동 체크
+            console.log(`📖 Connection: Marking chapter ${BOOK}:${JANG} as read`);
+            await markCurrentChapterAsRead();
+
+            // 4. 🆕 추가 대기 및 상태 재확인 (동기화 보장)
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+            // 캐시 재업데이트 (확실한 동기화)
+            updateReadingTableCache(BOOK, JANG, true);
+            console.log('🔄 Connection: Re-updated cache for safety');
+
+
+            // 6. 추가 대기 후 다음 장으로 이동
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            console.log(`⏭️ Connection: Moving to next chapter from ${BOOK}:${JANG}`);
+            onPressNext(JANG);
+
+            console.log('✅ Connection: Auto progress completed successfully');
+
+        } catch (error) {
+            console.error('❌ Connection: Auto progress error:', error);
+            Toast.show({
+                type: "error",
+                text1: "자동 진행 오류",
+                text2: "수동으로 읽었음 체크 후 다음 장으로 이동해주세요.",
+                visibilityTime: 3000,
+                position: "top",
+            });
+        } finally {
+            // 처리 상태 초기화
+            setIsAutoProcessing(false);
+            if (autoProgressTimeoutRef.current) {
+                clearTimeout(autoProgressTimeoutRef.current);
+                autoProgressTimeoutRef.current = null;
+            }
+        }
+    }, [BOOK, JANG, isAutoProcessing, markCurrentChapterAsRead, onPressNext, updateReadingTableCache]);
+
+    // 현재 장을 읽었음으로 표시하는 함수
+    const markCurrentChapterAsRead = useCallback(async () => {
+        try {
+            console.log(`📝 Connection: Marking chapter ${BOOK}:${JANG} as read`);
+
+            // reading_table SQL 쿼리 정의
+            const settingSelectSql = `${defineSQL(['read'], 'SELECT', 'reading_table', {
+                WHERE: { BOOK: '?', JANG: '?' }
+            })}`;
+
+            const settingInsertSql = `${defineSQL(
+                ['book', 'jang', 'read', 'time'],
+                'INSERT',
+                'reading_table',
+                {}
+            )}`;
+
+            const settingUpdateSql = `${defineSQL(
+                ['read', 'time'],
+                'UPDATE',
+                'reading_table',
+                {
+                    WHERE: { BOOK, JANG }
+                }
+            )}`;
+
+            // 기존 데이터 확인
+            const result = await fetchSql(bibleSetting, settingSelectSql, [BOOK, JANG], 0);
+
+            // reading_table 업데이트 또는 삽입
+            if (result) {
+                await fetchSql(bibleSetting, settingUpdateSql, [
+                    'true',
+                    String(new Date())
+                ]);
+                console.log('✅ Connection: Updated existing reading record');
+            } else {
+                await fetchSql(bibleSetting, settingInsertSql, [
+                    BOOK,
+                    JANG,
+                    'true',
+                    String(new Date())
+                ]);
+                console.log('✅ Connection: Created new reading record');
+            }
+
+            // 🆕 중요: 캐시 업데이트 (이것이 리스트 표시에 중요!)
+            updateReadingTableCache(BOOK, JANG, true);
+            console.log('✅ Connection: Updated reading table cache');
+
+            // 일독 계획 데이터도 업데이트 (있는 경우)
+            if (planData) {
+                await markChapterAsReadHook(BOOK, JANG);
+                console.log('✅ Connection: Updated plan data');
+            }
+
+            // 🔥 핵심: updateReadingTableCache 호출 시 자동으로 전역 새로고침이 트리거됨
+            // 추가적인 동기화를 위해 여러 번 호출
+            setTimeout(() => {
+                updateReadingTableCache(BOOK, JANG, true);
+                console.log('🔄 Connection: Additional cache update for sync');
+            }, 100);
+
+            setTimeout(() => {
+                updateReadingTableCache(BOOK, JANG, true);
+                console.log('🔄 Connection: Final cache update for sync');
+            }, 300);
+
+            // 상위 컴포넌트에 읽기 상태 변경 알림
+            if (handleReadStatusChange) {
+                handleReadStatusChange(BOOK, JANG, true);
+                console.log('✅ Connection: Notified parent component');
+            }
+
+            console.log(`✅ Connection: Successfully marked chapter ${BOOK}:${JANG} as read`);
+
+        } catch (error) {
+            console.error('❌ Connection: Error marking chapter as read:', error);
+            throw error;
+        }
+    }, [BOOK, JANG, planData, markChapterAsReadHook, updateReadingTableCache, handleReadStatusChange]);
 
     // 컴포넌트 언마운트 시 타이머 정리
     useEffect(() => {
@@ -421,6 +349,38 @@ export default function BibleConectionScreen() {
         },
         [sound, BOOK, JANG, handleUpdateData, navigation]
     );
+
+    dispatch(illdocSelectSlice.actions.changePage({ book, jang }));
+    const BOOK = useSelector(
+        (state: any) => state.illDoc.book,
+        (left, right) => left.book !== right.book
+    );
+    const JANG = useSelector(
+        (state: any) => state.illDoc.jang,
+        (left, right) => left.jang !== right.jang
+    );
+
+    const selectSql = `SELECT type, color, jul FROM 'bible_setting'
+                       WHERE book = ${BOOK} and jang = ${JANG}`;
+
+    const bibleName = `${BibleStep?.[BOOK - 1]?.name} ${JANG}장` ?? "";
+
+    const fetcher = async (url: string) => {
+        const data = await fetchSql(bibleSetting, url, []);
+        return data;
+    };
+
+    const { data: markData, mutate } = useSWR(selectSql, fetcher);
+
+    const handleUpdateData = useCallback(async () => {
+        const data = await fetchSql(bibleSetting, selectSql, []);
+        return mutate(selectSql, data);
+    }, [BOOK, JANG]);
+
+    const handleReadStatusChange = useCallback((book: number, chapter: number, isRead: boolean) => {
+        handleUpdateData();
+        loadPlan();
+    }, [handleUpdateData, loadPlan]);
 
     const [menuIndex, setMenuIndex] = useState<number>(0);
     const onMenuPress = useCallback(

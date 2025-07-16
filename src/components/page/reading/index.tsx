@@ -1,5 +1,4 @@
-// src/components/page/reading/index.tsx
-// 🔥 기존 UI 완전 유지, 내부 로직만 시간 기반으로 변경
+// src/components/page/reading/index.tsx - 일독 진행 현황 섹션 수정
 
 import {useFocusEffect, useIsFocused} from "@react-navigation/native";
 import { useCallback, useEffect, useState } from "react";
@@ -11,17 +10,13 @@ import SettingSidePage from "./_side/setting";
 import { Platform, View, StyleSheet } from "react-native";
 import { Box, Text, VStack, HStack, Progress, Button, Badge, ScrollView } from "native-base";
 import BannerAdMain from "../../../adforus/BannerAdMain";
-
-// 🔥 시간 기반 유틸리티 함수들로 교체 (기존 API 호환성 유지)
 import {
   loadBiblePlanData,
   calculateProgress,
   calculateMissedChapters,
   formatDate,
-  formatReadingTime,
   deleteBiblePlanData
 } from "../../../utils/biblePlanUtils";
-
 import { useBaseStyle, useNativeNavigation } from "../../../hooks";
 import { Alert } from "react-native";
 import { Toast } from "react-native-toast-message/lib/src/Toast";
@@ -33,7 +28,6 @@ import ProgressScreen from "../progs";
 import dayjs from 'dayjs';
 
 export default function ReadingBibleScreen() {
-  // 🔥 기존 상태 변수들 완전히 동일하게 유지
   const [menuIndex, setMenuIndex] = useState<number>(2);
   const [mark, setMark] = useState<any>(null);
   const [planData, setPlanData] = useState<any>(null);
@@ -44,19 +38,21 @@ export default function ReadingBibleScreen() {
   const { color } = useBaseStyle();
   const { navigation } = useNativeNavigation();
 
-  // 🔥 기존 훅 사용 (내부적으로 시간 기반 처리)
+  // 🔥 수정: resetAllData 제거하고 필요한 함수만 사용
   const {
     registerGlobalRefreshCallback,
     unregisterGlobalRefreshCallback
   } = useBibleReading(mark);
 
-  // 🔥 기존 함수들 완전히 동일하게 유지
+  // 안전한 메뉴 리스트 확보
   const safeMenuList = menuList && menuList.length > 0 ? menuList : ["구약", "신약", "설정"];
 
+  // SQL 쿼리 상수
   const settingSelectSql = `${defineSQL(["*"], "SELECT", "reading_table", {
     WHERE: { read: "?" }
   })}`;
 
+  // 일독 타입 이름 변환 함수
   const getPlanTypeName = useCallback((planType: string): string => {
     switch (planType) {
       case 'full_bible': return '성경';
@@ -68,6 +64,7 @@ export default function ReadingBibleScreen() {
     }
   }, []);
 
+  // 일독 타입별 설명 가져오기
   const getPlanTypeDescription = useCallback((planType: string): string => {
     switch (planType) {
       case 'full_bible':
@@ -85,7 +82,7 @@ export default function ReadingBibleScreen() {
     }
   }, []);
 
-  // 🔥 기존 로딩 함수 그대로 유지
+  // 📚 읽기 상태 로드 함수 - 의존성 제거
   const loadReadingState = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -112,7 +109,7 @@ export default function ReadingBibleScreen() {
     }
   }, [settingSelectSql]);
 
-  // 🔥 기존 메뉴 업데이트 함수 그대로 유지 (내부적으로 시간 기반 데이터 처리)
+  // 일독 데이터 로드 및 메뉴 설정 - 의존성 제거
   const updateMenuAndData = useCallback(() => {
     try {
       const existingPlan = loadBiblePlanData();
@@ -159,7 +156,7 @@ export default function ReadingBibleScreen() {
     }
   }, []);
 
-  // 🔥 기존 새로고침 함수들 그대로 유지
+  // 전역 새로고침 함수 - 의존성 명시
   const handleGlobalRefresh = useCallback(() => {
     console.log('🔄 ReadingBibleScreen 전역 새로고침 실행');
     setForceUpdateKey(prev => prev + 1);
@@ -167,12 +164,14 @@ export default function ReadingBibleScreen() {
     updateMenuAndData();
   }, [loadReadingState, updateMenuAndData]);
 
+  // 메뉴 변경 핸들러
   const handleMenuChange = useCallback((index: number) => {
     setMenuIndex(index);
     const currentMenuName = safeMenuList[index];
     console.log(`메뉴 변경: ${currentMenuName} (인덱스: ${index})`);
   }, [safeMenuList]);
 
+  // 🔥 수정된 데이터 업데이트 함수
   const handleChangeUpdateData = useCallback(async (targetTabIndex?: number) => {
     try {
       setIsLoading(true);
@@ -195,7 +194,7 @@ export default function ReadingBibleScreen() {
     }
   }, [loadReadingState, updateMenuAndData]);
 
-  // 🔥 기존 초기화 함수 그대로 유지
+  // 직접 초기화 함수
   const handleDirectReset = useCallback(async () => {
     try {
       console.log('=== ReadingBibleScreen 직접 초기화 시작 ===');
@@ -263,13 +262,12 @@ export default function ReadingBibleScreen() {
     }
   }, [loadReadingState, updateMenuAndData]);
 
-  // 🔥 ProgressView 컴포넌트 (내부적으로 시간 기반 데이터 사용)
+  // ProgressView 컴포넌트 정의
   const ProgressView = useCallback(() => {
     if (!planData) {
       return <ProgressScreen key={`progress-${forceUpdateKey}`} />;
     }
 
-    // 🔥 시간 기반 진행률 계산 (기존 UI 형식 유지)
     const progress = calculateProgress(planData);
     const missedCount = calculateMissedChapters(planData);
 
@@ -287,11 +285,7 @@ export default function ReadingBibleScreen() {
       return '#F44336';
     };
 
-    // 🔥 시간 기반 데이터에서 분 정보 가져오기
     const getEstimatedMinutes = () => {
-      if (planData.calculatedMinutesPerDay) {
-        return Math.round(planData.calculatedMinutesPerDay);
-      }
       if (planData.minutesPerDay) {
         return planData.minutesPerDay;
       }
@@ -315,7 +309,7 @@ export default function ReadingBibleScreen() {
 
     return (
         <ScrollView style={{ backgroundColor: color.white, flex: 1 }}>
-          {/* 진행률 카드 (기존 UI 그대로) */}
+          {/* 진행률 카드 */}
           <Box bg="white" mx={4} mt={4} p={4} borderRadius="md" shadow={1}>
             <VStack space={3}>
               <Text fontSize="22" fontWeight="600" color="#333">
@@ -369,7 +363,7 @@ export default function ReadingBibleScreen() {
             </VStack>
           </Box>
 
-          {/* 일정 정보 카드 (기존 UI에 시간 정보 조건부 추가) */}
+          {/* 일정 정보 카드 */}
           <Box bg="white" mx={4} mt={4} p={4} borderRadius="md" shadow={1}>
             <VStack space={3}>
               <Text fontSize="22" fontWeight="600" color="#333">
@@ -386,32 +380,17 @@ export default function ReadingBibleScreen() {
                 </HStack>
                 <HStack justifyContent="space-between">
                   <Text fontSize="18" color="#666">예상 시간</Text>
-                  <Text fontSize="18" fontWeight="500">
-                    {planData.isTimeBasedCalculation ?
-                        formatReadingTime(getEstimatedMinutes()) :
-                        `${getEstimatedMinutes()}분`
-                    }
-                  </Text>
+                  <Text fontSize="18" fontWeight="500">{getEstimatedMinutes()}분</Text>
                 </HStack>
                 <HStack justifyContent="space-between">
                   <Text fontSize="18" color="#666">남은 일수</Text>
                   <Text fontSize="18" fontWeight="500">{getDaysRemaining()}일</Text>
                 </HStack>
-
-                {/*/!* 🔥 시간 기반 계획일 때만 추가 정보 표시 *!/*/}
-                {/*{planData.isTimeBasedCalculation && progress.formattedReadTime && (*/}
-                {/*    <HStack justifyContent="space-between">*/}
-                {/*      <Text fontSize="18" color="#666">읽은 시간</Text>*/}
-                {/*      <Text fontSize="18" fontWeight="500" color="#37C4B9">*/}
-                {/*        {progress.formattedReadTime}*/}
-                {/*      </Text>*/}
-                {/*    </HStack>*/}
-                {/*)}*/}
               </VStack>
             </VStack>
           </Box>
 
-          {/* 액션 버튼들 (기존 UI 그대로) */}
+          {/* 액션 버튼들 */}
           <VStack space={3} mx={4} mt={4} mb={6}>
             <Button
                 onPress={() => {
@@ -463,7 +442,7 @@ export default function ReadingBibleScreen() {
     );
   }, [planData, color.white, navigation, handleDirectReset, getPlanTypeName, calculateProgress, calculateMissedChapters, forceUpdateKey]);
 
-  // 🔥 기존 렌더링 함수 그대로 유지 (내부 데이터만 시간 기반 처리)
+  // 컴포넌트 렌더링
   const renderContent = useCallback(() => {
     if (isLoading) {
       return (
@@ -488,13 +467,12 @@ export default function ReadingBibleScreen() {
     }
 
     if (planData && menuIndex === 0) {
-      // 🆕 첨부 이미지와 동일한 일독 진행 현황 박스 (시간 기반 데이터로 개선)
-      const progress = calculateProgress(planData);
-
+      // 🆕 첨부 이미지와 동일한 일독 진행 현황 박스
       const progressIndicator = (
           <Box bg="#E8F8F7" mx={4} mt={4} p={4} borderRadius="md">
             <VStack space={3}>
               {/* 상단 설명 */}
+
               <Text fontSize="16" color="#666" textAlign="center">
                 {getPlanTypeDescription(planData.planType)}
               </Text>
@@ -507,13 +485,13 @@ export default function ReadingBibleScreen() {
                 </Text>
               </HStack>
 
-              {/* 하단 기간 정보 (시간 기반 데이터 반영) */}
+              {/* 하단 기간 정보 */}
               <VStack space={1}>
                 <HStack justifyContent="space-between" alignItems="center">
                   <Text fontSize="18" color="#666">총 기간 :</Text>
                   <HStack alignItems="baseline">
                     <Text fontSize="16" color="#666">
-                      {dayjs(planData.startDate).format('YY.MM.DD')} ~ {dayjs(planData.targetDate || planData.endDate).format('YY.MM.DD')}
+                      {dayjs(planData.startDate).format('YY.MM.DD')} ~ {dayjs(planData.targetDate).format('YY.MM.DD')}
                     </Text>
                     <Text fontSize="18" color="#37C4B9" fontWeight="600" ml={2}>
                       {planData.totalDays}일
@@ -528,29 +506,15 @@ export default function ReadingBibleScreen() {
                       {planData.chaptersPerDay}장
                     </Text>
                     <Text fontSize="18" color="#37C4B9" ml={1} fontWeight="700">
-                      / {planData.isTimeBasedCalculation ?
-                        formatReadingTime(planData.calculatedMinutesPerDay) :
-                        `${planData.minutesPerDay || Math.round(planData.chaptersPerDay * 4.5)}분`
-                    }
+                      / {planData.minutesPerDay}분
                     </Text>
                   </HStack>
                 </HStack>
-
-                {/* 🔥 시간 기반 계획일 때만 추가 진행 정보 표시 */}
-                {/*{planData.isTimeBasedCalculation && progress.formattedReadTime && (*/}
-                {/*    <HStack justifyContent="space-between" alignItems="center">*/}
-                {/*      <Text fontSize="16" color="#666">읽은 시간 :</Text>*/}
-                {/*      <Text fontSize="16" color="#37C4B9" fontWeight="600">*/}
-                {/*        {progress.formattedReadTime} / {progress.formattedTotalTime || formatReadingTime(planData.totalMinutes)}*/}
-                {/*      </Text>*/}
-                {/*    </HStack>*/}
-                {/*)}*/}
               </VStack>
             </VStack>
           </Box>
       );
 
-      // 🔥 기존 계획 타입별 렌더링 로직 그대로 유지
       switch (planData.planType) {
         case 'full_bible':
           return (
@@ -659,7 +623,6 @@ export default function ReadingBibleScreen() {
       }
     }
 
-    // 🔥 기존 구약/신약 렌더링 로직 그대로 유지
     if (currentMenuName === "구약") {
       return (
           <ScrollView
@@ -697,7 +660,7 @@ export default function ReadingBibleScreen() {
     return null;
   }, [isLoading, safeMenuList, menuIndex, mark, planData, forceUpdateKey, color.white, handleChangeUpdateData, isFocused, ProgressView, getPlanTypeName, getPlanTypeDescription]);
 
-  // 🔥 기존 useEffect들 모두 그대로 유지
+  // 컴포넌트 마운트 시 전역 새로고침 콜백 등록
   useEffect(() => {
     console.log('🔄 ReadingBibleScreen 전역 새로고침 콜백 등록');
     registerGlobalRefreshCallback(handleGlobalRefresh);
@@ -708,6 +671,7 @@ export default function ReadingBibleScreen() {
     };
   }, [registerGlobalRefreshCallback, unregisterGlobalRefreshCallback, handleGlobalRefresh]);
 
+  // 컴포넌트 포커스 시 데이터 로드
   useFocusEffect(
       useCallback(() => {
         console.log('🎯 ReadingBibleScreen 포커스 - 데이터 로드 시작');
@@ -720,7 +684,6 @@ export default function ReadingBibleScreen() {
       }, [updateMenuAndData, loadReadingState])
   );
 
-  // 🔥 기존 return 구조 완전히 동일하게 유지
   return (
       <View style={styles.container}>
         <BackHeaderLayout title="성경일독" />
@@ -742,7 +705,6 @@ export default function ReadingBibleScreen() {
   );
 }
 
-// 🔥 기존 스타일 그대로 유지
 const styles = StyleSheet.create({
   container: {
     flex: 1,
