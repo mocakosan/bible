@@ -1,3 +1,6 @@
+// src/components/page/reading/_side/old.tsx
+// 최종 수정 버전
+
 import { FlashList } from '@shopify/flash-list';
 import { isEmpty } from 'lodash';
 import { Center, Text } from 'native-base';
@@ -17,27 +20,39 @@ interface Props {
 }
 
 function OldTestament({ readState, menuIndex, filterBooks }: Props) {
-    const { color } = useBaseStyle();
+    // 🔥 강화된 안전장치
+    const baseStyleResult = useBaseStyle();
+    const color = baseStyleResult?.color || {
+        white: '#FFFFFF',
+        black: '#000000',
+        gray: '#808080',
+        gray2: '#E0E0E0',
+        primary: '#37C4B9',
+        status: '#F0F0F0',
+        bible: '#37C4B9'
+    };
+
     const { navigation } = useNativeNavigation();
 
-    // 🔥 readState를 훅에 전달
+    // 🔥 useBibleReading 훅 안전장치 적용
+    const bibleReadingHook = useBibleReading(readState);
     const {
-        planData,
-        isChapterReadSync,
-        getChapterStatus,
-        getChapterStyleWithExclamation, // 🆕 느낌표 포함 스타일 함수
-        loadPlan,
-        loadAllReadingTableData,
-        getTodayProgress,
-        getYesterdayProgress,
-        refreshKey,
-        forceRefresh,
-        readingTableData
-    } = useBibleReading(readState); // readState 전달
+        planData = null,
+        isChapterReadSync = null,
+        getChapterStatus = null,
+        getChapterStyleWithExclamation = null,
+        loadPlan = () => {},
+        loadAllReadingTableData = () => {},
+        getTodayProgress = null,
+        getYesterdayProgress = null,
+        refreshKey = 0,
+        forceRefresh = () => {},
+        readingTableData = {}
+    } = bibleReadingHook || {};
 
     const [visibleChapters, setVisibleChapters] = useState<Set<string>>(new Set());
 
-    // 표시할 장들 업데이트 (오늘 + 어제 못 읽은 장)
+    // 🔥 표시할 장들 업데이트 - 안전장치 강화
     const updateVisibleChapters = useCallback(() => {
         if (!planData) {
             setVisibleChapters(new Set());
@@ -49,30 +64,37 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
 
             console.log(`=== ${planData.planType} 표시할 장 계산 시작 ===`);
 
-            // 오늘 읽을 장들 (remainingChapters 사용)
-            if (getTodayProgress) {
-                const todayProgress = getTodayProgress();
-                if (todayProgress && todayProgress.remainingChapters) {
-                    todayProgress.remainingChapters.forEach(chapter => {
-                        // 필터링이 있는 경우 해당 범위 내의 장만 추가
-                        if (!filterBooks || filterBooks.includes(chapter.bookIndex)) {
-                            chaptersToShow.add(`${chapter.bookIndex}-${chapter.chapter}`);
-                            console.log(`오늘 읽을 장 추가: ${chapter.bookIndex}권 ${chapter.chapter}장`);
-                        }
-                    });
+            // 오늘 읽을 장들
+            if (getTodayProgress && typeof getTodayProgress === 'function') {
+                try {
+                    const todayProgress = getTodayProgress();
+                    if (todayProgress && todayProgress.remainingChapters) {
+                        todayProgress.remainingChapters.forEach(chapter => {
+                            if (!filterBooks || filterBooks.includes(chapter.bookIndex)) {
+                                chaptersToShow.add(`${chapter.bookIndex}-${chapter.chapter}`);
+                                console.log(`오늘 읽을 장 추가: ${chapter.bookIndex}권 ${chapter.chapter}장`);
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.warn('getTodayProgress 호출 중 오류:', error);
                 }
             }
 
-            // 어제 못 읽은 장들 (missedChapters 사용)
-            if (getYesterdayProgress) {
-                const yesterdayProgress = getYesterdayProgress();
-                if (yesterdayProgress && yesterdayProgress.missedChapters) {
-                    yesterdayProgress.missedChapters.forEach(chapter => {
-                        if (!filterBooks || filterBooks.includes(chapter.bookIndex)) {
-                            chaptersToShow.add(`${chapter.bookIndex}-${chapter.chapter}`);
-                            console.log(`어제 못 읽은 장 추가: ${chapter.bookIndex}권 ${chapter.chapter}장`);
-                        }
-                    });
+            // 어제 못 읽은 장들
+            if (getYesterdayProgress && typeof getYesterdayProgress === 'function') {
+                try {
+                    const yesterdayProgress = getYesterdayProgress();
+                    if (yesterdayProgress && yesterdayProgress.missedChapters) {
+                        yesterdayProgress.missedChapters.forEach(chapter => {
+                            if (!filterBooks || filterBooks.includes(chapter.bookIndex)) {
+                                chaptersToShow.add(`${chapter.bookIndex}-${chapter.chapter}`);
+                                console.log(`어제 못 읽은 장 추가: ${chapter.bookIndex}권 ${chapter.chapter}장`);
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.warn('getYesterdayProgress 호출 중 오류:', error);
                 }
             }
 
@@ -84,11 +106,15 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
         }
     }, [planData, getTodayProgress, getYesterdayProgress, filterBooks]);
 
-    // 컴포넌트가 포커스될 때마다 데이터 새로고침
+    // 🔥 useEffect들 - 안전장치 적용
     useEffect(() => {
+        if (!navigation?.addListener) return;
+
         const unsubscribe = navigation.addListener('focus', () => {
             console.log('=== OldTestament 포커스 이벤트 ===');
-            forceRefresh();
+            if (forceRefresh && typeof forceRefresh === 'function') {
+                forceRefresh();
+            }
             setTimeout(() => {
                 updateVisibleChapters();
             }, 300);
@@ -97,32 +123,27 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
         return unsubscribe;
     }, [navigation, forceRefresh, updateVisibleChapters]);
 
-    // readState가 변경될 때마다 즉시 새로고침
     useEffect(() => {
         console.log('=== OldTestament readState 변경 감지 ===', readState?.length || 0);
         updateVisibleChapters();
     }, [readState, updateVisibleChapters]);
 
-    // planData가 변경될 때마다 즉시 새로고침
     useEffect(() => {
         console.log('=== OldTestament planData 변경 감지 ===', planData ? planData.planName : '없음');
         updateVisibleChapters();
     }, [planData, updateVisibleChapters]);
 
-    // refreshKey 변경 감지
     useEffect(() => {
         console.log('=== OldTestament refreshKey 변경 감지 ===', refreshKey);
         updateVisibleChapters();
     }, [refreshKey, updateVisibleChapters]);
 
-    // readingTableData 변경 감지 추가
     useEffect(() => {
         console.log('=== OldTestament readingTableData 변경 감지 ===', Object.keys(readingTableData || {}).length, '개 항목');
     }, [readingTableData]);
 
-    // 🔥 기존 스타일 함수 (호환성 유지)
+    // 🔥 스타일 함수 - 완전한 안전장치
     const getChapterStyleLegacy = useCallback((book: number, chapter: number) => {
-        // 기본 스타일 (테두리만)
         const baseStyle = {
             borderRadius: 17.5,
             width: 35,
@@ -135,10 +156,9 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
         };
 
         try {
-            // 먼저 읽기 상태부터 확인 (최우선)
+            // 읽기 상태 확인
             const isRead = isChapterReadSync ? isChapterReadSync(book, chapter) : false;
 
-            // 디버깅용 로그 (필요시 활성화)
             if ((book === 1 && chapter === 1) || (book === 19 && chapter === 1)) {
                 console.log(`Old: ${book}권 ${chapter}장 읽기 상태: ${isRead}, planData: ${planData ? planData.planType : 'null'}`);
             }
@@ -147,12 +167,12 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
             if (isRead) {
                 return {
                     ...baseStyle,
-                    color: '#4CAF50', // 초록색
+                    color: '#4CAF50',
                     showExclamation: false
                 };
             }
 
-            // 일독 계획이 없는 경우 - 읽지 않은 장은 검정색
+            // 일독 계획이 없는 경우
             if (!planData) {
                 return {
                     ...baseStyle,
@@ -161,31 +181,34 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                 };
             }
 
-            // 🔥 일독 계획이 있는 경우 - 계획 타입별로 상태 확인
+            // 상태 확인 - 계획 타입별 처리
             let status = 'normal';
 
-            // 시편 일독의 경우
-            if (planData.planType === 'psalms' && book === 19) {
-                // 시편책(19번)에서만 getChapterStatus 사용
-                status = getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
-            }
-            // 모세오경 일독의 경우
-            else if (planData.planType === 'pentateuch' && book >= 1 && book <= 5) {
-                // 창세기(1) ~ 신명기(5)에서만 getChapterStatus 사용
-                status = getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
-            }
-            // 구약 일독의 경우
-            else if (planData.planType === 'old_testament' && book >= 1 && book <= 39) {
-                // 구약 범위에서 getChapterStatus 사용
-                status = getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
-            }
-            // 전체 성경 일독의 경우
-            else if (planData.planType === 'full_bible') {
-                // 모든 책에서 getChapterStatus 사용
-                status = getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
+            if (getChapterStatus && typeof getChapterStatus === 'function') {
+                try {
+                    // 계획 타입에 따른 범위 확인
+                    let shouldCheckStatus = false;
+
+                    if (planData.planType === 'psalms' && book === 19) {
+                        shouldCheckStatus = true;
+                    } else if (planData.planType === 'pentateuch' && book >= 1 && book <= 5) {
+                        shouldCheckStatus = true;
+                    } else if (planData.planType === 'old_testament' && book >= 1 && book <= 39) {
+                        shouldCheckStatus = true;
+                    } else if (planData.planType === 'full_bible') {
+                        shouldCheckStatus = true;
+                    }
+
+                    if (shouldCheckStatus) {
+                        status = getChapterStatus(book, chapter);
+                    }
+                } catch (error) {
+                    console.warn('getChapterStatus 호출 중 오류:', error);
+                    status = 'normal';
+                }
             }
 
-            // 디버깅용 로그 (시편/모세오경 첫 장만)
+            // 디버깅용 로그
             if ((book === 19 && chapter === 1 && planData.planType === 'psalms') ||
                 (book === 1 && chapter === 1 && planData.planType === 'pentateuch')) {
                 console.log(`🔍 Debug - ${book}권 ${chapter}장: planType=${planData.planType}, status=${status}`);
@@ -196,25 +219,25 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                 case 'today':
                     return {
                         ...baseStyle,
-                        color: '#F44336', // 빨간색 (오늘 읽을 장) ⭐
+                        color: '#F44336',
                         showExclamation: false
                     };
                 case 'yesterday':
                     return {
                         ...baseStyle,
-                        color: '#2196F3', // 파란색 (어제 읽어야 했던 장)
-                        showExclamation: true // 어제 안 읽은 장에 느낌표 표시
+                        color: '#2196F3',
+                        showExclamation: true
                     };
                 case 'missed':
                     return {
                         ...baseStyle,
-                        color: '#333333', // 진한 회색 (놓친 장)
-                        showExclamation: true // 놓친 장에 느낌표 표시
+                        color: '#333333',
+                        showExclamation: true
                     };
                 default:
                     return {
                         ...baseStyle,
-                        color: "#000000", // 검정색 (미래 장 등)
+                        color: "#000000",
                         showExclamation: false
                     };
             }
@@ -228,22 +251,26 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
         }
     }, [planData, isChapterReadSync, getChapterStatus, refreshKey]);
 
+    // 🔥 네비게이션 함수 - 안전장치
     const onNavigate = useCallback((book: number, chapter: number) => {
         try {
             defaultStorage.set('bible_book_connec', book);
             defaultStorage.set('bible_jang_connec', chapter);
 
-            navigation.navigate(
-                'BibleConectionScreen',
-                menuIndex === 1 ? { sound: true } : { show: true }
-            );
+            const params = menuIndex === 1 ? { sound: true } : { show: true };
+            navigation.navigate('BibleConectionScreen', params);
         } catch (error) {
             console.error('화면 이동 오류:', error);
         }
     }, [navigation, menuIndex]);
 
+    // 🔥 렌더링 아이템 - 완전한 안전장치
     const RenderItems = useCallback(
         ({ book, title, length }: { book: number; title: string; length: number }) => {
+            if (!book || !title || !length) {
+                return <View key={`invalid-${Math.random()}`} />;
+            }
+
             return (
                 <View key={`${book}-${refreshKey}`}>
                     <Center>
@@ -268,25 +295,48 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                         {Array.from({ length }).map((_, index) => {
                             const chapter = index + 1;
 
-                            // 🆕 느낌표 포함 스타일 함수 사용 (안전하게 처리)
+                            // 스타일 계산 - 안전장치
                             let chapterStyle, showExclamation;
 
-                            if (getChapterStyleWithExclamation) {
-                                const result = getChapterStyleWithExclamation(book, chapter);
-                                chapterStyle = result.style;
-                                showExclamation = result.showExclamation;
-                            } else {
-                                // 호환성 유지
-                                const legacyResult = getChapterStyleLegacy(book, chapter);
-                                chapterStyle = legacyResult;
-                                showExclamation = legacyResult.showExclamation || false;
+                            try {
+                                if (getChapterStyleWithExclamation && typeof getChapterStyleWithExclamation === 'function') {
+                                    const result = getChapterStyleWithExclamation(book, chapter);
+                                    chapterStyle = result.style;
+                                    showExclamation = result.showExclamation;
+                                } else {
+                                    const legacyResult = getChapterStyleLegacy(book, chapter);
+                                    chapterStyle = legacyResult;
+                                    showExclamation = legacyResult.showExclamation || false;
+                                }
+                            } catch (error) {
+                                console.error('스타일 계산 중 오류:', error);
+                                chapterStyle = {
+                                    borderRadius: 17.5,
+                                    width: 35,
+                                    height: 35,
+                                    justifyContent: 'center' as const,
+                                    alignItems: 'center' as const,
+                                    borderWidth: 1,
+                                    borderColor: "#E0E0E0",
+                                    backgroundColor: 'transparent',
+                                    color: '#000000'
+                                };
+                                showExclamation = false;
                             }
 
-                            // 🆕 개선된 읽기 상태 확인
+                            // 읽기 상태 및 상태 확인
                             const isRead = isChapterReadSync ? isChapterReadSync(book, chapter) : false;
-                            const status = planData && getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
+                            let status = 'normal';
 
-                            // 디버깅용 로그 (창세기 1장만)
+                            if (planData && getChapterStatus && typeof getChapterStatus === 'function') {
+                                try {
+                                    status = getChapterStatus(book, chapter);
+                                } catch (error) {
+                                    console.warn('상태 확인 중 오류:', error);
+                                }
+                            }
+
+                            // 디버깅용 로그
                             if (book === 1 && chapter === 1) {
                                 console.log(`Old RenderItems: 창세기 1장 - isRead: ${isRead}, status: ${status}, showExclamation: ${showExclamation}`);
                             }
@@ -297,7 +347,7 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                                     activeOpacity={0.7}
                                     style={{
                                         margin: 2,
-                                        position: 'relative' // 🔥 느낌표 절대 위치를 위해 필요
+                                        position: 'relative'
                                     }}
                                     onPress={() => onNavigate(book, chapter)}
                                 >
@@ -306,7 +356,7 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                                         <Text
                                             textAlign={'center'}
                                             style={{
-                                                color: chapterStyle.color,
+                                                color: chapterStyle?.color || '#000000',
                                                 fontSize: 14,
                                                 fontWeight: status === 'today' ? 'bold' : 'normal'
                                             }}
@@ -315,7 +365,7 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                                         </Text>
                                     </View>
 
-                                    {/* 🔥 느낌표 아이콘 (조건부 렌더링) */}
+                                    {/* 느낌표 아이콘 */}
                                     {showExclamation && (
                                         <View
                                             style={{
@@ -328,13 +378,17 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                                                 alignItems: 'center',
                                             }}
                                         >
-                                          <FastImage
-                                              source={require('../../../../assets/img/noRead.png')}
-                                              style={{
-                                                  width: 16,
-                                                  height: 16,
-                                              }}
-                                              resizeMode={FastImage.resizeMode.contain}/>
+                                            <FastImage
+                                                source={require('../../../../assets/img/noRead.png')}
+                                                style={{
+                                                    width: 16,
+                                                    height: 16,
+                                                }}
+                                                resizeMode={FastImage.resizeMode.contain}
+                                                onError={(error) => {
+                                                    console.warn('FastImage 로드 실패:', error);
+                                                }}
+                                            />
                                         </View>
                                     )}
                                 </TouchableOpacity>
@@ -347,21 +401,40 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
         [getChapterStyleLegacy, getChapterStyleWithExclamation, isChapterReadSync, getChapterStatus, planData, onNavigate, refreshKey, readState]
     );
 
-    // 데이터 메모이제이션
+    // 🔥 데이터 메모이제이션 - 안전장치
     const filteredData = useMemo(() => {
-        return filterBooks
-            ? OldBibleStep.filter(book => filterBooks.includes(book.index))
-            : OldBibleStep;
+        try {
+            const baseData = Array.isArray(OldBibleStep) ? OldBibleStep : [];
+            return filterBooks
+                ? baseData.filter(book => book && filterBooks.includes(book.index))
+                : baseData;
+        } catch (error) {
+            console.error('데이터 필터링 오류:', error);
+            return [];
+        }
     }, [filterBooks]);
+
+    // 로딩 상태
+    if (isEmpty(filteredData)) {
+        return (
+            <Center flex={1} bg={color?.white || '#FFFFFF'}>
+                <Text color={color?.black || '#000000'}>구약 데이터를 불러오는 중...</Text>
+            </Center>
+        );
+    }
 
     return (
         <FlashList
             renderItem={({ item }) => {
+                if (!item) {
+                    return <View key={`empty-${Math.random()}`} />;
+                }
+
                 return (
                     <RenderItems
-                        book={item.index}
-                        length={item.count}
-                        title={item.name}
+                        book={item.index || 0}
+                        length={item.count || 0}
+                        title={item.name || ''}
                     />
                 );
             }}
@@ -369,7 +442,10 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
             estimatedItemSize={66}
             data={filteredData}
             extraData={`${refreshKey}-${planData?.id || 'no-plan'}-${readState?.length || 0}-${visibleChapters.size}-${Object.keys(readingTableData || {}).length}`}
-            keyExtractor={(item, index) => `${item.index}-${refreshKey}-${readState?.length || 0}-${index}`}
+            keyExtractor={(item, index) => `${item?.index || index}-${refreshKey}-${readState?.length || 0}-${index}`}
+            onError={(error) => {
+                console.error('FlashList 오류:', error);
+            }}
         />
     );
 }

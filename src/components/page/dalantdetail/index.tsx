@@ -11,11 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import BackMypageHeaderLayout from "../../layout/header/backMypageHeaer";
-import {
-  useFocusEffect,
-  useNavigation,
-  useRoute,
-} from "@react-navigation/native";
+import {useFocusEffect, useNavigation, useRoute} from "@react-navigation/native";
 import { useCallback, useEffect, useState, useMemo } from "react";
 import DropDownPicker from "react-native-dropdown-picker";
 import {
@@ -61,7 +57,7 @@ export default function PointHistoryScreen() {
   const route = useRoute();
   const [pointData, setPointData] = useState(route.params?.point);
   const [userData, setUserData] = useState([]);
-  const [total, setTotal] = useState(0);
+  const [total,setTotal] = useState(0);
   const [naverId, setNaverId] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [naverPayInfo, setNaverPayInfo] = useState<NaverPayMemberInfo | null>(
@@ -74,7 +70,7 @@ export default function PointHistoryScreen() {
     id: "",
     isAdTrackingLimited: false,
   });
-  const [totalPoint, setTotalPoint] = useState(0);
+  const [totalPoint,setTotalPoint] = useState(0);
   // 새로 추가된 상태
   const [todayPoints, setTodayPoints] = useState<number>(0);
   const [totalPoints, setTotalPoints] = useState<number>(0);
@@ -132,9 +128,9 @@ export default function PointHistoryScreen() {
               },
             }
           );
-          const filteredData = response1.data.list;
+          const filteredData = response1.data.list
           setUserData(filteredData);
-          setTotal(response1.data.total);
+          setTotal(response1.data.total)
         }
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -234,29 +230,30 @@ export default function PointHistoryScreen() {
 
   const fetchPointSum = async () => {
     try {
+
       const response = await axios.get(
-        `https://bible25backend.givemeprice.co.kr/point/sum?userId=${pointData?.userId}&type=sum`
+          `https://bible25backend.givemeprice.co.kr/point/sum?userId=${pointData?.userId}&type=sum`
       );
 
       // 응답 구조에 따라 적절한 필드를 선택하여 상태 업데이트
-      const pointValue =
-        response.data.totalPoint || response.data.sum || response.data || 0;
+      const pointValue = response.data.totalPoint || response.data.sum || response.data || 0;
       setTotalPoint(pointValue);
+
     } catch (error) {
-      console.error("포인트 API 호출 실패:", error);
+      console.error('포인트 API 호출 실패:', error);
       if (axios.isAxiosError(error)) {
-        console.error("에러 상세:", {
+        console.error('에러 상세:', {
           message: error.message,
           status: error.response?.status,
-          data: error.response?.data,
+          data: error.response?.data
         });
       }
     }
   };
   useFocusEffect(
-    useCallback(() => {
-      fetchPointSum();
-    }, [fetchPointSum])
+      useCallback(() => {
+        fetchPointSum();
+      }, [fetchPointSum])
   );
 
   // 포인트 이력 조회 함수
@@ -501,22 +498,95 @@ export default function PointHistoryScreen() {
    */
   const getNaverPayMemberInfo = async (uniqueId) => {
     try {
+      // 접근 토큰 획득
+      const accessToken = await getAccessToken();
+
+      if (!uniqueId) {
+        throw new Error("네이버 유니크 아이디가 누락되었습니다.");
+      }
+
+      // 로그인 API에서 사용한 네이버 앱 키를 clientId로 사용
+      const clientId = naverLoginConfig.consumerKey;
+      const clientSecret = naverLoginConfig.consumerSecret;
+
+      if (!clientId || !clientSecret) {
+        throw new Error(
+          "네이버 앱 clientId 또는 clientSecret이 누락되었습니다."
+        );
+      }
+
+      // 유니크 아이디 암호화
+      const encryptedUniqueId = encryptPersonalInfo(uniqueId);
+      const encryptedClientId = encryptPersonalInfo(clientId);
+      const encryptedClientSecret = encryptPersonalInfo(clientSecret);
+
+      // API 요청 데이터 구성
+      const requestData = {
+        uniqueId: encryptedUniqueId,
+        clientId: encryptedClientId,
+        clientSecret: encryptedClientSecret,
+      };
+
+      console.log("최종 요청 데이터:", JSON.stringify(requestData, null, 2));
+
       // API 호출
-      const response = await axios.get(
-        `https://dev25backend.givemeprice.co.kr/point/nid?uniqueId=${uniqueId}`
+      const response = await axios.post(
+        `${DAWU_API_CONFIG.BASE_URL}/v1/npay/members/nid`,
+        requestData,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "pointbox-partner-code": DAWU_API_CONFIG.PARTNER_CODE,
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
       );
-      console.log("response", response.data);
+
       return response.data;
     } catch (error) {
       console.error(
         "네이버페이 회원 정보 조회 오류:",
         error.response?.data || error.message
       );
-      throw new Error(
-        `네이버페이 회원 정보 조회 중 오류가 발생했습니다: ${
-          error.message || "알 수 없는 오류"
-        }`
-      );
+
+      if (error.response?.data) {
+        console.error(
+          "오류 상세:",
+          JSON.stringify(error.response.data, null, 2)
+        );
+      }
+
+      const errorCode = error.response?.data?.code;
+      const errorMessage = error.response?.data?.message;
+
+      if (errorCode === "41001" && errorMessage === "파라미터 복호화 실패") {
+        throw new Error(
+          "API 서버에서 암호화된 파라미터를 복호화하지 못했습니다. 다우기술에 정확한 암호화 키와 예제를 문의하세요."
+        );
+      } else if (errorCode === "41000") {
+        throw new Error(`필수 파라미터가 누락되었습니다: ${errorMessage}`);
+      } else if (errorCode === "40015" && errorMessage === "비어있는 jwt") {
+        throw new Error(
+          "JWT 토큰이 비어있습니다. 접근 토큰 발급을 확인하세요."
+        );
+      } else if (
+        errorCode === "40012" &&
+        errorMessage === "유효하지 않은 jwt"
+      ) {
+        throw new Error(
+          "JWT 토큰이 유효하지 않습니다. 접근 토큰 발급을 확인하세요."
+        );
+      } else if (errorCode === "429") {
+        throw new Error(
+          "API 호출 한도를 초과했습니다. 잠시 후 다시 시도하세요."
+        );
+      } else {
+        throw new Error(
+          `네이버페이 회원 정보 조회 중 오류가 발생했습니다: ${
+            errorMessage || "알 수 없는 오류"
+          }`
+        );
+      }
     }
   };
 
@@ -606,6 +676,9 @@ export default function PointHistoryScreen() {
   // 네이버페이 포인트 적립 함수
   const addNaverPayPoint = async (userKey, points) => {
     try {
+      // 접근 토큰 획득
+      const accessToken = await getAccessToken();
+
       if (!userKey) {
         throw new Error("네이버페이 유저키가 누락되었습니다.");
       }
@@ -614,16 +687,34 @@ export default function PointHistoryScreen() {
         throw new Error("적립할 포인트는 양수여야 합니다.");
       }
 
+      // userKey 암호화
+      const encryptedUserKey = encryptPersonalInfo(userKey);
+      console.log("암호화된 유저키:", encryptedUserKey);
+
+      // 거래번호 생성 (요청 일자 + 제휴사 코드 + 랜덤 문자열)
+      const now = new Date();
+      const formattedDate = format(now, "yyMMddHHmmss");
+      const randomString = Math.random().toString(36).substring(2, 10);
+      const partnerTxNo = `${formattedDate}${DAWU_API_CONFIG.PARTNER_CODE}${randomString}`;
+
       // API 요청 데이터 구성
       const requestData = {
-        userKey: userKey,
-        points: points,
+        userKey: encryptedUserKey,
+        partnerTxNo: partnerTxNo,
+        point: APP_CONFIG.MINIMUM_POINTS_REQUIRED, // 항상 최소 금액 사용
       };
 
       // API 호출
       const response = await axios.post(
-        `https://dev25backend.givemeprice.co.kr/point/addnaver`,
-        requestData
+        `${DAWU_API_CONFIG.BASE_URL}/v1/npay/point`,
+        requestData,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "pointbox-partner-code": DAWU_API_CONFIG.PARTNER_CODE,
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
       );
 
       // 응답 확인
@@ -636,11 +727,47 @@ export default function PointHistoryScreen() {
         "네이버페이 포인트 적립 오류:",
         error.response?.data || error.message
       );
-      throw new Error(
-        `네이버페이 포인트 적립 중 오류가 발생했습니다: ${
-          error.message || "알 수 없는 오류"
-        }`
-      );
+
+      // 오류 응답에서 상세 정보 추출하여 로깅
+      if (error.response?.data) {
+        console.error(
+          "오류 상세:",
+          JSON.stringify(error.response.data, null, 2)
+        );
+      }
+
+      // 오류 코드에 따른 메시지 처리
+      const errorCode = error.response?.data?.code;
+      const errorMessage = error.response?.data?.message;
+
+      if (errorCode === "41001" && errorMessage === "파라미터 복호화 실패") {
+        throw new Error(
+          "API 서버에서 암호화된 파라미터를 복호화하지 못했습니다. 다우기술에 정확한 암호화 키와 예제를 문의하세요."
+        );
+      } else if (errorCode === "41000") {
+        throw new Error(`필수 파라미터가 누락되었습니다: ${errorMessage}`);
+      } else if (errorCode === "40015" && errorMessage === "비어있는 jwt") {
+        throw new Error(
+          "JWT 토큰이 비어있습니다. 접근 토큰 발급을 확인하세요."
+        );
+      } else if (
+        errorCode === "40012" &&
+        errorMessage === "유효하지 않은 jwt"
+      ) {
+        throw new Error(
+          "JWT 토큰이 유효하지 않습니다. 접근 토큰 발급을 확인하세요."
+        );
+      } else if (errorCode === "429") {
+        throw new Error(
+          "API 호출 한도를 초과했습니다. 잠시 후 다시 시도하세요."
+        );
+      } else {
+        throw new Error(
+          `네이버페이 포인트 적립 중 오류가 발생했습니다: ${
+            errorMessage || "알 수 없는 오류"
+          }`
+        );
+      }
     }
   };
 
@@ -967,6 +1094,7 @@ export default function PointHistoryScreen() {
 
   const filteredData = getFilteredData();
 
+
   // 필터링된 데이터의 총 포인트 계산 - 만기포인트 로직 제거
   const filteredTotalPoints = useMemo(() => {
     return filteredData.reduce((total, item) => {
@@ -977,188 +1105,188 @@ export default function PointHistoryScreen() {
       }
     }, 0);
   }, [filteredData]);
-  console.log("detailtotalPoint", totalPoint);
+  console.log("detailtotalPoint",totalPoint);
   return (
-    <View style={styles.container}>
-      <BackMypageHeaderLayout
-        title="포인트 내역"
-        totalSumPoint={totalPoint} // 헤더에 표시할 포인트 값
-        point={{
-          userId: pointData?.userId, // API 호출을 위한 userId
-        }}
-        user={route.params?.user}
-        showPoints={true} // 포인트 표시 활성화
-      />
+      <View style={styles.container}>
+        <BackMypageHeaderLayout
+            title="포인트 내역"
+            totalSumPoint={totalPoint} // 헤더에 표시할 포인트 값
+            point={{
+              userId: pointData?.userId // API 호출을 위한 userId
+            }}
+            user={route.params?.user}
+            showPoints={true} // 포인트 표시 활성화
+        />
 
-      {/* 상단 포인트 카드 섹션 */}
-      <View style={styles.pointCard}>
-        <View style={styles.headerSection}>
-          <View style={styles.currentPointSection}>
-            <Text style={styles.mainLabel}>출금가능 포인트</Text>
-            <View style={styles.pointValueContainer}>
-              <Image
-                source={require("../../../assets/img/pimage.png")}
-                style={styles.mainPointIcon}
-              />
-              <Text style={styles.mainPointValue}>{currentPoints}</Text>
-              <Text style={styles.wonText}>포인트</Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.usePointButton,
-              !isPointButtonEnabled && styles.usePointButtonDisabled,
-            ]}
-            onPress={handleUsePointPress}
-            disabled={!isPointButtonEnabled}
-          >
-            <Text style={styles.usePointButtonText}>포인트 사용</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.pointDetailsSection}>
-          <View style={styles.pointDetailItem}>
-            <Text style={styles.detailLabel}>오늘 번 포인트</Text>
-            <View style={styles.detailValueContainer}>
-              <Image
-                source={require("../../../assets/img/pimage.png")}
-                style={styles.detailPointIcon}
-              />
-              <Text style={styles.detailPointValue}>{todayPoints}</Text>
-              <Text style={styles.detailWonText}>포인트</Text>
-            </View>
-          </View>
-
-          <View style={styles.pointDetailItem}>
-            <Text style={styles.detailLabel}>총 적립 포인트</Text>
-            <View style={styles.detailValueContainer}>
-              <Image
-                source={require("../../../assets/img/pimage.png")}
-                style={styles.detailPointIcon}
-              />
-              <Text style={styles.detailPointValue}>{totalPoints}</Text>
-              <Text style={styles.detailWonText}>포인트</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* 최소 달란트 요구 사항 안내 */}
-        {currentPoints < APP_CONFIG.MINIMUM_POINTS_REQUIRED && (
-          <View style={styles.minimumPointsNotice}>
-            <Text style={styles.minimumPointsText}>
-              포인트는 {APP_CONFIG.MINIMUM_POINTS_REQUIRED}원 이상부터 사용
-              가능합니다.
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* 상단 총 건수 및 필터 섹션 */}
-      <View style={styles.topSection}>
-        <View style={styles.totalCount}>
-          <Text style={styles.totalCountText}>총 </Text>
-          <Text style={styles.totalCountNumber}>{total}</Text>
-          <Text style={styles.totalCountText}>건</Text>
-        </View>
-        <View style={styles.filterButtons}>
-          <View style={styles.dropdownContainer}>
-            <DropDownPicker
-              open={open}
-              value={value}
-              items={items}
-              setOpen={setOpen}
-              setValue={setValue}
-              setItems={setItems}
-              style={styles.dropdown}
-              textStyle={styles.dropdownText}
-              dropDownContainerStyle={styles.dropdownPanel}
-              listItemContainerStyle={styles.dropdownItemContainer}
-              zIndex={2000}
-            />
-          </View>
-          <View style={styles.dropdownContainer}>
-            <DropDownPicker
-              open={open2}
-              value={value2}
-              items={items2}
-              setOpen={setOpen2}
-              setValue={setValue2}
-              setItems={setItems2}
-              style={styles.dropdown}
-              textStyle={styles.dropdownText}
-              dropDownContainerStyle={styles.dropdownPanel}
-              listItemContainerStyle={styles.dropdownItemContainer}
-              zIndex={1000}
-            />
-          </View>
-        </View>
-      </View>
-
-      {/* 총 포인트 섹션 */}
-      <View style={styles.filteredTotalSection}>
-        <Text style={styles.filteredTotalLabel}>총 포인트</Text>
-        <View style={styles.filteredTotalValueContainer}>
-          <Text style={styles.filteredTotalValue}>{filteredTotalPoints}</Text>
-          <Text style={styles.filteredTotalUnit}>포인트</Text>
-        </View>
-      </View>
-
-      {/* 로딩 인디케이터 */}
-      {loadingHistory && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#75C2B8" />
-        </View>
-      )}
-
-      {/* 포인트 내역 리스트 */}
-      <FlatList
-        data={filteredData}
-        renderItem={({ item }) => (
-          <View style={styles.historyItemCard}>
-            <Text style={styles.historyDateTime}>
-              {item.today} | {item.time}
-            </Text>
-            <View style={styles.historyContent}>
-              <View style={styles.historyTitleContainer}>
-                <Text style={styles.historyTitle}>{item.point_type}</Text>
-                {item.company && (
-                  <Text style={styles.historyCompany}>{item.company}</Text>
-                )}
-              </View>
-              <View style={styles.historyPoints}>
+        {/* 상단 포인트 카드 섹션 */}
+        <View style={styles.pointCard}>
+          <View style={styles.headerSection}>
+            <View style={styles.currentPointSection}>
+              <Text style={styles.mainLabel}>출금가능 포인트</Text>
+              <View style={styles.pointValueContainer}>
                 <Image
-                  source={require("../../../assets/img/pimage.png")}
-                  style={styles.historyPointIcon}
+                    source={require("../../../assets/img/pimage.png")}
+                    style={styles.mainPointIcon}
                 />
-                <Text
-                  style={[
-                    styles.historyPointValue,
-                    item.point_type.includes("쓴")
-                      ? styles.usedPoints
-                      : styles.earnedPoints,
-                  ]}
-                >
-                  {item.point_type.includes("쓴") ? "-" : ""}
-                  {item.points}포인트
+                <Text style={styles.mainPointValue}>{currentPoints}</Text>
+                <Text style={styles.wonText}>포인트</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+                style={[
+                  styles.usePointButton,
+                  !isPointButtonEnabled && styles.usePointButtonDisabled,
+                ]}
+                onPress={handleUsePointPress}
+                disabled={!isPointButtonEnabled}
+            >
+              <Text style={styles.usePointButtonText}>포인트 사용</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.pointDetailsSection}>
+            <View style={styles.pointDetailItem}>
+              <Text style={styles.detailLabel}>오늘 번 포인트</Text>
+              <View style={styles.detailValueContainer}>
+                <Image
+                    source={require("../../../assets/img/pimage.png")}
+                    style={styles.detailPointIcon}
+                />
+                <Text style={styles.detailPointValue}>{todayPoints}</Text>
+                <Text style={styles.detailWonText}>포인트</Text>
+              </View>
+            </View>
+
+            <View style={styles.pointDetailItem}>
+              <Text style={styles.detailLabel}>총 적립 포인트</Text>
+              <View style={styles.detailValueContainer}>
+                <Image
+                    source={require("../../../assets/img/pimage.png")}
+                    style={styles.detailPointIcon}
+                />
+                <Text style={styles.detailPointValue}>{totalPoints}</Text>
+                <Text style={styles.detailWonText}>포인트</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* 최소 달란트 요구 사항 안내 */}
+          {currentPoints < APP_CONFIG.MINIMUM_POINTS_REQUIRED && (
+              <View style={styles.minimumPointsNotice}>
+                <Text style={styles.minimumPointsText}>
+                  포인트는 {APP_CONFIG.MINIMUM_POINTS_REQUIRED}원 이상부터 사용
+                  가능합니다.
                 </Text>
               </View>
+          )}
+        </View>
+
+        {/* 상단 총 건수 및 필터 섹션 */}
+        <View style={styles.topSection}>
+          <View style={styles.totalCount}>
+            <Text style={styles.totalCountText}>총 </Text>
+            <Text style={styles.totalCountNumber}>{total}</Text>
+            <Text style={styles.totalCountText}>건</Text>
+          </View>
+          <View style={styles.filterButtons}>
+            <View style={styles.dropdownContainer}>
+              <DropDownPicker
+                  open={open}
+                  value={value}
+                  items={items}
+                  setOpen={setOpen}
+                  setValue={setValue}
+                  setItems={setItems}
+                  style={styles.dropdown}
+                  textStyle={styles.dropdownText}
+                  dropDownContainerStyle={styles.dropdownPanel}
+                  listItemContainerStyle={styles.dropdownItemContainer}
+                  zIndex={2000}
+              />
+            </View>
+            <View style={styles.dropdownContainer}>
+              <DropDownPicker
+                  open={open2}
+                  value={value2}
+                  items={items2}
+                  setOpen={setOpen2}
+                  setValue={setValue2}
+                  setItems={setItems2}
+                  style={styles.dropdown}
+                  textStyle={styles.dropdownText}
+                  dropDownContainerStyle={styles.dropdownPanel}
+                  listItemContainerStyle={styles.dropdownItemContainer}
+                  zIndex={1000}
+              />
             </View>
           </View>
-        )}
-        keyExtractor={(item) => item.id.toString()}
-        style={styles.historyList}
-        contentContainerStyle={styles.historyListContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyListContainer}>
-            <Text style={styles.emptyListText}>포인트 내역이 없습니다.</Text>
+        </View>
+
+        {/* 총 포인트 섹션 */}
+        <View style={styles.filteredTotalSection}>
+          <Text style={styles.filteredTotalLabel}>총 포인트</Text>
+          <View style={styles.filteredTotalValueContainer}>
+            <Text style={styles.filteredTotalValue}>{filteredTotalPoints}</Text>
+            <Text style={styles.filteredTotalUnit}>포인트</Text>
           </View>
-        }
-      />
-      <View style={styles.adContainer}>
-        <BannerAdMyPage />
+        </View>
+
+        {/* 로딩 인디케이터 */}
+        {loadingHistory && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#75C2B8" />
+            </View>
+        )}
+
+        {/* 포인트 내역 리스트 */}
+        <FlatList
+            data={filteredData}
+            renderItem={({ item }) => (
+                <View style={styles.historyItemCard}>
+                  <Text style={styles.historyDateTime}>
+                    {item.today} | {item.time}
+                  </Text>
+                  <View style={styles.historyContent}>
+                    <View style={styles.historyTitleContainer}>
+                      <Text style={styles.historyTitle}>{item.point_type}</Text>
+                      {item.company && (
+                          <Text style={styles.historyCompany}>{item.company}</Text>
+                      )}
+                    </View>
+                    <View style={styles.historyPoints}>
+                      <Image
+                          source={require("../../../assets/img/pimage.png")}
+                          style={styles.historyPointIcon}
+                      />
+                      <Text
+                          style={[
+                            styles.historyPointValue,
+                            item.point_type.includes("쓴")
+                                ? styles.usedPoints
+                                : styles.earnedPoints,
+                          ]}
+                      >
+                        {item.point_type.includes("쓴") ? "-" : ""}
+                        {item.points}포인트
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+            )}
+            keyExtractor={(item) => item.id.toString()}
+            style={styles.historyList}
+            contentContainerStyle={styles.historyListContent}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyListContainer}>
+                <Text style={styles.emptyListText}>포인트 내역이 없습니다.</Text>
+              </View>
+            }
+        />
+        <View style={styles.adContainer}>
+          <BannerAdMyPage />
+        </View>
       </View>
-    </View>
   );
 }
 

@@ -3,6 +3,7 @@
 
 import { BibleStep } from './define';
 import { calculateTotalPsalmsTime, optimizePsalmsFor25Days } from './psalmsCalculationFix';
+
 // === 타입 정의 ===
 export interface TimeBasedBiblePlan {
     planType: string;
@@ -66,41 +67,17 @@ export interface DailyReading {
 let chapterTimeMap: Map<string, number> = new Map();
 
 /**
- * 음성파일길이.csv 데이터로 장별 시간 초기화
+ * 🔥 React Native 호환 초기화 함수
+ * CSV 파일 대신 정적 데이터 사용
  */
 export const initializePeriodBasedBibleSystem = async (): Promise<boolean> => {
     try {
-        // CSV 파일 읽기 시도
-        const fileContent = await window.fs.readFile('음성파일길이.csv', { encoding: 'utf8' });
+        console.log('🔄 시간 기반 성경 시스템 초기화 시작 (React Native 호환)');
 
-        // 제공된 음성파일 데이터 파싱
-        const lines = fileContent.split('\n').filter(line => line.trim());
+        // 기본 추정치로 초기화
+        initializeDefaultTimes();
 
-        // CSV 파싱이 아닌 제공된 형식 파싱
-        const audioData = parseProvidedAudioData(fileContent);
-
-        chapterTimeMap.clear();
-
-        // 성경 약자 매핑
-        const bookMapping: { [key: string]: number } = {
-            'Gen': 1, 'Exo': 2, 'Lev': 3, 'Num': 4, 'Deu': 5, 'Jos': 6, 'Jdg': 7, 'Rut': 8,
-            '1Sa': 9, '2Sa': 10, '1Ki': 11, '2Ki': 12, '1Ch': 13, '2Ch': 14, 'Ezr': 15, 'Neh': 16,
-            'Est': 17, 'Job': 18, 'Psa': 19, 'Pro': 20, 'Ecc': 21, 'Son': 22, 'Isa': 23, 'Jer': 24,
-            'Lam': 25, 'Eze': 26, 'Dan': 27, 'Hos': 28, 'Joe': 29, 'Amo': 30, 'Oba': 31, 'Jon': 32,
-            'Mic': 33, 'Nah': 34, 'Hab': 35, 'Zep': 36, 'Hag': 37, 'Zec': 38, 'Mal': 39,
-            'Mat': 40, 'Mar': 41, 'Luk': 42, 'Joh': 43, 'Act': 44, 'Rom': 45, '1Co': 46, '2Co': 47,
-            'Gal': 48, 'Eph': 49, 'Phi': 50, 'Col': 51, '1Th': 52, '2Th': 53, '1Ti': 54, '2Ti': 55,
-            'Tit': 56, 'Phm': 57, 'Heb': 58, 'Jam': 59, '1Pe': 60, '2Pe': 61, '1Jo': 62, '2Jo': 63,
-            '3Jo': 64, 'Jud': 65, 'Rev': 66
-        };
-
-        // 제공된 데이터로 시간 맵 구성
-        audioData.forEach(({ book, chapter, minutes }: any) => {
-            const key = `${book}_${chapter}`;
-            chapterTimeMap.set(key, minutes);
-        });
-
-        console.log(`✅ 음성파일 기반 장별 시간 데이터 로드 완료: ${chapterTimeMap.size}개`);
+        console.log('✅ 시간 기반 시스템 초기화 완료');
         return true;
 
     } catch (error) {
@@ -108,50 +85,6 @@ export const initializePeriodBasedBibleSystem = async (): Promise<boolean> => {
         initializeDefaultTimes();
         return false;
     }
-};
-
-/**
- * 제공된 음성파일 데이터 형식 파싱
- */
-const parseProvidedAudioData = (data: string) => {
-    const audioData: any[] = [];
-
-    // 제공된 예시 데이터 형식으로 파싱
-    // "Gen창세기Exo출애굽기..." 형식과 시간 정보 파싱
-
-    // 예시: "Gen001 (4:31), Gen002 (3:22)" 형식으로 가정
-    const chapterPattern = /([A-Za-z0-9]+)(\d{3})\s*\((\d+):(\d+)\)/g;
-    let match;
-
-    while ((match = chapterPattern.exec(data)) !== null) {
-        const [, bookCode, chapterStr, minutes, seconds] = match;
-        const chapterNum = parseInt(chapterStr, 10);
-        const totalMinutes = parseInt(minutes) + parseInt(seconds) / 60;
-
-        // 북코드를 북번호로 변환
-        const bookMapping: { [key: string]: number } = {
-            'Gen': 1, 'Exo': 2, 'Lev': 3, 'Num': 4, 'Deu': 5, 'Jos': 6, 'Jdg': 7, 'Rut': 8,
-            '1Sa': 9, '2Sa': 10, '1Ki': 11, '2Ki': 12, '1Ch': 13, '2Ch': 14, 'Ezr': 15, 'Neh': 16,
-            'Est': 17, 'Job': 18, 'Psa': 19, 'Pro': 20, 'Ecc': 21, 'Son': 22, 'Isa': 23, 'Jer': 24,
-            'Lam': 25, 'Eze': 26, 'Dan': 27, 'Hos': 28, 'Joe': 29, 'Amo': 30, 'Oba': 31, 'Jon': 32,
-            'Mic': 33, 'Nah': 34, 'Hab': 35, 'Zep': 36, 'Hag': 37, 'Zec': 38, 'Mal': 39,
-            'Mat': 40, 'Mar': 41, 'Luk': 42, 'Joh': 43, 'Act': 44, 'Rom': 45, '1Co': 46, '2Co': 47,
-            'Gal': 48, 'Eph': 49, 'Phi': 50, 'Col': 51, '1Th': 52, '2Th': 53, '1Ti': 54, '2Ti': 55,
-            'Tit': 56, 'Phm': 57, 'Heb': 58, 'Jam': 59, '1Pe': 60, '2Pe': 61, '1Jo': 62, '2Jo': 63,
-            '3Jo': 64, 'Jud': 65, 'Rev': 66
-        };
-
-        const bookNumber = bookMapping[bookCode];
-        if (bookNumber) {
-            audioData.push({
-                book: bookNumber,
-                chapter: chapterNum,
-                minutes: totalMinutes
-            });
-        }
-    }
-
-    return audioData;
 };
 
 /**
@@ -166,14 +99,25 @@ const initializeDefaultTimes = () => {
             let estimatedTime = 4.0; // 기본 4분
 
             // 성경별 시간 추정
-            if (book.index === 19) estimatedTime = 2.5;      // 시편
-            else if (book.index === 20) estimatedTime = 3.5; // 잠언
-            else if (book.index <= 39) estimatedTime = 4.0;  // 구약
-            else estimatedTime = 4.2;                        // 신약
+            if (book.index === 19) {
+                // 시편 장별 특별 처리
+                if (chapter === 119) estimatedTime = 8.5;  // 가장 긴 시편
+                else if (chapter === 117) estimatedTime = 0.5;  // 가장 짧은 시편
+                else if ([23, 1, 8, 100].includes(chapter)) estimatedTime = 1.5; // 유명한 짧은 시편들
+                else estimatedTime = 2.5; // 시편 평균
+            } else if (book.index === 20) {
+                estimatedTime = 3.5; // 잠언
+            } else if (book.index <= 39) {
+                estimatedTime = 4.0; // 구약
+            } else {
+                estimatedTime = 4.2; // 신약
+            }
 
             chapterTimeMap.set(key, estimatedTime);
         }
     });
+
+    console.log(`✅ 기본 추정 시간 데이터 초기화 완료: ${chapterTimeMap.size}개`);
 };
 
 /**
@@ -239,6 +183,7 @@ export const divideChaptersByPeriod = (
         }
 
         // 다른 기간의 시편 계획
+        const schedule = createOptimizedSchedule(planType, startDate, totalDays, calculatedMinutesPerDay);
         return {
             planType,
             planName: '시편',
@@ -251,34 +196,30 @@ export const divideChaptersByPeriod = (
             isTimeBasedCalculation: true,
             currentDay: 1,
             readChapters: [],
-            dailyReadingSchedule: [],
+            dailyReadingSchedule: schedule,
             createdAt: new Date().toISOString(),
-            version: '2.1_psalms_optimized'
+            version: '2.0_time_based'
         };
     }
 
-    // 기존 로직 유지 (다른 계획들)
+    // 🔥 다른 계획들 처리
     const bookRange = getBookRangeForPlan(planType);
-    let totalMinutes = 0;
+    let totalTime = 0;
     let totalChapters = 0;
 
+    // 총 시간과 장수 계산
     for (let book = bookRange.start; book <= bookRange.end; book++) {
         const bookInfo = BibleStep.find(step => step.index === book);
-        if (!bookInfo) continue;
-
-        for (let chapter = 1; chapter <= bookInfo.count; chapter++) {
-            totalMinutes += getChapterReadingTime(book, chapter);
-            totalChapters++;
+        if (bookInfo) {
+            for (let chapter = 1; chapter <= bookInfo.count; chapter++) {
+                totalTime += getChapterReadingTime(book, chapter);
+                totalChapters++;
+            }
         }
     }
 
-    const calculatedMinutesPerDay = Math.round((totalMinutes / totalDays) * 10) / 10;
-    const dailyReadingSchedule = createDailyScheduleByTime(
-        bookRange,
-        calculatedMinutesPerDay,
-        totalDays,
-        startDate
-    );
+    const calculatedMinutesPerDay = Math.round((totalTime / totalDays) * 10) / 10;
+    const schedule = createOptimizedSchedule(planType, startDate, totalDays, calculatedMinutesPerDay);
 
     const planNames: { [key: string]: string } = {
         'full_bible': '성경',
@@ -295,27 +236,30 @@ export const divideChaptersByPeriod = (
         endDate,
         totalDays,
         calculatedMinutesPerDay,
-        totalMinutes: Math.round(totalMinutes),
+        totalMinutes: Math.round(totalTime),
         totalChapters,
         isTimeBasedCalculation: true,
         currentDay: 1,
         readChapters: [],
-        dailyReadingSchedule,
+        dailyReadingSchedule: schedule,
         createdAt: new Date().toISOString(),
-        version: '2.1'
+        version: '2.0_time_based'
     };
 };
 
 /**
- * 🔥 시간 기준으로 매일 읽을 장 나누기
+ * 🔥 최적화된 일일 스케줄 생성
+ * 목표 시간에 맞춰 장들을 배분
  */
-const createDailyScheduleByTime = (
-    bookRange: { start: number, end: number },
-    targetMinutesPerDay: number,
+const createOptimizedSchedule = (
+    planType: string,
+    startDate: string,
     totalDays: number,
-    startDate: string
+    targetMinutesPerDay: number
 ): DailyReadingSchedule[] => {
     const schedule: DailyReadingSchedule[] = [];
+    const bookRange = getBookRangeForPlan(planType);
+
     let currentBook = bookRange.start;
     let currentChapter = 1;
 

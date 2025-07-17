@@ -1,10 +1,5 @@
 // src/utils/audioDataLoader.ts
-// 🔥 음성파일 길이 데이터 로더
-
-/**
- * 제공해주신 음성파일 길이 데이터를 파싱하여 사용할 수 있는 형태로 변환
- * 실제 프로젝트에서는 이 데이터를 JSON 파일이나 API에서 가져올 수 있습니다
- */
+// 🔥 음성파일 길이 데이터 로더 - React Native 호환
 
 interface AudioChapterData {
     book: number;
@@ -13,79 +8,8 @@ interface AudioChapterData {
     bookName: string;
 }
 
-// 🔥 실제 음성파일 길이 데이터 (예시)
-// 제공해주신 형식에 맞춰 실제 데이터로 교체하세요
-export const AUDIO_DATA: AudioChapterData[] = [
-    // 창세기 예시 (제공해주신 데이터 기반)
-    { book: 1, chapter: 1, minutes: 4.52, bookName: '창세기' }, // 4분 31초
-    { book: 1, chapter: 2, minutes: 3.37, bookName: '창세기' }, // 3분 22초
-    { book: 1, chapter: 3, minutes: 3.97, bookName: '창세기' }, // 3분 58초
-    { book: 1, chapter: 4, minutes: 3.97, bookName: '창세기' }, // 3분 58초
-    { book: 1, chapter: 5, minutes: 2.5, bookName: '창세기' },  // 2분 30초
-    { book: 1, chapter: 6, minutes: 3.22, bookName: '창세기' }, // 3분 13초
-    { book: 1, chapter: 7, minutes: 2.88, bookName: '창세기' }, // 2분 53초
-    { book: 1, chapter: 8, minutes: 2.92, bookName: '창세기' }, // 2분 55초
-    { book: 1, chapter: 9, minutes: 3.75, bookName: '창세기' }, // 3분 45초
-
-    // 🔥 여기에 실제 음성파일 데이터를 모두 추가하세요
-    // 형식: { book: 북번호, chapter: 장번호, minutes: 분.초를_소수로, bookName: '성경책이름' }
-
-    // 예시: 마태복음
-    { book: 40, chapter: 1, minutes: 4.2, bookName: '마태복음' },
-    { book: 40, chapter: 2, minutes: 3.8, bookName: '마태복음' },
-    // ... 계속 추가
-];
-
 /**
- * 성경 약자를 북 번호로 변환하는 매핑
- */
-export const BOOK_CODE_MAPPING: { [key: string]: number } = {
-    'Gen': 1, 'Exo': 2, 'Lev': 3, 'Num': 4, 'Deu': 5, 'Jos': 6, 'Jdg': 7, 'Rut': 8,
-    '1Sa': 9, '2Sa': 10, '1Ki': 11, '2Ki': 12, '1Ch': 13, '2Ch': 14, 'Ezr': 15, 'Neh': 16,
-    'Est': 17, 'Job': 18, 'Psa': 19, 'Pro': 20, 'Ecc': 21, 'Son': 22, 'Isa': 23, 'Jer': 24,
-    'Lam': 25, 'Eze': 26, 'Dan': 27, 'Hos': 28, 'Joe': 29, 'Amo': 30, 'Oba': 31, 'Jon': 32,
-    'Mic': 33, 'Nah': 34, 'Hab': 35, 'Zep': 36, 'Hag': 37, 'Zec': 38, 'Mal': 39,
-    'Mat': 40, 'Mar': 41, 'Luk': 42, 'Joh': 43, 'Act': 44, 'Rom': 45, '1Co': 46, '2Co': 47,
-    'Gal': 48, 'Eph': 49, 'Phi': 50, 'Col': 51, '1Th': 52, '2Th': 53, '1Ti': 54, '2Ti': 55,
-    'Tit': 56, 'Phm': 57, 'Heb': 58, 'Jam': 59, '1Pe': 60, '2Pe': 61, '1Jo': 62, '2Jo': 63,
-    '3Jo': 64, 'Jud': 65, 'Rev': 66
-};
-
-/**
- * 문자열 형태의 음성파일 데이터를 파싱
- */
-export const parseAudioDataString = (dataString: string): AudioChapterData[] => {
-    const result: AudioChapterData[] = [];
-
-    try {
-        // 예시 형식: "Gen001 (4:31), Gen002 (3:22)" 등을 파싱
-        const chapterPattern = /([A-Za-z0-9]+)(\d{3})\s*\((\d+):(\d+)\)/g;
-        let match;
-
-        while ((match = chapterPattern.exec(dataString)) !== null) {
-            const [, bookCode, chapterStr, minutes, seconds] = match;
-            const chapterNum = parseInt(chapterStr, 10);
-            const totalMinutes = parseInt(minutes) + parseInt(seconds) / 60;
-
-            const bookNumber = BOOK_CODE_MAPPING[bookCode];
-            if (bookNumber && chapterNum > 0) {
-                result.push({
-                    book: bookNumber,
-                    chapter: chapterNum,
-                    minutes: totalMinutes,
-                    bookName: getBookName(bookNumber)
-                });
-            }
-        }
-    } catch (error) {
-        console.error('음성파일 데이터 파싱 오류:', error);
-    }
-
-    return result;
-};
-
-/**
- * 북 번호로 성경책 이름 반환
+ * 성경 책 이름 매핑
  */
 const getBookName = (bookNumber: number): string => {
     const bookNames = [
@@ -104,18 +28,66 @@ const getBookName = (bookNumber: number): string => {
 };
 
 /**
+ * 🔥 실제 음성파일 길이 데이터 (정적으로 정의)
+ * CSV 파일 대신 코드 내에 직접 정의하여 React Native 환경에서 안전하게 사용
+ */
+export const AUDIO_DATA: AudioChapterData[] = [
+    // 창세기 (실제 데이터로 교체 필요)
+    { book: 1, chapter: 1, minutes: 4.52, bookName: '창세기' },
+    { book: 1, chapter: 2, minutes: 3.37, bookName: '창세기' },
+    { book: 1, chapter: 3, minutes: 3.97, bookName: '창세기' },
+    { book: 1, chapter: 4, minutes: 3.97, bookName: '창세기' },
+    { book: 1, chapter: 5, minutes: 2.5, bookName: '창세기' },
+
+    // 🔥 TODO: 여기에 모든 성경 장의 실제 음성 시간 데이터를 추가하세요
+    // 형식: { book: 북번호, chapter: 장번호, minutes: 분.초를_소수로, bookName: '성경책이름' }
+
+    // 시편 예시 (정확한 시간 데이터 필요)
+    { book: 19, chapter: 1, minutes: 1.5, bookName: '시편' },
+    { book: 19, chapter: 23, minutes: 2.0, bookName: '시편' }, // 주의 목자
+    { book: 19, chapter: 119, minutes: 8.5, bookName: '시편' }, // 긴 시편
+
+    // 마태복음 예시
+    { book: 40, chapter: 1, minutes: 4.2, bookName: '마태복음' },
+    { book: 40, chapter: 2, minutes: 3.8, bookName: '마태복음' },
+];
+
+/**
+ * 성경 약자를 북 번호로 변환하는 매핑
+ */
+export const BOOK_CODE_MAPPING: { [key: string]: number } = {
+    'Gen': 1, 'Exo': 2, 'Lev': 3, 'Num': 4, 'Deu': 5, 'Jos': 6, 'Jdg': 7, 'Rut': 8,
+    '1Sa': 9, '2Sa': 10, '1Ki': 11, '2Ki': 12, '1Ch': 13, '2Ch': 14, 'Ezr': 15, 'Neh': 16,
+    'Est': 17, 'Job': 18, 'Psa': 19, 'Pro': 20, 'Ecc': 21, 'Son': 22, 'Isa': 23, 'Jer': 24,
+    'Lam': 25, 'Eze': 26, 'Dan': 27, 'Hos': 28, 'Joe': 29, 'Amo': 30, 'Oba': 31, 'Jon': 32,
+    'Mic': 33, 'Nah': 34, 'Hab': 35, 'Zep': 36, 'Hag': 37, 'Zec': 38, 'Mal': 39,
+    'Mat': 40, 'Mar': 41, 'Luk': 42, 'Joh': 43, 'Act': 44, 'Rom': 45, '1Co': 46, '2Co': 47,
+    'Gal': 48, 'Eph': 49, 'Phi': 50, 'Col': 51, '1Th': 52, '2Th': 53, '1Ti': 54, '2Ti': 55,
+    'Tit': 56, 'Phm': 57, 'Heb': 58, 'Jam': 59, '1Pe': 60, '2Pe': 61, '1Jo': 62, '2Jo': 63,
+    '3Jo': 64, 'Jud': 65, 'Rev': 66
+};
+
+/**
  * 특정 장의 음성 시간 반환
  */
 export const getChapterAudioTime = (book: number, chapter: number): number => {
     const audioData = AUDIO_DATA.find(data => data.book === book && data.chapter === chapter);
-    return audioData?.minutes || getDefaultTime(book);
+    return audioData?.minutes || getDefaultTime(book, chapter);
 };
 
 /**
  * 기본 예상 시간 반환 (음성 데이터가 없는 경우)
  */
-const getDefaultTime = (book: number): number => {
-    if (book === 19) return 2.5;      // 시편
+const getDefaultTime = (book: number, chapter?: number): number => {
+    // 시편의 경우 장별로 다른 시간 적용
+    if (book === 19 && chapter) {
+        // 시편 장별 특별 처리
+        if (chapter === 119) return 8.5;  // 가장 긴 시편
+        if (chapter === 117) return 0.5;  // 가장 짧은 시편
+        if ([23, 1, 8, 100].includes(chapter)) return 1.5; // 유명한 짧은 시편들
+        return 2.5; // 시편 평균
+    }
+
     if (book === 20) return 3.5;      // 잠언
     if (book <= 39) return 4.0;       // 구약
     return 4.2;                       // 신약
@@ -133,6 +105,29 @@ export const createAudioTimeMap = (): Map<string, number> => {
         timeMap.set(key, data.minutes);
     });
 
-    console.log(`✅ 음성 시간 데이터 ${timeMap.size}개 로드 완료`);
+    console.log(`✅ 음성 시간 데이터 ${timeMap.size}개 로드 완료 (정적 데이터)`);
     return timeMap;
+};
+
+/**
+ * 🔥 React Native 호환 초기화 함수
+ * CSV 파일 대신 정적 데이터 사용
+ */
+export const initializeAudioData = (): boolean => {
+    try {
+        const timeMap = createAudioTimeMap();
+        console.log(`✅ 음성 데이터 초기화 완료: ${timeMap.size}개 항목`);
+        return true;
+    } catch (error) {
+        console.error('음성 데이터 초기화 실패:', error);
+        return false;
+    }
+};
+
+/**
+ * 문자열 형태의 음성파일 데이터를 파싱 (현재는 사용하지 않음)
+ */
+export const parseAudioDataString = (dataString: string): AudioChapterData[] => {
+    console.log('⚠️ parseAudioDataString은 React Native에서 사용되지 않습니다.');
+    return [];
 };
