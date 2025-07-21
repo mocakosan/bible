@@ -8,10 +8,6 @@ import android.content.IntentFilter;
 import android.os.Build;
 import android.util.Log;
 
-// 🔥 MultiDex 지원 추가
-import androidx.multidex.MultiDex;
-import androidx.multidex.MultiDexApplication;
-
 import com.buzzvil.buzzbenefit.BuzzBenefitConfig;
 import com.buzzvil.sdk.BuzzvilSdk;
 import com.facebook.react.PackageList;
@@ -32,8 +28,7 @@ import com.clsk.media.greenp.GreenpPackage;
 import com.clsk.media.adpopcorn.RNAdPopcornRewardPackage;
 import com.clsk.media.ReactWrapperPackage;
 
-// 🔥 MultiDexApplication 상속으로 변경
-public class MainApplication extends MultiDexApplication implements ReactApplication {
+public class MainApplication extends Application implements ReactApplication {
 
     private final ReactNativeHost mReactNativeHost =
         new DefaultReactNativeHost(this) {
@@ -46,16 +41,16 @@ public class MainApplication extends MultiDexApplication implements ReactApplica
             protected List<ReactPackage> getPackages() {
                 @SuppressWarnings("UnnecessaryLocalVariable")
                 List<ReactPackage> packages = new PackageList(this).getPackages();
-
-                // 🔥 패키지 추가 방식 수정
-                packages.add(new RNExitAppPackage());
+                new RNExitAppPackage();
                 packages.add(new RNAdPopcornSSPPackage());
                 packages.add(new GreenpPackage());
                 packages.add(new RNAdPopcornRewardPackage());
                 packages.add(new ReactWrapperPackage());
                 packages.add(new MottoWebPackage());
+                // Buzzvil 패키지 추가
                 packages.add(new BuzzvilPackage());
-
+                // Packages that cannot be autolinked yet can be added manually here, for example:
+                // packages.add(new MyReactNativePackage());
                 return packages;
             }
 
@@ -85,19 +80,9 @@ public class MainApplication extends MultiDexApplication implements ReactApplica
         return mReactNativeHost;
     }
 
-    // 🔥 MultiDex 지원 추가
-    @Override
-    protected void attachBaseContext(Context base) {
-        super.attachBaseContext(base);
-        MultiDex.install(this);
-    }
-
     @Override
     public void onCreate() {
         super.onCreate();
-
-        // TrackPlayer와 백그라운드 재생을 위한 초기 설정
-        initializeTrackPlayerEnvironment();
 
         // Buzzvil SDK 초기화 (가장 먼저 호출)
         initializeBuzzvilSdk();
@@ -112,28 +97,7 @@ public class MainApplication extends MultiDexApplication implements ReactApplica
             // If you opted-in for the New Architecture, we load the native entry point for this app.
             DefaultNewArchitectureEntryPoint.load();
         }
-
-        // 🔥 Flipper 초기화 - try-catch로 안전하게 처리
-        try {
-            ReactNativeFlipper.initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
-        } catch (Exception e) {
-            Log.w("MainApplication", "Flipper 초기화 실패 (릴리즈 빌드에서는 정상)", e);
-        }
-    }
-
-    /**
-     * TrackPlayer 백그라운드 재생을 위한 환경 설정
-     */
-    private void initializeTrackPlayerEnvironment() {
-        try {
-            Log.d("MainApplication", "TrackPlayer 환경 초기화 시작");
-
-            // 백그라운드 서비스 실행을 위한 권한 확인은 런타임에서 처리
-            Log.d("MainApplication", "TrackPlayer 환경 초기화 완료");
-
-        } catch (Exception e) {
-            Log.e("MainApplication", "TrackPlayer 환경 초기화 중 오류", e);
-        }
+        ReactNativeFlipper.initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
     }
 
     private void initializeBuzzvilSdk() {
@@ -199,23 +163,5 @@ public class MainApplication extends MultiDexApplication implements ReactApplica
             return super.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
         }
         return super.registerReceiver(receiver, filter);
-    }
-
-    /**
-     * 앱 종료 시 백그라운드 서비스 정리
-     */
-    @Override
-    public void onTerminate() {
-        super.onTerminate();
-        Log.d("MainApplication", "앱 종료 - 백그라운드 서비스 정리");
-    }
-
-    /**
-     * 메모리 부족 시 처리
-     */
-    @Override
-    public void onLowMemory() {
-        super.onLowMemory();
-        Log.w("MainApplication", "메모리 부족 상황 감지");
     }
 }

@@ -17,13 +17,6 @@
     <!-- react-native-track-player 권한 추가 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-    <!-- 🔥 알림 권한 추가 (Android 13+) -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- 🔥 미디어 세션 권한 추가 -->
-    <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-
     <application
             android:name=".MainApplication"
             android:label="@string/app_name"
@@ -112,34 +105,21 @@
                 android:screenOrientation="portrait"
                 android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
-        <!-- 🔥 react-native-track-player 서비스 수정 -->
+        <!-- react-native-track-player 서비스 추가 -->
         <service
                 android:name="com.doublesymmetry.trackplayer.service.MusicService"
-                android:exported="false"
+                android:exported="true"
                 android:foregroundServiceType="mediaPlayback"
-                android:enabled="true"
-                tools:replace="android:exported">
+                >
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
-                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
 
-        <!-- 🔥 react-native-track-player 리시버 수정 -->
+        <!-- react-native-track-player 리시버 추가 -->
         <receiver
-                android:name="androidx.media.session.MediaButtonReceiver"
-                android:exported="true"
-                android:enabled="true">
-            <intent-filter android:priority="1000">
-                <action android:name="android.intent.action.MEDIA_BUTTON" />
-            </intent-filter>
-        </receiver>
-
-        <!-- 🔥 추가 미디어 리시버 (호환성) -->
-        <receiver
-                android:name="com.doublesymmetry.trackplayer.service.MediaButtonReceiver"
-                android:exported="false"
-                android:enabled="true">
+                android:name="com.doublesymmetry.trackplayer.receivers.MediaButtonReceiver"
+                android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
@@ -147,7 +127,10 @@
 
     </application>
 
-    <!-- 🚨 사용하지 않는 권한들은 제거하거나 최하단으로 이동 🚨 -->
-    <!-- <uses-permission android:name="android.permission.ACCEPT_HANDOVER" /> -->
+    <!-- 🚨 Keep only the permissions used in your app 🚨 -->
+    <uses-permission android:name="android.permission.ACCEPT_HANDOVER" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
+    <!-- … -->
 </manifest>
