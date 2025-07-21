@@ -1,7 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
           xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 기본 권한 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -10,22 +9,19 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
-    <!-- 버즈빌 SDK 권한 -->
+    <!-- 버즈빌 SDK 권한 추가 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
-    <!-- 백그라운드 서비스 권한 (TrackPlayer용) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- react-native-track-player 권한 추가 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-    <!-- 알림 권한 (Android 13+) -->
+    <!-- 🔥 알림 권한 추가 (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- 오디오 포커스 권한 -->
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-
-    <!-- 맨 아래로 이동된 권한들 -->
-    <uses-permission android:name="android.permission.ACCEPT_HANDOVER" />
+    <!-- 🔥 미디어 세션 권한 추가 -->
+    <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
     <application
@@ -35,10 +31,8 @@
             android:roundIcon="@mipmap/ic_launcher_round"
             android:allowBackup="true"
             android:usesCleartextTraffic="true"
-            android:theme="@style/AppTheme"
-            android:requestLegacyExternalStorage="true">
+            android:theme="@style/AppTheme">
 
-        <!-- 광고 관련 메타데이터 -->
         <meta-data android:name="adpopcorn_ssp_app_key" android:value="755912846"/>
         <meta-data
                 android:name="com.google.android.gms.ads.APPLICATION_ID"
@@ -49,12 +43,11 @@
         <meta-data android:name="adpopcorn_reward_server_type" android:value="server"/>
         <meta-data android:name="tnkad_app_id" android:value="90c01040-a0a1-39b6-6b93-190f0a050800" />
 
-        <!-- 버즈빌 SDK 메타데이터 -->
+        <!-- 버즈빌 SDK 메타데이터 (실제 APP_ID로 변경 필요) -->
         <meta-data
                 android:name="buzzvil_app_id"
-                android:value="177038632787380" />
+                android:value="YOUR_BUZZVIL_APP_ID" />
 
-        <!-- 메인 액티비티 -->
         <activity
                 android:name=".MainActivity"
                 android:label="@string/app_name"
@@ -62,14 +55,13 @@
                 android:launchMode="singleTask"
                 android:windowSoftInputMode="adjustResize"
                 android:exported="true"
-                android:screenOrientation="portrait">
+        >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- 카카오 로그인 -->
         <activity
                 android:name="com.kakao.sdk.auth.AuthCodeHandlerActivity"
                 android:exported="true">
@@ -77,22 +69,20 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Redirect URI: "kakao{NATIVE_APP_KEY}://oauth" -->
                 <data android:host="oauth"
                       android:scheme="kakao28a89768be0fbdb0e663bcfcab8b3ae8" />
             </intent-filter>
         </activity>
 
-        <!-- 광고 관련 액티비티 -->
-        <activity android:name="com.tnkfactory.ad.AdWallActivity"
-                  android:exported="true"
-                  android:screenOrientation="portrait"/>
+        <activity android:name="com.tnkfactory.ad.AdWallActivity" android:exported="true" android:screenOrientation="portrait"/>
 
         <activity
                 android:name=".MottoWebActivity"
                 android:exported="false"
                 android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
 
-        <!-- 버즈빌 SDK 컴포넌트 -->
+        <!-- 버즈빌 SDK 서비스 및 리시버 -->
         <service
                 android:name="com.buzzvil.buzzbenefit.core.service.BuzzBenefitBackgroundService"
                 android:exported="false" />
@@ -109,7 +99,7 @@
                 android:name="com.buzzvil.buzzbenefit.core.receiver.BuzzBenefitAlarmReceiver"
                 android:exported="false" />
 
-        <!-- 버즈빌 액티비티 -->
+        <!-- 버즈빌 액티비티들 -->
         <activity
                 android:name="com.buzzvil.buzzbenefit.presentation.benefit.BuzzBenefitActivity"
                 android:exported="false"
@@ -122,29 +112,42 @@
                 android:screenOrientation="portrait"
                 android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
-        <!-- TrackPlayer 서비스 - 백그라운드 재생 허용, 앱 종료 시에만 정지 -->
+        <!-- 🔥 react-native-track-player 서비스 수정 -->
         <service
                 android:name="com.doublesymmetry.trackplayer.service.MusicService"
-                android:enabled="true"
                 android:exported="false"
                 android:foregroundServiceType="mediaPlayback"
-                android:stopWithTask="true"
+                android:enabled="true"
                 tools:replace="android:exported">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
-                <action android:name="android.media.AUDIO_BECOMING_NOISY" />
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
 
-        <!-- TrackPlayer 미디어 버튼 리시버 -->
+        <!-- 🔥 react-native-track-player 리시버 수정 -->
         <receiver
-                android:name="com.doublesymmetry.trackplayer.receivers.MediaButtonReceiver"
-                android:exported="true">
+                android:name="androidx.media.session.MediaButtonReceiver"
+                android:exported="true"
+                android:enabled="true">
             <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
 
+        <!-- 🔥 추가 미디어 리시버 (호환성) -->
+        <receiver
+                android:name="com.doublesymmetry.trackplayer.service.MediaButtonReceiver"
+                android:exported="false"
+                android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
     </application>
+
+    <!-- 🚨 사용하지 않는 권한들은 제거하거나 최하단으로 이동 🚨 -->
+    <!-- <uses-permission android:name="android.permission.ACCEPT_HANDOVER" /> -->
 
 </manifest>
