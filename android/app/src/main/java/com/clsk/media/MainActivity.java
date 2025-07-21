@@ -2,13 +2,11 @@ package com.clsk.media;
 
 import com.facebook.react.ReactActivity;
 import com.facebook.react.ReactActivityDelegate;
-import com.facebook.react.ReactRootView;
+import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
+import com.facebook.react.defaults.DefaultReactActivityDelegate;
 import android.os.Bundle;
 import android.content.Intent;
 import android.content.res.Configuration;
-
-// 🔥 Gesture Handler import
-import com.swmansion.gesturehandler.react.RNGestureHandlerEnabledRootView;
 
 import org.devio.rn.splashscreen.SplashScreen;
 
@@ -20,30 +18,32 @@ public class MainActivity extends ReactActivity {
    */
   @Override
   protected void onCreate(Bundle savedInstanceState) {
-      // 🔥 SplashScreen 표시 (기본 스타일 사용)
+      // react-native-screens 라이브러리 충돌 방지
+      // savedInstanceState를 null로 전달하여 Fragment 복원을 방지
+      super.onCreate(null);
       SplashScreen.show(this);
-      super.onCreate(savedInstanceState);
   }
 
   @Override
   protected String getMainComponentName() {
-    return "clsk"; // 🔥 올바른 컴포넌트 이름 사용
+    return "media";
   }
 
   /**
-   * 🔥 구버전 호환 ReactActivityDelegate 사용
+   * Returns the instance of the {@link ReactActivityDelegate}. Here we use a util class {@link
+   * DefaultReactActivityDelegate} which allows you to easily enable Fabric and Concurrent React
+   * (aka React 18) with two boolean flags.
    */
   @Override
   protected ReactActivityDelegate createReactActivityDelegate() {
-    return new ReactActivityDelegate(this, getMainComponentName()) {
-
-        // 🔥 Gesture Handler 지원을 위한 ReactRootView 오버라이드
-        @Override
-        protected ReactRootView createRootView() {
-            ReactRootView rootView = new RNGestureHandlerEnabledRootView(MainActivity.this);
-            return rootView;
-        }
-    };
+    return new DefaultReactActivityDelegate(
+        this,
+        getMainComponentName(),
+        // If you opted-in for the New Architecture, we enable the Fabric Renderer.
+        DefaultNewArchitectureEntryPoint.getFabricEnabled(), // fabricEnabled
+        // If you opted-in for the New Architecture, we enable Concurrent React (i.e. React 18).
+        DefaultNewArchitectureEntryPoint.getConcurrentReactEnabled() // concurrentRootEnabled
+        );
   }
 
   /**
@@ -52,9 +52,6 @@ public class MainActivity extends ReactActivity {
   @Override
   public void onConfigurationChanged(Configuration newConfig) {
     super.onConfigurationChanged(newConfig);
-    Intent intent = new Intent("onConfigurationChanged");
-    intent.putExtra("newConfig", newConfig);
-    this.sendBroadcast(intent);
   }
 
   /**
