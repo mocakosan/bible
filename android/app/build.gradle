@@ -65,7 +65,7 @@ def enableSeparateBuildPerCPUArchitecture = false
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true // 🔥 Proguard 활성화
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -100,8 +100,10 @@ android {
         applicationId "com.clsk.media"
         minSdk 24
         targetSdk 34
-        versionCode 158
-        versionName "5.3.7"
+        versionCode 160
+        versionName "5.3.9"
+        // 🔥 멀티덱스 지원 추가
+        multiDexEnabled true
 //        signingConfig signingConfigs.release
     }
     dexOptions {
@@ -161,7 +163,23 @@ android {
             signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            // 🔥 추가 최적화 설정
+            shrinkResources false // 리소스 압축 비활성화로 안정성 확보
+            zipAlignEnabled true
+            debuggable false
         }
+    }
+
+    // 🔥 패키징 옵션 추가 - 중복 파일 처리
+    packagingOptions {
+        pickFirst '**/libc++_shared.so'
+        pickFirst '**/libjsc.so'
+        pickFirst '**/libfbjni.so'
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/NOTICE.txt'
     }
 
     // applicationVariants are e.g. debug, release
@@ -184,6 +202,10 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+
+    // 🔥 멀티덱스 지원
+    implementation 'androidx.multidex:multidex:2.0.1'
+
     implementation 'com.tnkfactory:rwd:8.06.15'
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.0.0")
     implementation project(':react-native-exit-app')

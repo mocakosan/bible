@@ -8,6 +8,10 @@ import android.content.IntentFilter;
 import android.os.Build;
 import android.util.Log;
 
+// 🔥 MultiDex 지원 추가
+import androidx.multidex.MultiDex;
+import androidx.multidex.MultiDexApplication;
+
 import com.buzzvil.buzzbenefit.BuzzBenefitConfig;
 import com.buzzvil.sdk.BuzzvilSdk;
 import com.facebook.react.PackageList;
@@ -28,7 +32,8 @@ import com.clsk.media.greenp.GreenpPackage;
 import com.clsk.media.adpopcorn.RNAdPopcornRewardPackage;
 import com.clsk.media.ReactWrapperPackage;
 
-public class MainApplication extends Application implements ReactApplication {
+// 🔥 MultiDexApplication 상속으로 변경
+public class MainApplication extends MultiDexApplication implements ReactApplication {
 
     private final ReactNativeHost mReactNativeHost =
         new DefaultReactNativeHost(this) {
@@ -41,16 +46,16 @@ public class MainApplication extends Application implements ReactApplication {
             protected List<ReactPackage> getPackages() {
                 @SuppressWarnings("UnnecessaryLocalVariable")
                 List<ReactPackage> packages = new PackageList(this).getPackages();
-                new RNExitAppPackage();
+
+                // 🔥 패키지 추가 방식 수정
+                packages.add(new RNExitAppPackage());
                 packages.add(new RNAdPopcornSSPPackage());
                 packages.add(new GreenpPackage());
                 packages.add(new RNAdPopcornRewardPackage());
                 packages.add(new ReactWrapperPackage());
                 packages.add(new MottoWebPackage());
-                // Buzzvil 패키지 추가
                 packages.add(new BuzzvilPackage());
-                // Packages that cannot be autolinked yet can be added manually here, for example:
-                // packages.add(new MyReactNativePackage());
+
                 return packages;
             }
 
@@ -80,6 +85,13 @@ public class MainApplication extends Application implements ReactApplication {
         return mReactNativeHost;
     }
 
+    // 🔥 MultiDex 지원 추가
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        MultiDex.install(this);
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -100,7 +112,13 @@ public class MainApplication extends Application implements ReactApplication {
             // If you opted-in for the New Architecture, we load the native entry point for this app.
             DefaultNewArchitectureEntryPoint.load();
         }
-        ReactNativeFlipper.initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
+
+        // 🔥 Flipper 초기화 - try-catch로 안전하게 처리
+        try {
+            ReactNativeFlipper.initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
+        } catch (Exception e) {
+            Log.w("MainApplication", "Flipper 초기화 실패 (릴리즈 빌드에서는 정상)", e);
+        }
     }
 
     /**

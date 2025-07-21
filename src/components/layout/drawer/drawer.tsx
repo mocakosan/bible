@@ -256,34 +256,9 @@ export default function DrawerLayout({ props }: Props) {
   // 네이버페이 회원 정보 조회 함수
   const getNaverPayMemberInfo = async (uniqueId) => {
     try {
-      // 접근 토큰 획득
-      const accessToken = await getAccessToken();
-
       if (!uniqueId) {
         throw new Error("네이버 유니크 아이디가 누락되었습니다.");
       }
-
-      // 로그인 API에서 사용한 네이버 앱 키를 clientId로 사용
-      const clientId = naverLoginConfig.consumerKey;
-      const clientSecret = naverLoginConfig.consumerSecret;
-
-      if (!clientId || !clientSecret) {
-        throw new Error(
-          "네이버 앱 clientId 또는 clientSecret이 누락되었습니다."
-        );
-      }
-
-      // 유니크 아이디 암호화
-      const encryptedUniqueId = encryptPersonalInfo(uniqueId);
-      const encryptedClientId = encryptPersonalInfo(clientId);
-      const encryptedClientSecret = encryptPersonalInfo(clientSecret);
-
-      // API 요청 데이터 구성
-      const requestData = {
-        uniqueId: encryptedUniqueId,
-        clientId: encryptedClientId,
-        clientSecret: encryptedClientSecret,
-      };
 
       // API 호출
       const response = await axios.get(
@@ -307,9 +282,6 @@ export default function DrawerLayout({ props }: Props) {
   // 네이버페이 포인트 적립 함수
   const addNaverPayPoint = async (userKey, points) => {
     try {
-      // 접근 토큰 획득
-      const accessToken = await getAccessToken();
-
       if (!userKey) {
         throw new Error("네이버페이 유저키가 누락되었습니다.");
       }
@@ -317,25 +289,16 @@ export default function DrawerLayout({ props }: Props) {
       if (!points || isNaN(points) || points <= 0) {
         throw new Error("적립할 포인트는 양수여야 합니다.");
       }
-
-      // userKey 암호화
-      const encryptedUserKey = encryptPersonalInfo(userKey);
-
-      // 거래번호 생성 (요청 일자 + 제휴사 코드 + 랜덤 문자열)
-      const now = new Date();
-      const formattedDate = format(now, "yyMMddHHmmss");
-      const randomString = Math.random().toString(36).substring(2, 10);
-      const partnerTxNo = `${formattedDate}${DAWU_API_CONFIG.PARTNER_CODE}${randomString}`;
-      console.log("userKey",userKey)
       // API 요청 데이터 구성
       const requestData = {
         userKey: userKey,
+        points: points,
       };
 
       // API 호출
       const response = await axios.post(
         `https://dev25backend.givemeprice.co.kr/point/addnaver`,
-        requestData,
+        requestData
       );
 
       // 응답 확인
