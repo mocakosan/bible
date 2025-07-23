@@ -1,0 +1,10 @@
+{
+  "android": {
+    "name": "media",
+    "displayName": "media"
+  },
+  "ios": {
+    "name": "bible25app",
+    "displayName": "bible25app"
+  }
+}
