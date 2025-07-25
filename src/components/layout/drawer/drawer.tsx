@@ -253,7 +253,7 @@ export default function DrawerLayout({ props }: Props) {
     }
   };
 
-  // 네이버페이 회원 정보 조회 함수
+  //! 네이버페이 회원 정보 조회 함수
   const getNaverPayMemberInfo = async (uniqueId) => {
     try {
       if (!uniqueId) {

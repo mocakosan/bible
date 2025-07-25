@@ -73,6 +73,7 @@ public class GreenpModule extends ReactContextBaseJavaModule {
                 }
             }
             this.callback.invoke(result, msg);
+            this.callback = null;
         }
     }
 

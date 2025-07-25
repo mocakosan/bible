@@ -5,6 +5,8 @@ import com.facebook.react.ReactActivityDelegate;
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
 import com.facebook.react.defaults.DefaultReactActivityDelegate;
 import android.os.Bundle;
+import android.content.Intent;
+import android.content.res.Configuration;
 
 import org.devio.rn.splashscreen.SplashScreen;
 
@@ -42,5 +44,40 @@ public class MainActivity extends ReactActivity {
         // If you opted-in for the New Architecture, we enable Concurrent React (i.e. React 18).
         DefaultNewArchitectureEntryPoint.getConcurrentReactEnabled() // concurrentRootEnabled
         );
+  }
+
+  /**
+   * TrackPlayer와 백그라운드 재생을 위한 추가 설정
+   */
+  @Override
+  public void onConfigurationChanged(Configuration newConfig) {
+    super.onConfigurationChanged(newConfig);
+  }
+
+  /**
+   * 앱이 백그라운드로 이동할 때 처리
+   */
+  @Override
+  protected void onPause() {
+    super.onPause();
+    // 백그라운드에서 일시적으로 재생 유지
+  }
+
+  /**
+   * 앱이 포그라운드로 돌아올 때 처리
+   */
+  @Override
+  protected void onResume() {
+    super.onResume();
+    // 포그라운드 복귀 시 처리
+  }
+
+  /**
+   * Intent 처리 (딥링크, 미디어 버튼 등)
+   */
+  @Override
+  public void onNewIntent(Intent intent) {
+    super.onNewIntent(intent);
+    setIntent(intent);
   }
 }

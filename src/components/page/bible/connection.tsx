@@ -1,3 +1,5 @@
+// BibleConectionScreen 안전성 개선 버전
+
 import Clipboard from "@react-native-clipboard/clipboard";
 import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useLayoutEffect, useRef, useState, useEffect } from "react";
@@ -48,6 +50,10 @@ export default function BibleConectionScreen() {
     const [isAutoProcessing, setIsAutoProcessing] = useState(false);
     const autoProgressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+    // 🆕 추가: 컴포넌트 마운트 상태 추적 및 타이머 관리
+    const isMountedRef = useRef(true);
+    const timerRefs = useRef<Set<NodeJS.Timeout>>(new Set());
+
     const {
         markChapterAsRead: markChapterAsReadHook,
         isChapterReadSync: isChapterReadSyncHook,
@@ -58,7 +64,68 @@ export default function BibleConectionScreen() {
         unregisterGlobalRefreshCallback
     } = useBibleReading();
 
+    // 🆕 안전한 타이머 설정 함수
+    const safeSetTimeout = useCallback((callback: () => void, delay: number) => {
+        if (!isMountedRef.current) {
+            console.log("Component is unmounted, skipping timer");
+            return null;
+        }
+
+        const timer = setTimeout(() => {
+            if (isMountedRef.current) {
+                callback();
+            }
+            timerRefs.current.delete(timer);
+        }, delay);
+
+        timerRefs.current.add(timer);
+        return timer;
+    }, []);
+
+    // 🆕 모든 타이머 정리 함수
+    const clearAllTimers = useCallback(() => {
+        timerRefs.current.forEach(timer => {
+            clearTimeout(timer);
+        });
+        timerRefs.current.clear();
+
+        if (autoProgressTimeoutRef.current) {
+            clearTimeout(autoProgressTimeoutRef.current);
+            autoProgressTimeoutRef.current = null;
+        }
+    }, []);
+
+    // 🆕 안전한 오디오 재생 함수
+    const safePlayCurrentPageAudio = useCallback(async () => {
+        try {
+            // 컴포넌트 마운트 상태 확인
+            if (!isMountedRef.current) {
+                console.log("Component is unmounted, skipping audio play");
+                return;
+            }
+
+            // ref가 null인지 확인
+            if (!audioPlayerRef.current) {
+                console.log("AudioPlayer ref is null, skipping audio play");
+                return;
+            }
+
+            // playCurrentPageAudio 메서드가 존재하는지 확인
+            if (typeof audioPlayerRef.current.playCurrentPageAudio !== 'function') {
+                console.log("playCurrentPageAudio method not available");
+                return;
+            }
+
+            console.log("Calling playCurrentPageAudio safely");
+            await audioPlayerRef.current.playCurrentPageAudio();
+        } catch (error) {
+            console.error("Error calling playCurrentPageAudio:", error);
+        }
+    }, []);
+
     const handleGlobalRefresh = useCallback(() => {
+        if (!isMountedRef.current) return;
+
         console.log('🔄 BibleConectionScreen 전역 새로고침 실행');
 
         // 현재 페이지 데이터 새로고침
@@ -79,9 +146,16 @@ export default function BibleConectionScreen() {
 
     // 컴포넌트 마운트 시 자동 진행 기능 기본 활성화
     useEffect(() => {
+        isMountedRef.current = true;
         setIsAutoProgressEnabled(true);
         saveAutoProgressSetting(true);
-    }, []);
+
+        return () => {
+            console.log("BibleConectionScreen unmounting, cleaning up");
+            isMountedRef.current = false;
+            clearAllTimers();
+        };
+    }, [clearAllTimers]);
 
     // TrackPlayer 이벤트 리스너 - 오디오 재생 완료 감지
     useTrackPlayerEvents([
@@ -89,6 +163,8 @@ export default function BibleConectionScreen() {
         Event.PlaybackState,
         Event.PlaybackTrackChanged
     ], async (event) => {
+        if (!isMountedRef.current) return;
+
         console.log('🎵 TrackPlayer Event:', event.type, 'AutoProgress:', isAutoProgressEnabled);
 
         // 자동 진행이 비활성화되어 있거나 이미 처리 중이면 리턴
@@ -114,7 +190,7 @@ export default function BibleConectionScreen() {
             if (autoProgressTimeoutRef.current) {
                 clearTimeout(autoProgressTimeoutRef.current);
             }
-            autoProgressTimeoutRef.current = setTimeout(async () => {
+            autoProgressTimeoutRef.current = safeSetTimeout(async () => {
                 await handleAutoProgress();
             }, 500);
         }
@@ -123,8 +199,8 @@ export default function BibleConectionScreen() {
     // 자동 진행 메인 로직
     const handleAutoProgress = useCallback(async () => {
         // 중복 실행 방지
-        if (isAutoProcessing) {
-            console.log('⚠️ Connection: Auto progress already in progress, skipping');
+        if (isAutoProcessing || !isMountedRef.current) {
+            console.log('⚠️ Connection: Auto progress already in progress or unmounted, skipping');
             return;
         }
 
@@ -135,25 +211,28 @@ export default function BibleConectionScreen() {
             // 1. 재생 완료 알림 (즉시 표시)
 
             // 2. 짧은 대기 (사용자가 메시지를 확인할 수 있도록)
-            await new Promise(resolve => setTimeout(resolve, 800));
+            await new Promise(resolve => safeSetTimeout(resolve, 800));
 
             // 3. 현재 장을 읽었음으로 자동 체크
             console.log(`📖 Connection: Marking chapter ${BOOK}:${JANG} as read`);
             await markCurrentChapterAsRead();
 
             // 4. 🆕 추가 대기 및 상태 재확인 (동기화 보장)
-            await new Promise(resolve => setTimeout(resolve, 200));
+            await new Promise(resolve => safeSetTimeout(resolve, 200));
 
             // 캐시 재업데이트 (확실한 동기화)
-            updateReadingTableCache(BOOK, JANG, true);
-            console.log('🔄 Connection: Re-updated cache for safety');
-
+            if (isMountedRef.current) {
+                updateReadingTableCache(BOOK, JANG, true);
+                console.log('🔄 Connection: Re-updated cache for safety');
+            }
 
             // 6. 추가 대기 후 다음 장으로 이동
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => safeSetTimeout(resolve, 1000));
 
-            console.log(`⏭️ Connection: Moving to next chapter from ${BOOK}:${JANG}`);
-            onPressNext(JANG);
+            if (isMountedRef.current) {
+                console.log(`⏭️ Connection: Moving to next chapter from ${BOOK}:${JANG}`);
+                onPressNext(JANG);
+            }
 
             console.log('✅ Connection: Auto progress completed successfully');
 
@@ -168,16 +247,20 @@ export default function BibleConectionScreen() {
             });
         } finally {
             // 처리 상태 초기화
-            setIsAutoProcessing(false);
+            if (isMountedRef.current) {
+                setIsAutoProcessing(false);
+            }
             if (autoProgressTimeoutRef.current) {
                 clearTimeout(autoProgressTimeoutRef.current);
                 autoProgressTimeoutRef.current = null;
             }
         }
-    }, [BOOK, JANG, isAutoProcessing, markCurrentChapterAsRead, onPressNext, updateReadingTableCache]);
+    }, [BOOK, JANG, isAutoProcessing, markCurrentChapterAsRead, onPressNext, updateReadingTableCache, safeSetTimeout]);
 
     // 현재 장을 읽었음으로 표시하는 함수
     const markCurrentChapterAsRead = useCallback(async () => {
+        if (!isMountedRef.current) return;
+
         try {
             console.log(`📝 Connection: Marking chapter ${BOOK}:${JANG} as read`);
 
@@ -223,29 +306,35 @@ export default function BibleConectionScreen() {
             }
 
             // 🆕 중요: 캐시 업데이트 (이것이 리스트 표시에 중요!)
-            updateReadingTableCache(BOOK, JANG, true);
-            console.log('✅ Connection: Updated reading table cache');
+            if (isMountedRef.current) {
+                updateReadingTableCache(BOOK, JANG, true);
+                console.log('✅ Connection: Updated reading table cache');
+            }
 
             // 일독 계획 데이터도 업데이트 (있는 경우)
-            if (planData) {
+            if (planData && isMountedRef.current) {
                 await markChapterAsReadHook(BOOK, JANG);
                 console.log('✅ Connection: Updated plan data');
             }
 
             // 🔥 핵심: updateReadingTableCache 호출 시 자동으로 전역 새로고침이 트리거됨
             // 추가적인 동기화를 위해 여러 번 호출
-            setTimeout(() => {
-                updateReadingTableCache(BOOK, JANG, true);
-                console.log('🔄 Connection: Additional cache update for sync');
+            safeSetTimeout(() => {
+                if (isMountedRef.current) {
+                    updateReadingTableCache(BOOK, JANG, true);
+                    console.log('🔄 Connection: Additional cache update for sync');
+                }
             }, 100);
 
-            setTimeout(() => {
-                updateReadingTableCache(BOOK, JANG, true);
-                console.log('🔄 Connection: Final cache update for sync');
+            safeSetTimeout(() => {
+                if (isMountedRef.current) {
+                    updateReadingTableCache(BOOK, JANG, true);
+                    console.log('🔄 Connection: Final cache update for sync');
+                }
             }, 300);
 
             // 상위 컴포넌트에 읽기 상태 변경 알림
-            if (handleReadStatusChange) {
+            if (handleReadStatusChange && isMountedRef.current) {
                 handleReadStatusChange(BOOK, JANG, true);
                 console.log('✅ Connection: Notified parent component');
             }
@@ -256,19 +345,12 @@ export default function BibleConectionScreen() {
             console.error('❌ Connection: Error marking chapter as read:', error);
             throw error;
         }
-    }, [BOOK, JANG, planData, markChapterAsReadHook, updateReadingTableCache, handleReadStatusChange]);
-
-    // 컴포넌트 언마운트 시 타이머 정리
-    useEffect(() => {
-        return () => {
-            if (autoProgressTimeoutRef.current) {
-                clearTimeout(autoProgressTimeoutRef.current);
-            }
-        };
-    }, []);
+    }, [BOOK, JANG, planData, markChapterAsReadHook, updateReadingTableCache, handleReadStatusChange, safeSetTimeout]);
 
     const onPressforward = useCallback(
         async (jang: number) => {
+            if (!isMountedRef.current) return;
+
             const curJang = jang - 1;
 
             if (curJang === 0) {
@@ -292,7 +374,7 @@ export default function BibleConectionScreen() {
                 );
             }
 
-            if (sound) {
+            if (sound && isMountedRef.current) {
                 handleUpdateData();
                 setAutoPlay(true);
                 setIsPlaying(false);
@@ -305,6 +387,8 @@ export default function BibleConectionScreen() {
 
     const onPressNext = useCallback(
         (jang: number) => {
+            if (!isMountedRef.current) return;
+
             const curJang = jang + 1;
             const totalJang = BibleStep[BOOK - 1].count;
 
@@ -341,13 +425,16 @@ export default function BibleConectionScreen() {
             handleUpdateData();
             dispatch(bibleTextSlice.actions.reset());
 
-            if (sound && audioPlayerRef.current) {
-                setTimeout(() => {
-                    audioPlayerRef.current.playCurrentPageAudio();
+            // 🆕 핵심 개선: 안전한 오디오 재생 호출
+            if (sound && isMountedRef.current) {
+                console.log("🎵 Scheduling safe audio play after page change");
+                safeSetTimeout(() => {
+                    console.log("🎵 Executing delayed audio play");
+                    safePlayCurrentPageAudio();
                 }, 500);
             }
         },
-        [sound, BOOK, JANG, handleUpdateData, navigation]
+        [sound, BOOK, JANG, handleUpdateData, navigation, safeSetTimeout, safePlayCurrentPageAudio]
     );
 
     dispatch(illdocSelectSlice.actions.changePage({ book, jang }));
@@ -373,11 +460,15 @@ export default function BibleConectionScreen() {
     const { data: markData, mutate } = useSWR(selectSql, fetcher);
 
     const handleUpdateData = useCallback(async () => {
+        if (!isMountedRef.current) return;
+
         const data = await fetchSql(bibleSetting, selectSql, []);
         return mutate(selectSql, data);
     }, [BOOK, JANG]);
 
     const handleReadStatusChange = useCallback((book: number, chapter: number, isRead: boolean) => {
+        if (!isMountedRef.current) return;
+
         handleUpdateData();
         loadPlan();
     }, [handleUpdateData, loadPlan]);
@@ -385,6 +476,7 @@ export default function BibleConectionScreen() {
     const [menuIndex, setMenuIndex] = useState<number>(0);
     const onMenuPress = useCallback(
         (index: number) => {
+            if (!isMountedRef.current) return;
             setMenuIndex(index);
         },
         [menuIndex]
@@ -408,7 +500,7 @@ export default function BibleConectionScreen() {
     }, [menuIndex, BOOK, JANG]);
 
     useLayoutEffect(() => {
-        if (isFocused) {
+        if (isFocused && isMountedRef.current) {
             handleUpdateData();
         }
     }, [isFocused]);
@@ -478,7 +570,7 @@ const getAutoProgressSetting = (): boolean => {
     return defaultStorage.getBoolean('auto_progress_enabled') ?? false;
 };
 
-// FloatingActionContainer와 나머지 함수들은 기존과 동일
+// FloatingActionContainer와 나머지 함수들은 기존과 동일하지만 안전성 검사 추가
 const FloatingActionContainer = ({ BOOK, JANG, handleUpdateData }: any) => {
     const fontStyle = JSON.parse(defaultStorage.getString("fontStyle") ?? "");
     const dispatch = useDispatch();

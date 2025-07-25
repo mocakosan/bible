@@ -36,6 +36,7 @@ interface Props {
     onTrigger: () => void;
     openSound: boolean;
 }
+
 let isPlayerGloballyInitialized = false;
 
 // 플레이어 설정 초기화 함수
@@ -116,6 +117,10 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
         const [autoPlay, setAutoPlay] = useState<boolean>(false);
         const [isProcessingAction, setIsProcessingAction] = useState(false);
 
+        // 컴포넌트 마운트 여부를 추적하는 ref 추가
+        const isMountedRef = useRef(true);
+        const timerRefs = useRef<Set<NodeJS.Timeout>>(new Set());
+
         const prevBookRef = useRef(BOOK);
         const prevJangRef = useRef(JANG);
         const savedTrackInfoRef = useRef(null);
@@ -126,8 +131,36 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
         const progress = useProgress();
         const appStateRef = useRef(AppState.currentState);
 
+        // 안전한 타이머 설정 함수
+        const safeSetTimeout = useCallback((callback: () => void, delay: number) => {
+            if (!isMountedRef.current) {
+                console.log("Component is unmounted, skipping timer");
+                return null;
+            }
+
+            const timer = setTimeout(() => {
+                if (isMountedRef.current) {
+                    callback();
+                }
+                timerRefs.current.delete(timer);
+            }, delay);
+
+            timerRefs.current.add(timer);
+            return timer;
+        }, []);
+
+        // 모든 타이머 정리 함수
+        const clearAllTimers = useCallback(() => {
+            timerRefs.current.forEach(timer => {
+                clearTimeout(timer);
+            });
+            timerRefs.current.clear();
+        }, []);
+
         // 통합 상태 동기화 함수
         const syncBibleState = useCallback((book, jang) => {
+            if (!isMountedRef.current) return;
+
             console.log(`syncBibleState: ${book}권 ${jang}장으로 상태 동기화`);
 
             defaultStorage.set("bible_book", book);
@@ -170,9 +203,15 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
             return url;
         }, []);
 
-        // 외부에서 접근 가능한 함수들 정의
+        // 외부에서 접근 가능한 함수들 정의 - 안전성 검사 추가
         useImperativeHandle(ref, () => ({
             playCurrentPageAudio: async () => {
+                // 컴포넌트 마운트 상태 확인
+                if (!isMountedRef.current) {
+                    console.log("컴포넌트가 언마운트된 상태입니다");
+                    return;
+                }
+
                 if (!isPlayerReady || !openSound) {
                     console.log("오디오 플레이어가 준비되지 않았거나 소리가 꺼져 있습니다");
                     return;
@@ -221,31 +260,39 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
                     await TrackPlayer.setRepeatMode(RepeatMode.Off);
                     await TrackPlayer.play();
 
-                    setIsPlaying(true);
-                    syncBibleState(currentBook, currentJang);
+                    if (isMountedRef.current) {
+                        setIsPlaying(true);
+                        syncBibleState(currentBook, currentJang);
+                    }
 
                     return true;
                 } catch (error) {
                     console.error("재생 실패:", error);
                     return false;
                 } finally {
-                    setTimeout(() => {
-                        setIsProcessingAction(false);
+                    safeSetTimeout(() => {
+                        if (isMountedRef.current) {
+                            setIsProcessingAction(false);
+                        }
                     }, 1000);
                 }
             }
-        }));
+        }), [isPlayerReady, openSound, isProcessingAction, BOOK, JANG, soundSpeed, soundUrl, syncBibleState, safeSetTimeout]);
 
         // TrackPlayer 이벤트 리스너 - 자동 진행은 항상 활성화
         useTrackPlayerEvents([
             Event.PlaybackQueueEnded,
             Event.PlaybackState,
         ], async (event) => {
+            if (!isMountedRef.current) return;
+
             console.log("IllDoc TrackPlayer Event:", event.type);
 
             if (event.type === Event.PlaybackQueueEnded) {
                 console.log("IllDoc: Playback queue ended - auto progress always enabled");
-                setIsPlaying(false);
+                if (isMountedRef.current) {
+                    setIsPlaying(false);
+                }
                 console.log("IllDoc: Auto progress will be handled by parent component");
 
             } else if (event.type === Event.PlaybackState) {
@@ -253,7 +300,9 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
                 console.log("IllDoc: Playback state changed:", state);
 
                 if (state === State.Playing) {
-                    setIsPlaying(true);
+                    if (isMountedRef.current) {
+                        setIsPlaying(true);
+                    }
                     try {
                         const queue = await TrackPlayer.getQueue();
                         if (queue.length > 0) {
@@ -266,13 +315,17 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
                         console.error('IllDoc: Error saving track info:', error);
                     }
                 } else if (state === State.Paused || state === State.Stopped) {
-                    setIsPlaying(false);
+                    if (isMountedRef.current) {
+                        setIsPlaying(false);
+                    }
                     if (state === State.Stopped && !isProcessingAction && savedTrackInfoRef.current) {
                         console.log('IllDoc: Detected stopped state - saving position:', trackPositionRef.current);
                     }
                 } else if (state === 'ended') {
                     console.log("IllDoc: Playback ended detected");
-                    setIsPlaying(false);
+                    if (isMountedRef.current) {
+                        setIsPlaying(false);
+                    }
                 }
             }
         });
@@ -280,6 +333,8 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
         // 화면 포커스 변경 감지 및 상태 동기화
         useFocusEffect(
             useCallback(() => {
+                if (!isMountedRef.current) return;
+
                 console.log("Screen focused:", isFocused);
 
                 defaultStorage.set("is_illdoc_player", true);
@@ -318,13 +373,13 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
 
         // 컴포넌트 마운트 시 TrackPlayer 설정
         useEffect(() => {
-            let isMounted = true;
+            isMountedRef.current = true;
 
             const initializePlayer = async () => {
                 try {
                     const isSetup = await setupPlayer();
 
-                    if (isMounted && isSetup) {
+                    if (isMountedRef.current && isSetup) {
                         setIsPlayerReady(true);
 
                         if (!isPlayerGloballyInitialized) {
@@ -357,16 +412,19 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
             initializePlayer();
 
             return () => {
-                isMounted = false;
+                isMountedRef.current = false;
+                clearAllTimers();
                 TrackPlayer.pause().catch(error => {
                     console.error("Error pausing on unmount:", error);
                 });
             };
-        }, [navigation, BOOK, JANG]);
+        }, [navigation, BOOK, JANG, clearAllTimers]);
 
         // 앱 상태 변경 감지
         useEffect(() => {
             const subscription = AppState.addEventListener("change", async (nextAppState) => {
+                if (!isMountedRef.current) return;
+
                 console.log("App state changed from", appStateRef.current, "to", nextAppState);
 
                 if (appStateRef.current === 'active' &&
@@ -405,7 +463,7 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
 
         // 책/장 변경 감지 및 자동 재생 처리
         useEffect(() => {
-            if (!isPlayerReady) return;
+            if (!isPlayerReady || !isMountedRef.current) return;
 
             if (BOOK !== prevBookRef.current || JANG !== prevJangRef.current) {
                 console.log(`Book or chapter changed: ${prevBookRef.current}:${prevJangRef.current} → ${BOOK}:${JANG}`);
@@ -418,14 +476,14 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
 
         // 자동 재생 처리
         useEffect(() => {
-            if (!isPlayerReady || !autoPlay || !openSound) {
-                console.log("🚫 Auto play skipped - Ready:", isPlayerReady, "AutoPlay:", autoPlay, "Sound:", openSound);
+            if (!isPlayerReady || !autoPlay || !openSound || !isMountedRef.current) {
+                console.log("🚫 Auto play skipped - Ready:", isPlayerReady, "AutoPlay:", autoPlay, "Sound:", openSound, "Mounted:", isMountedRef.current);
                 return;
             }
 
             const loadAndPlayTrack = async () => {
-                if (isProcessingAction) {
-                    console.log("⚠️ Auto play skipped - already processing");
+                if (isProcessingAction || !isMountedRef.current) {
+                    console.log("⚠️ Auto play skipped - already processing or unmounted");
                     setAutoPlay(false);
                     return;
                 }
@@ -474,28 +532,33 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
                     console.log("▶️ Starting playback");
                     await TrackPlayer.play();
 
-                    setIsPlaying(true);
-
-                    console.log("🔄 Syncing state after auto play");
-                    syncBibleState(currentBook, currentJang);
+                    if (isMountedRef.current) {
+                        setIsPlaying(true);
+                        console.log("🔄 Syncing state after auto play");
+                        syncBibleState(currentBook, currentJang);
+                    }
 
                     console.log("✅ Auto play completed successfully");
                 } catch (error) {
                     console.error("❌ 자동 재생 실패:", error);
                 } finally {
                     setAutoPlay(false);
-                    setTimeout(() => {
-                        console.log("🏁 Resetting processing flag after auto play");
-                        setIsProcessingAction(false);
+                    safeSetTimeout(() => {
+                        if (isMountedRef.current) {
+                            console.log("🏁 Resetting processing flag after auto play");
+                            setIsProcessingAction(false);
+                        }
                     }, 1500);
                 }
             };
 
             loadAndPlayTrack();
-        }, [BOOK, JANG, autoPlay, isPlayerReady, soundSpeed, openSound, soundUrl, syncBibleState, isProcessingAction]);
+        }, [BOOK, JANG, autoPlay, isPlayerReady, soundSpeed, openSound, soundUrl, syncBibleState, isProcessingAction, safeSetTimeout]);
 
         // 재생 속도 변경
         const changeBasuk = useCallback(async (baesok: number) => {
+            if (!isMountedRef.current) return;
+
             let newSpeed = 1;
             if (baesok === 1) {
                 newSpeed = 1.2;
@@ -507,7 +570,9 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
 
             try {
                 await TrackPlayer.setRate(newSpeed);
-                setSoundSpeed(newSpeed);
+                if (isMountedRef.current) {
+                    setSoundSpeed(newSpeed);
+                }
                 defaultStorage.set("last_audio_speed", newSpeed);
             } catch (error) {
                 console.error("Failed to set playback rate:", error);
@@ -526,8 +591,8 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
 
         // 이전 장으로 이동
         const onPressforward = useCallback(async (jang: number) => {
-            if (isProcessingAction) {
-                console.log("이미 처리 중인 작업이 있습니다");
+            if (isProcessingAction || !isMountedRef.current) {
+                console.log("이미 처리 중인 작업이 있거나 컴포넌트가 언마운트됨");
                 return;
             }
 
@@ -549,8 +614,10 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
                         nextBook = currentBook - 1;
                         nextJang = BibleStep[nextBook - 1]?.count || 1;
                     } else {
-                        setTimeout(() => {
-                            setIsProcessingAction(false);
+                        safeSetTimeout(() => {
+                            if (isMountedRef.current) {
+                                setIsProcessingAction(false);
+                            }
                         }, 500);
                         return;
                     }
@@ -561,28 +628,34 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
                 defaultStorage.set("is_illdoc_player", true);
                 syncBibleState(nextBook, nextJang);
                 onTrigger();
-                setAutoPlay(true);
-                setIsPlaying(false);
+                if (isMountedRef.current) {
+                    setAutoPlay(true);
+                    setIsPlaying(false);
+                }
             } catch (error) {
                 console.error("이전 장 이동 오류:", error);
             } finally {
-                setTimeout(() => {
-                    setIsProcessingAction(false);
+                safeSetTimeout(() => {
+                    if (isMountedRef.current) {
+                        setIsProcessingAction(false);
+                    }
                 }, 1000);
             }
-        }, [BOOK, JANG, syncBibleState, onTrigger]);
+        }, [BOOK, JANG, syncBibleState, onTrigger, safeSetTimeout]);
 
         // 다음 장으로 이동
         const onPressNext = useCallback((jang: number) => {
             console.log("🎯 === IllDoc onPressNext CALLED ===");
             console.log("IllDoc Input jang:", jang, "Current BOOK:", BOOK, "Current JANG:", JANG);
-            console.log("IllDoc Is processing:", isProcessingAction);
+            console.log("IllDoc Is processing:", isProcessingAction, "Is mounted:", isMountedRef.current);
 
-            if (isProcessingAction) {
-                console.log("⚠️ IllDoc: Already processing, forcing reset after 2 seconds");
-                setTimeout(() => {
+            if (isProcessingAction || !isMountedRef.current) {
+                console.log("⚠️ IllDoc: Already processing or unmounted, forcing reset after 2 seconds");
+                safeSetTimeout(() => {
                     console.log("🔓 IllDoc: Force resetting processing flag");
-                    setIsProcessingAction(false);
+                    if (isMountedRef.current) {
+                        setIsProcessingAction(false);
+                    }
                 }, 2000);
                 return;
             }
@@ -628,27 +701,35 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
                 console.log("🔄 IllDoc: Calling onTrigger");
                 onTrigger();
 
-                console.log("🎵 IllDoc: Setting autoPlay to true");
-                setAutoPlay(true);
+                if (isMountedRef.current) {
+                    console.log("🎵 IllDoc: Setting autoPlay to true");
+                    setAutoPlay(true);
 
-                console.log("⏸️ IllDoc: Setting isPlaying to false");
-                setIsPlaying(false);
+                    console.log("⏸️ IllDoc: Setting isPlaying to false");
+                    setIsPlaying(false);
+                }
 
                 console.log("✅ IllDoc: onPressNext completed successfully");
 
-                setTimeout(() => {
+                safeSetTimeout(() => {
                     console.log("🏁 IllDoc: Quick reset processing flag after onPressNext");
-                    setIsProcessingAction(false);
+                    if (isMountedRef.current) {
+                        setIsProcessingAction(false);
+                    }
                 }, 100);
 
             } catch (error) {
                 console.error("❌ IllDoc: 다음 장 이동 오류:", error);
-                setIsProcessingAction(false);
+                if (isMountedRef.current) {
+                    setIsProcessingAction(false);
+                }
             }
-        }, [BOOK, JANG, syncBibleState, onTrigger, isProcessingAction]);
+        }, [BOOK, JANG, syncBibleState, onTrigger, isProcessingAction, safeSetTimeout]);
 
         // 슬라이더 값 변경 처리
         const onSliderValueChanged = useCallback(async (value: any) => {
+            if (!isMountedRef.current) return;
+
             try {
                 await TrackPlayer.seekTo(value);
             } catch (error) {
@@ -658,16 +739,18 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
 
         // 재생/일시정지 전환
         const onPlaySwitch = useCallback(async () => {
-            if (!isPlayerReady) {
-                console.log("Player is not ready yet");
+            if (!isPlayerReady || !isMountedRef.current) {
+                console.log("Player is not ready yet or component unmounted");
                 return;
             }
 
             if (isProcessingAction) {
                 console.log("이미 처리 중인 작업이 있습니다");
-                const forceResetTimer = setTimeout(() => {
+                safeSetTimeout(() => {
                     console.log("강제로 처리 상태 초기화");
-                    setIsProcessingAction(false);
+                    if (isMountedRef.current) {
+                        setIsProcessingAction(false);
+                    }
                 }, 500);
                 return;
             }
@@ -720,8 +803,10 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
                     await TrackPlayer.play();
                     console.log("Started playback");
 
-                    syncBibleState(currentBook, currentJang);
-                    setIsPlaying(true);
+                    if (isMountedRef.current) {
+                        syncBibleState(currentBook, currentJang);
+                        setIsPlaying(true);
+                    }
                 }
             } catch (error) {
                 console.error("Play switch error:", error);
@@ -730,11 +815,13 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
                     '오디오를 재생하는 동안 문제가 발생했습니다. 다시 시도해주세요.'
                 );
             } finally {
-                setTimeout(() => {
-                    setIsProcessingAction(false);
+                safeSetTimeout(() => {
+                    if (isMountedRef.current) {
+                        setIsProcessingAction(false);
+                    }
                 }, 300);
             }
-        }, [isPlayerReady, isPlaying, soundSpeed, syncBibleState, BOOK, JANG, soundUrl, isProcessingAction]);
+        }, [isPlayerReady, isPlaying, soundSpeed, syncBibleState, BOOK, JANG, soundUrl, isProcessingAction, safeSetTimeout]);
 
         return (
             <>

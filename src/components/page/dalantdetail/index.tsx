@@ -501,10 +501,6 @@ export default function PointHistoryScreen() {
    */
   const getNaverPayMemberInfo = async (uniqueId) => {
     try {
-      if (!uniqueId) {
-        throw new Error("네이버 유니크 아이디가 누락되었습니다.");
-      }
-
       // API 호출
       const response = await axios.get(
         `https://dev25backend.givemeprice.co.kr/point/nid?uniqueId=${uniqueId}`
@@ -628,7 +624,6 @@ export default function PointHistoryScreen() {
         `https://dev25backend.givemeprice.co.kr/point/addnaver`,
         requestData
       );
-
       // 응답 확인
       console.log("포인트 적립 응답 결과:", response.data);
 

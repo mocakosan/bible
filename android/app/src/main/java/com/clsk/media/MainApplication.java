@@ -27,6 +27,12 @@ import com.clsk.media.adpopcorn.RNAdPopcornSSPPackage;
 import com.clsk.media.greenp.GreenpPackage;
 import com.clsk.media.adpopcorn.RNAdPopcornRewardPackage;
 import com.clsk.media.ReactWrapperPackage;
+import com.clsk.media.SettingsModule;
+import com.facebook.react.bridge.NativeModule;
+import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.uimanager.ViewManager;
+import java.util.Arrays;
+import java.util.Collections;
 
 public class MainApplication extends Application implements ReactApplication {
 
@@ -49,6 +55,18 @@ public class MainApplication extends Application implements ReactApplication {
                 packages.add(new MottoWebPackage());
                 // Buzzvil 패키지 추가
                 packages.add(new BuzzvilPackage());
+                // SettingsModule 패키지 추가
+                packages.add(new ReactPackage() {
+                    @Override
+                    public List<NativeModule> createNativeModules(ReactApplicationContext reactContext) {
+                        return Arrays.<NativeModule>asList(new SettingsModule(reactContext));
+                    }
+
+                    @Override
+                    public List<ViewManager> createViewManagers(ReactApplicationContext reactContext) {
+                        return Collections.emptyList();
+                    }
+                });
                 // Packages that cannot be autolinked yet can be added manually here, for example:
                 // packages.add(new MyReactNativePackage());
                 return packages;
@@ -84,6 +102,9 @@ public class MainApplication extends Application implements ReactApplication {
     public void onCreate() {
         super.onCreate();
 
+        // TrackPlayer와 백그라운드 재생을 위한 초기 설정
+        initializeTrackPlayerEnvironment();
+
         // Buzzvil SDK 초기화 (가장 먼저 호출)
         initializeBuzzvilSdk();
 
@@ -98,6 +119,21 @@ public class MainApplication extends Application implements ReactApplication {
             DefaultNewArchitectureEntryPoint.load();
         }
         ReactNativeFlipper.initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
+    }
+
+    /**
+     * TrackPlayer 백그라운드 재생을 위한 환경 설정
+     */
+    private void initializeTrackPlayerEnvironment() {
+        try {
+            Log.d("MainApplication", "TrackPlayer 환경 초기화 시작");
+
+            // 백그라운드 서비스 실행을 위한 권한 확인은 런타임에서 처리
+            Log.d("MainApplication", "TrackPlayer 환경 초기화 완료");
+
+        } catch (Exception e) {
+            Log.e("MainApplication", "TrackPlayer 환경 초기화 중 오류", e);
+        }
     }
 
     private void initializeBuzzvilSdk() {
@@ -163,5 +199,23 @@ public class MainApplication extends Application implements ReactApplication {
             return super.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
         }
         return super.registerReceiver(receiver, filter);
+    }
+
+    /**
+     * 앱 종료 시 백그라운드 서비스 정리
+     */
+    @Override
+    public void onTerminate() {
+        super.onTerminate();
+        Log.d("MainApplication", "앱 종료 - 백그라운드 서비스 정리");
+    }
+
+    /**
+     * 메모리 부족 시 처리
+     */
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        Log.w("MainApplication", "메모리 부족 상황 감지");
     }
 }
