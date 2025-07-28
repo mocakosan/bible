@@ -1,28 +1,45 @@
 /**
  * @format
  */
-
-import { AppRegistry, Platform } from 'react-native';
+import { AppRegistry, Platform, AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import TrackPlayer from 'react-native-track-player';
 import App from './App';
-import appName from './app.json';
-import { FbBackgrdMsgHandler } from './src/utils/firebase';
-
+import { name as appName } from './app.json';
 import notifee from '@notifee/react-native';
 import messaging from '@react-native-firebase/messaging';
+import { PlaybackService } from './src/services/PlaybackService';
 
-// 앱 시작 시 TrackPlayer 서비스 초기화 시도 - 더 안전하게 수정
+// 에러 핸들링 강화
+const originalConsoleError = console.error;
+console.error = (...args) => {
+  // 특정 경고나 에러 무시 (필요한 경우)
+  if (
+      typeof args[0] === 'string' &&
+      (args[0].includes('Warning: ReactDOM.render is deprecated') ||
+          args[0].includes('Require cycle:'))
+  ) {
+    return;
+  }
+  originalConsoleError.apply(console, args);
+};
+
+// 앱 시작 시 TrackPlayer 서비스 초기화
 const setupTrackPlayer = async () => {
   if (Platform.OS === 'android') {
     try {
-      // TrackPlayer 서비스 정리 시도 (3.2.0 버전 호환성)
-      try {
-        // 새 TrackPlayer 설정 전 기존 트랙 리셋
-        await TrackPlayer.reset();
-        console.log('이전 트랙 리셋 성공');
-      } catch (e) {
-        console.log('트랙 리셋 불필요 또는 실패:', e.message);
+      // 앱이 활성 상태일 때만 초기화
+      if (AppState.currentState === 'active') {
+        try {
+          const isServiceRunning = await TrackPlayer.isServiceRunning();
+          if (isServiceRunning) {
+            // 기존 트랙 리셋
+            await TrackPlayer.reset();
+            console.log('이전 트랙 리셋 성공');
+          }
+        } catch (e) {
+          console.log('트랙 리셋 불필요 또는 실패:', e.message);
+        }
       }
     } catch (error) {
       console.error('앱 초기화 중 오류:', error);
@@ -30,13 +47,12 @@ const setupTrackPlayer = async () => {
   }
 };
 
-// 앱 시작 시 초기화 시도
-setupTrackPlayer();
-
 // App 컴포넌트를 SafeAreaProvider로 감싸기
-function HeadlessCheck({ isHeadless }) {
+function MainApp({ isHeadless }) {
+  // 헤드리스 모드 체크 개선
   if (isHeadless) {
-    // 헤드리스 모드에서 Firebase 메시지만 처리
+    // 헤드리스 모드에서는 null 반환
+    console.log('앱이 헤드리스 모드로 실행됨');
     return null;
   }
 
@@ -47,14 +63,18 @@ function HeadlessCheck({ isHeadless }) {
   );
 }
 
-// 백그라운드 메시지 핸들러 등록 - 완전히 단순화하여 StackOverflowError 방지
+// 백그라운드 메시지 핸들러 등록 - 안전한 처리
 messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   console.log('백그라운드 메시지 수신:', remoteMessage);
 
-  // 직접 notifee를 사용하여 알림 표시 (최소한의 처리만)
   try {
+    // DisplayNotifee 함수 안전하게 import
     const { DisplayNotifee } = require('./src/utils/notifee');
-    await DisplayNotifee(remoteMessage);
+    if (DisplayNotifee && typeof DisplayNotifee === 'function') {
+      await DisplayNotifee(remoteMessage);
+    } else {
+      console.warn('DisplayNotifee 함수를 찾을 수 없습니다.');
+    }
   } catch (error) {
     console.error('백그라운드 알림 표시 실패:', error);
   }
@@ -62,34 +82,44 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   return Promise.resolve();
 });
 
-// Notifee 백그라운드 이벤트 핸들러 - 최대한 단순화
+// Notifee 백그라운드 이벤트 핸들러
 notifee.onBackgroundEvent(async ({ type, detail }) => {
-  console.log('Notifee 백그라운드 이벤트:', type);
-  // 최소한의 처리만 수행
-  return Promise.resolve();
+  try {
+    console.log('Notifee 백그라운드 이벤트:', type);
+    // 필요한 경우 이벤트 처리 로직 추가
+    return Promise.resolve();
+  } catch (error) {
+    console.error('Notifee 백그라운드 이벤트 처리 오류:', error);
+    return Promise.resolve();
+  }
 });
 
-// 메인 앱 컴포넌트 등록
-AppRegistry.registerComponent(appName[Platform.OS].name, () => HeadlessCheck);
-
-// 헤드리스 태스크 등록 - 완전히 제거하여 충돌 방지
-// Android의 헤드리스 태스크는 Firebase가 자동으로 처리하도록 함
-// AppRegistry.registerHeadlessTask 제거
-
-// TrackPlayer 서비스 등록 - PlaybackService import 문제 수정
+// TrackPlayer 서비스 등록 - 안전한 처리
 try {
-  TrackPlayer.registerPlaybackService(() => {
-    try {
-      // 동적 import 대신 직접 require 사용
-      return require('./src/services/PlaybackService').default || require('./src/services/PlaybackService');
-    } catch (error) {
-      console.error('PlaybackService 로드 오류:', error);
-      // 기본 서비스 반환
-      return async () => {
-        console.log('기본 PlaybackService 실행');
-      };
-    }
-  });
+  // PlaybackService 존재 여부 확인
+  if (PlaybackService && typeof PlaybackService === 'function') {
+    TrackPlayer.registerPlaybackService(() => PlaybackService);
+    console.log('TrackPlayer 서비스 등록 성공');
+  } else {
+    console.warn('PlaybackService를 찾을 수 없습니다. 기본 서비스 사용');
+    TrackPlayer.registerPlaybackService(() => require('./src/services/PlaybackService'));
+  }
 } catch (error) {
-  console.error('TrackPlayer 서비스 등록 오류:', error);
+  console.error('TrackPlayer 서비스 등록 실패:', error);
 }
+
+// 앱 초기화 - 비동기 처리
+const initializeApp = async () => {
+  try {
+    await setupTrackPlayer();
+    console.log('앱 초기화 완료');
+  } catch (error) {
+    console.error('앱 초기화 실패:', error);
+  }
+};
+
+// 앱 초기화 실행
+initializeApp();
+
+// 메인 앱 컴포넌트 등록
+AppRegistry.registerComponent(appName, () => MainApp);
