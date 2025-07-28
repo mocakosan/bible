@@ -1,72 +1,51 @@
 import TrackPlayer, {
   Event,
   State,
-  RepeatMode,
   AppKilledPlaybackBehavior,
+  RepeatMode,
 } from "react-native-track-player";
-import { Platform, AppState } from "react-native";
+import { AppState } from "react-native";
 import { defaultStorage } from "../utils/mmkv";
+
+import { bibleSelectSlice } from "../provider/redux/slice";
 import { BibleStep } from "../utils/define";
-import { illdocSelectSlice, bibleSelectSlice } from "../provider/redux/slice";
-import { store } from "../provider/redux/store";
+import axios from "axios";
+import { api } from "../api/define";
+import {store} from "../provider/redux/store";
 
-// 전역 변수
+// 프로세싱 플래그
 let processingChapter = false;
-let processingTimer: NodeJS.Timeout | null = null;
-let lastProcessTimestamp = 0;
 let lastChapterInfo = { book: 0, jang: 0 };
-let appState = "active";
 let backgroundEventCount = 0;
+let appState = "active";
 
-// 성경 오디오 파일 목록
-const bibleAudioList: string[] = [
-  "Gen", "Exo", "Lev", "Num", "Deu", "Jos", "Jdg", "Rut", "1Sa", "2Sa",
-  "1Ki", "2Ki", "1Ch", "2Ch", "Ezr", "Neh", "Est", "Job", "Psa", "Pro",
-  "Ecc", "Son", "Isa", "Jer", "Lam", "Eze", "Dan", "Hos", "Joe", "Amo",
-  "Oba", "Jon", "Mic", "Nah", "Hab", "Zep", "Hag", "Zec", "Mal", "Mat",
-  "Mar", "Luk", "Joh", "Act", "Rom", "1Co", "2Co", "Gal", "Eph", "Phi",
-  "Col", "1Th", "2Th", "1Ti", "2Ti", "Tit", "Phm", "Heb", "Jam", "1Pe",
-  "2Pe", "1Jo", "2Jo", "3Jo", "Jud", "Rev",
-];
-
-// 플래그 초기화 함수
+// 프로세싱 플래그 초기화 함수
 const clearProcessingFlags = () => {
   processingChapter = false;
-  if (processingTimer) {
-    clearTimeout(processingTimer);
-    processingTimer = null;
-  }
-};
-
-// 음원 URL 생성 함수
-const createSoundUrl = (book: number, jang: number): string => {
-  const baseUrl = process.env.AUDIO_BASE_URL || "https://your-audio-url.com/";
-  return `${baseUrl}${bibleAudioList[book - 1]}${String(jang).padStart(3, "0")}.mp3`;
+  console.log("Processing flags cleared");
 };
 
 // 트랙 로드 함수
 const loadTrack = async (book: number, jang: number): Promise<boolean> => {
   try {
-    console.log(`Loading track for Book ${book}, Chapter ${jang}`);
+    const bookCode = bibleAudioList[book - 1];
+    const track = {
+      id: `${book}-${jang}`,
+      url: `https://bible25file.s3.ap-northeast-2.amazonaws.com/audiobible_개역개정/${book
+          .toString()
+          .padStart(2, "0")}_${bookCode}/${book
+          .toString()
+          .padStart(2, "0")}_${bookCode}_${jang
+          .toString()
+          .padStart(3, "0")}.mp3`,
+      title: `${BibleStep[book - 1].title} ${jang}장`,
+      artist: "성경일독",
+      artwork: "https://bible25frontend.givemeprice.co.kr/images/logo2.png",
+    };
 
     await TrackPlayer.reset();
-    await TrackPlayer.setRepeatMode(RepeatMode.Off);
-
-    const url = createSoundUrl(book, jang);
-
-    await TrackPlayer.add({
-      id: "bible",
-      url: url,
-      title: `${bibleAudioList[book - 1]} ${jang}`,
-      artist: "성경",
-      artwork: require("../assets/img/bibile25.png"),
-    });
-
-    const soundSpeed = defaultStorage.getNumber("last_audio_speed") ?? 1;
-    if (soundSpeed !== 1) {
-      await TrackPlayer.setRate(soundSpeed);
-    }
-
+    await TrackPlayer.add([track]);
+    console.log(`Track loaded: ${track.title}`);
     return true;
   } catch (error) {
     console.error("Error loading track:", error);
@@ -74,36 +53,17 @@ const loadTrack = async (book: number, jang: number): Promise<boolean> => {
   }
 };
 
-// 안전한 타임아웃 설정
-const safeSetTimeout = (callback: () => void, delay: number) => {
-  if (processingTimer) {
-    clearTimeout(processingTimer);
-  }
-  processingTimer = setTimeout(() => {
-    callback();
-    processingTimer = null;
-  }, delay);
-};
-
-// 다음 장으로 이동하는 함수
+// 다음 챕터로 이동
 const moveToNextChapter = async () => {
-  const now = Date.now();
-
-  if (processingChapter && now - lastProcessTimestamp > 5000) {
-    console.log("Force clearing stuck processing flag");
-    clearProcessingFlags();
-  }
-
-  if (processingChapter) {
-    console.log("Already processing chapter change, skipping");
-    return;
-  }
-
-  processingChapter = true;
-  lastProcessTimestamp = now;
-  console.log("Starting to process next chapter");
-
   try {
+    if (processingChapter) {
+      console.log("Already processing chapter change");
+      return;
+    }
+
+    processingChapter = true;
+    console.log("Moving to next chapter");
+
     const autoNextEnabled = defaultStorage.getBoolean("auto_next_chapter_enabled") ?? false;
     const isIlldocPlayer = defaultStorage.getBoolean("is_illdoc_player") ?? false;
 
@@ -170,32 +130,73 @@ const moveToNextChapter = async () => {
   }
 };
 
-// PlaybackService 함수 - ES6 export로 변경
+// 성경 오디오 목록
+export const bibleAudioList: string[] = [
+  "Gen", "Exo", "Lev", "Num", "Deu", "Jos", "Jdg", "Rut", "1Sa", "2Sa",
+  "1Ki", "2Ki", "1Ch", "2Ch", "Ezr", "Neh", "Est", "Job", "Psa", "Pro",
+  "Ecc", "Son", "Isa", "Jer", "Lam", "Eze", "Dan", "Hos", "Joe", "Amo",
+  "Oba", "Jon", "Mic", "Nah", "Hab", "Zep", "Hag", "Zec", "Mal", "Mat",
+  "Mar", "Luk", "Joh", "Act", "Rom", "1Co", "2Co", "Gal", "Eph", "Phi",
+  "Col", "1Th", "2Th", "1Ti", "2Ti", "Tit", "Phm", "Heb", "Jam", "1Pe",
+  "2Pe", "1Jo", "2Jo", "3Jo", "Jud", "Rev"
+];
+
+// PlaybackService 함수
 const PlaybackService = async () => {
   try {
     console.log("PlaybackService started");
 
+    // 초기화
     clearProcessingFlags();
     lastChapterInfo = { book: 0, jang: 0 };
     backgroundEventCount = 0;
     appState = "active";
 
+    // 서비스가 이미 실행 중인지 확인
     try {
-      await TrackPlayer.updateOptions({
-        repeatMode: RepeatMode.Off,
-        android: {
-          appKilledPlaybackBehavior:
-          AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
-        },
-        notification: {
+      const isServiceRunning = await TrackPlayer.isServiceRunning();
+
+      if (isServiceRunning) {
+        await TrackPlayer.updateOptions({
+          android: {
+            appKilledPlaybackBehavior:
+            AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+            stopForegroundGracePeriod: 5,
+          },
           stopWithApp: true,
-        },
-      });
-      console.log("RepeatMode disabled");
-      await TrackPlayer.setRepeatMode(RepeatMode.Off);
+        });
+
+        await TrackPlayer.setRepeatMode(RepeatMode.Off);
+      }
     } catch (error) {
-      console.error("Error setting repeat mode:", error);
+      console.error("Error updating options:", error);
     }
+
+    // 앱 상태 변화 감지
+    const appStateSubscription = AppState.addEventListener(
+        "change",
+        async (nextAppState) => {
+          console.log("App state changed from", appState, "to", nextAppState);
+
+          if (appState === "active" && nextAppState === "background") {
+            backgroundEventCount = 0;
+
+            try {
+              // 백그라운드로 갈 때 포그라운드 서비스 정지 준비
+              const state = await TrackPlayer.getState();
+              if (state !== State.Playing) {
+                // 재생 중이 아니면 서비스 정지
+                await TrackPlayer.stop();
+                await TrackPlayer.reset();
+              }
+            } catch (error) {
+              console.error("Error handling background transition:", error);
+            }
+          }
+
+          appState = nextAppState;
+        }
+    );
 
     // Queue end 이벤트 리스너
     const queueEndListener = TrackPlayer.addEventListener(
@@ -268,20 +269,7 @@ const PlaybackService = async () => {
         }
     );
 
-    // 앱 상태 변화 감지
-    const appStateSubscription = AppState.addEventListener(
-        "change",
-        async (nextAppState) => {
-          console.log("App state changed from", appState, "to", nextAppState);
-
-          if (appState === "active" && nextAppState === "background") {
-            backgroundEventCount = 0;
-          }
-
-          appState = nextAppState;
-        }
-    );
-
+    // 클린업 함수 반환
     return () => {
       queueEndListener.remove();
       stateListener.remove();
@@ -300,7 +288,7 @@ const PlaybackService = async () => {
 export default PlaybackService;
 export { PlaybackService };
 
-// CommonJS 호환성을 위한 module.exports (하지만 조건부로)
+// CommonJS 호환성을 위한 module.exports
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = PlaybackService;
 }

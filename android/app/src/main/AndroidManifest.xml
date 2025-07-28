@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
@@ -17,6 +17,7 @@
     <!-- 백그라운드 서비스 권한 (TrackPlayer용) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
             android:name=".MainApplication"
@@ -111,24 +112,28 @@
                 android:screenOrientation="portrait"
                 android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
-        <!-- react-native-track-player 서비스 추가 -->
+        <!-- react-native-track-player 서비스 수정 -->
         <service
                 android:name="com.doublesymmetry.trackplayer.service.MusicService"
-                android:exported="false"
+                android:exported="true"
                 android:foregroundServiceType="mediaPlayback"
-                tools:replace="android:exported"
                 android:stopWithTask="true">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
-                <action android:name="android.media.AUDIO_BECOMING_NOISY" />
             </intent-filter>
         </service>
 
-        <!-- react-native-track-player 리시버 추가 -->
+        <!-- NotificationService 추가 -->
+        <service
+                android:name="com.doublesymmetry.trackplayer.service.NotificationService"
+                android:foregroundServiceType="mediaPlayback"
+                android:exported="false" />
+
+        <!-- react-native-track-player 리시버 수정 -->
         <receiver
                 android:name="androidx.media.session.MediaButtonReceiver"
                 android:exported="true">
-            <intent-filter android:priority="1000">
+            <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
