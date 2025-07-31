@@ -51,7 +51,18 @@
                 android:launchMode="singleTask"
                 android:windowSoftInputMode="adjustResize"
                 android:exported="true"
-                android:screenOrientation="portrait">
+                android:screenOrientation="sensor">
+            <!--
+            주요 변경사항:
+            - android:screenOrientation="portrait" → android:screenOrientation="sensor"로 변경
+
+            다른 옵션들:
+            - "sensor": 센서에 따라 자동 회전 (권장)
+            - "fullSensor": 모든 방향 허용 (상하좌우 모든 회전)
+            - "unspecified": 시스템이 결정 (기본값)
+            - "sensorLandscape": 가로 방향만 허용
+            - "sensorPortrait": 세로 방향만 허용
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

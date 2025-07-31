@@ -1,377 +1,347 @@
-import { FlashList } from '@shopify/flash-list';
-import { isEmpty } from 'lodash';
-import { Center, Text } from 'native-base';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { TouchableOpacity, View } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import { useBaseStyle, useNativeNavigation } from '../../../../hooks';
-import { OldBibleStep } from '../../../../utils/define';
-import { defaultStorage } from '../../../../utils/mmkv';
-import { useBibleReading } from "../../../../utils/useBibleReading";
-import FastImage from "react-native-fast-image";
+// src/components/page/reading/_side/old.tsx
+// 🔥 시간 기반 성경일독 시스템으로 완전 수정
+
+import { useCallback, useEffect, useState, useMemo } from "react";
+import { ScrollView, TouchableOpacity } from "react-native";
+import { Box, Text, VStack, HStack, Badge, Pressable } from "native-base";
+import { BibleStep } from "../../../../utils/define";
+import { useBaseStyle } from "../../../../hooks";
+import {
+    getBibleChapterStatus,
+    getChapterListForReading
+} from "../../../../utils/biblePlanIntegration";
 
 interface Props {
-    readState: any;
-    menuIndex: number;
-    filterBooks?: number[];
+    mark?: any;
+    planData?: any;
+    dashboardData?: any;
+    onChapterToggle?: (bookIndex: number, chapter: number, isCurrentlyRead: boolean) => void;
+    onTrigger?: () => void;
+    forceUpdateKey?: number;
+    showFullBible?: boolean; // 전체 성경 표시 여부
+    planType?: string; // 'pentateuch', 'psalms' 등
 }
 
-function OldTestament({ readState, menuIndex, filterBooks }: Props) {
+export default function Old({
+                                mark,
+                                planData,
+                                dashboardData,
+                                onChapterToggle,
+                                onTrigger,
+                                forceUpdateKey,
+                                showFullBible = false,
+                                planType
+                            }: Props) {
     const { color } = useBaseStyle();
-    const { navigation } = useNativeNavigation();
+    const [expandedBooks, setExpandedBooks] = useState<Set<number>>(new Set());
 
-    // 🔥 readState를 훅에 전달
-    const {
-        planData,
-        isChapterReadSync,
-        getChapterStatus,
-        getChapterStyleWithExclamation, // 🆕 느낌표 포함 스타일 함수
-        loadPlan,
-        loadAllReadingTableData,
-        getTodayProgress,
-        getYesterdayProgress,
-        refreshKey,
-        forceRefresh,
-        readingTableData
-    } = useBibleReading(readState); // readState 전달
+    // 🔥 표시할 성경 범위 결정
+    const getBookRange = useMemo(() => {
+        if (planType === 'pentateuch') {
+            return { start: 1, end: 5 }; // 모세오경
+        } else if (planType === 'psalms') {
+            return { start: 19, end: 19 }; // 시편만
+        } else if (showFullBible && planData?.planType === 'full_bible') {
+            return { start: 1, end: 66 }; // 전체 성경
+        } else if (planData?.planType === 'new_testament') {
+            return { start: 40, end: 66 }; // 신약
+        } else {
+            return { start: 1, end: 39 }; // 구약 (기본값)
+        }
+    }, [showFullBible, planData?.planType, planType]);
 
-    const [visibleChapters, setVisibleChapters] = useState<Set<string>>(new Set());
-
-    // 표시할 장들 업데이트 (오늘 + 어제 못 읽은 장)
-    const updateVisibleChapters = useCallback(() => {
+    // 🔥 시간 기반 장 리스트 가져오기
+    const chapterList = useMemo(() => {
         if (!planData) {
-            setVisibleChapters(new Set());
-            return;
+            // 계획이 없으면 기본 표시
+            return BibleStep
+                .filter(book => book.index >= getBookRange.start && book.index <= getBookRange.end)
+                .map(book => ({
+                    bookIndex: book.index,
+                    bookName: book.name,
+                    chapters: Array.from({ length: book.count }, (_, i) => ({
+                        chapter: i + 1,
+                        status: 'future' as const,
+                        isRead: false,
+                        estimatedMinutes: 0,
+                        displayTime: ''
+                    }))
+                }));
         }
 
-        try {
-            const chaptersToShow = new Set<string>();
+        // 시간 기반 계획이 있으면 해당 데이터 사용
+        const effectivePlanType = planType || planData.planType || 'old_testament';
+        return getChapterListForReading(effectivePlanType)
+            .filter(book => book.bookIndex >= getBookRange.start && book.bookIndex <= getBookRange.end);
+    }, [planData, getBookRange, planType, forceUpdateKey]);
 
-            console.log(`=== ${planData.planType} 표시할 장 계산 시작 ===`);
-
-            // 오늘 읽을 장들 (remainingChapters 사용)
-            if (getTodayProgress) {
-                const todayProgress = getTodayProgress();
-                if (todayProgress && todayProgress.remainingChapters) {
-                    todayProgress.remainingChapters.forEach(chapter => {
-                        // 필터링이 있는 경우 해당 범위 내의 장만 추가
-                        if (!filterBooks || filterBooks.includes(chapter.bookIndex)) {
-                            chaptersToShow.add(`${chapter.bookIndex}-${chapter.chapter}`);
-                            console.log(`오늘 읽을 장 추가: ${chapter.bookIndex}권 ${chapter.chapter}장`);
-                        }
-                    });
-                }
+    // 책 펼침/접힘 토글
+    const toggleBookExpanded = useCallback((bookIndex: number) => {
+        setExpandedBooks(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(bookIndex)) {
+                newSet.delete(bookIndex);
+            } else {
+                newSet.add(bookIndex);
             }
-
-            // 어제 못 읽은 장들 (missedChapters 사용)
-            if (getYesterdayProgress) {
-                const yesterdayProgress = getYesterdayProgress();
-                if (yesterdayProgress && yesterdayProgress.missedChapters) {
-                    yesterdayProgress.missedChapters.forEach(chapter => {
-                        if (!filterBooks || filterBooks.includes(chapter.bookIndex)) {
-                            chaptersToShow.add(`${chapter.bookIndex}-${chapter.chapter}`);
-                            console.log(`어제 못 읽은 장 추가: ${chapter.bookIndex}권 ${chapter.chapter}장`);
-                        }
-                    });
-                }
-            }
-
-            setVisibleChapters(chaptersToShow);
-            console.log(`OldTestament - 표시할 장들 업데이트: ${chaptersToShow.size}개`);
-        } catch (error) {
-            console.error('표시할 장 업데이트 오류:', error);
-            setVisibleChapters(new Set());
-        }
-    }, [planData, getTodayProgress, getYesterdayProgress, filterBooks]);
-
-    // 컴포넌트가 포커스될 때마다 데이터 새로고침
-    useEffect(() => {
-        const unsubscribe = navigation.addListener('focus', () => {
-            console.log('=== OldTestament 포커스 이벤트 ===');
-            forceRefresh();
-            setTimeout(() => {
-                updateVisibleChapters();
-            }, 300);
+            return newSet;
         });
+    }, []);
 
-        return unsubscribe;
-    }, [navigation, forceRefresh, updateVisibleChapters]);
-
-    // readState가 변경될 때마다 즉시 새로고침
+    // 초기에 오늘 읽을 책들은 펼쳐놓기
     useEffect(() => {
-        console.log('=== OldTestament readState 변경 감지 ===', readState?.length || 0);
-        updateVisibleChapters();
-    }, [readState, updateVisibleChapters]);
+        if (chapterList.length > 0) {
+            const todayBooks = new Set<number>();
 
-    // planData가 변경될 때마다 즉시 새로고침
-    useEffect(() => {
-        console.log('=== OldTestament planData 변경 감지 ===', planData ? planData.planName : '없음');
-        updateVisibleChapters();
-    }, [planData, updateVisibleChapters]);
+            chapterList.forEach(book => {
+                const hasTodayChapters = book.chapters.some(ch => ch.status === 'today');
+                if (hasTodayChapters) {
+                    todayBooks.add(book.bookIndex);
+                }
+            });
 
-    // refreshKey 변경 감지
-    useEffect(() => {
-        console.log('=== OldTestament refreshKey 변경 감지 ===', refreshKey);
-        updateVisibleChapters();
-    }, [refreshKey, updateVisibleChapters]);
+            if (todayBooks.size > 0) {
+                setExpandedBooks(todayBooks);
+            }
+        }
+    }, [chapterList]);
 
-    // readingTableData 변경 감지 추가
-    useEffect(() => {
-        console.log('=== OldTestament readingTableData 변경 감지 ===', Object.keys(readingTableData || {}).length, '개 항목');
-    }, [readingTableData]);
-
-    // 🔥 기존 스타일 함수 (호환성 유지)
-    const getChapterStyleLegacy = useCallback((book: number, chapter: number) => {
-        // 기본 스타일 (테두리만)
+    // 장 상태에 따른 스타일 반환
+    const getChapterStyle = useCallback((chapter: any) => {
         const baseStyle = {
-            borderRadius: 17.5,
-            width: 35,
-            height: 35,
-            justifyContent: 'center' as const,
-            alignItems: 'center' as const,
+            minH: 45,
+            px: 3,
+            py: 2,
+            borderRadius: 'md',
             borderWidth: 1,
-            borderColor: "#E0E0E0",
-            backgroundColor: 'transparent',
+            mb: 1
         };
 
-        try {
-            // 먼저 읽기 상태부터 확인 (최우선)
-            const isRead = isChapterReadSync ? isChapterReadSync(book, chapter) : false;
-
-            // 디버깅용 로그 (필요시 활성화)
-            if ((book === 1 && chapter === 1) || (book === 19 && chapter === 1)) {
-                console.log(`Old: ${book}권 ${chapter}장 읽기 상태: ${isRead}, planData: ${planData ? planData.planType : 'null'}`);
-            }
-
-            // 읽은 장은 항상 초록색
-            if (isRead) {
+        switch (chapter.status) {
+            case 'completed':
                 return {
                     ...baseStyle,
-                    color: '#4CAF50', // 초록색
-                    showExclamation: false
+                    bg: '#D1FAE5',
+                    borderColor: '#10B981'
                 };
-            }
-
-            // 일독 계획이 없는 경우 - 읽지 않은 장은 검정색
-            if (!planData) {
+            case 'today':
                 return {
                     ...baseStyle,
-                    color: "#000000",
-                    showExclamation: false
+                    bg: chapter.isRead ? '#D1FAE5' : '#FEF3C7',
+                    borderColor: chapter.isRead ? '#10B981' : '#F59E0B'
                 };
-            }
-
-            // 🔥 일독 계획이 있는 경우 - 계획 타입별로 상태 확인
-            let status = 'normal';
-
-            // 시편 일독의 경우
-            if (planData.planType === 'psalms' && book === 19) {
-                // 시편책(19번)에서만 getChapterStatus 사용
-                status = getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
-            }
-            // 모세오경 일독의 경우
-            else if (planData.planType === 'pentateuch' && book >= 1 && book <= 5) {
-                // 창세기(1) ~ 신명기(5)에서만 getChapterStatus 사용
-                status = getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
-            }
-            // 구약 일독의 경우
-            else if (planData.planType === 'old_testament' && book >= 1 && book <= 39) {
-                // 구약 범위에서 getChapterStatus 사용
-                status = getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
-            }
-            // 전체 성경 일독의 경우
-            else if (planData.planType === 'full_bible') {
-                // 모든 책에서 getChapterStatus 사용
-                status = getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
-            }
-
-            // 디버깅용 로그 (시편/모세오경 첫 장만)
-            if ((book === 19 && chapter === 1 && planData.planType === 'psalms') ||
-                (book === 1 && chapter === 1 && planData.planType === 'pentateuch')) {
-                console.log(`🔍 Debug - ${book}권 ${chapter}장: planType=${planData.planType}, status=${status}`);
-            }
-
-            // 상태별 색상 반환
-            switch (status) {
-                case 'today':
-                    return {
-                        ...baseStyle,
-                        color: '#F44336', // 빨간색 (오늘 읽을 장) ⭐
-                        showExclamation: false
-                    };
-                case 'yesterday':
-                    return {
-                        ...baseStyle,
-                        color: '#2196F3', // 파란색 (어제 읽어야 했던 장)
-                        showExclamation: true // 어제 안 읽은 장에 느낌표 표시
-                    };
-                case 'missed':
-                    return {
-                        ...baseStyle,
-                        color: '#333333', // 진한 회색 (놓친 장)
-                        showExclamation: true // 놓친 장에 느낌표 표시
-                    };
-                default:
-                    return {
-                        ...baseStyle,
-                        color: "#000000", // 검정색 (미래 장 등)
-                        showExclamation: false
-                    };
-            }
-        } catch (error) {
-            console.error('장 스타일 계산 오류:', error);
-            return {
-                ...baseStyle,
-                color: "#000000",
-                showExclamation: false
-            };
+            case 'missed':
+                return {
+                    ...baseStyle,
+                    bg: '#FEE2E2',
+                    borderColor: '#EF4444'
+                };
+            case 'past':
+                return {
+                    ...baseStyle,
+                    bg: '#F3F4F6',
+                    borderColor: '#9CA3AF'
+                };
+            default: // future
+                return {
+                    ...baseStyle,
+                    bg: '#F9FAFB',
+                    borderColor: '#E5E7EB'
+                };
         }
-    }, [planData, isChapterReadSync, getChapterStatus, refreshKey]);
+    }, []);
 
-    const onNavigate = useCallback((book: number, chapter: number) => {
-        try {
-            defaultStorage.set('bible_book_connec', book);
-            defaultStorage.set('bible_jang_connec', chapter);
-
-            navigation.navigate(
-                'BibleConectionScreen',
-                menuIndex === 1 ? { sound: true } : { show: true }
-            );
-        } catch (error) {
-            console.error('화면 이동 오류:', error);
+    // 장 상태에 따른 텍스트 색상
+    const getChapterTextColor = useCallback((chapter: any) => {
+        switch (chapter.status) {
+            case 'completed':
+                return '#059669';
+            case 'today':
+                return chapter.isRead ? '#059669' : '#D97706';
+            case 'missed':
+                return '#DC2626';
+            case 'past':
+                return '#6B7280';
+            default:
+                return '#374151';
         }
-    }, [navigation, menuIndex]);
+    }, []);
 
-    const RenderItems = useCallback(
-        ({ book, title, length }: { book: number; title: string; length: number }) => {
-            return (
-                <View key={`${book}-${refreshKey}`}>
-                    <Center>
-                        <Text
-                            fontSize={'18px'}
-                            fontWeight={'bold'}
-                            marginTop={5}
-                            marginBottom={5}
-                        >
-                            {title}
-                        </Text>
-                    </Center>
-                    <View
-                        style={{
-                            flexDirection: 'row',
-                            flexWrap: 'wrap',
-                            width: '100%',
-                            padding: 12,
-                            justifyContent: 'center'
-                        }}
-                    >
-                        {Array.from({ length }).map((_, index) => {
-                            const chapter = index + 1;
+    // 장 클릭 핸들러
+    const handleChapterPress = useCallback((bookIndex: number, chapter: number, isRead: boolean) => {
+        if (onChapterToggle) {
+            onChapterToggle(bookIndex, chapter, isRead);
+        }
+    }, [onChapterToggle]);
 
-                            // 🆕 느낌표 포함 스타일 함수 사용 (안전하게 처리)
-                            let chapterStyle, showExclamation;
+    // 책 요약 정보 계산
+    const getBookSummary = useCallback((book: any) => {
+        const totalChapters = book.chapters.length;
+        const completedChapters = book.chapters.filter((ch: any) => ch.isRead).length;
+        const todayChapters = book.chapters.filter((ch: any) => ch.status === 'today').length;
+        const missedChapters = book.chapters.filter((ch: any) => ch.status === 'missed').length;
 
-                            if (getChapterStyleWithExclamation) {
-                                const result = getChapterStyleWithExclamation(book, chapter);
-                                chapterStyle = result.style;
-                                showExclamation = result.showExclamation;
-                            } else {
-                                // 호환성 유지
-                                const legacyResult = getChapterStyleLegacy(book, chapter);
-                                chapterStyle = legacyResult;
-                                showExclamation = legacyResult.showExclamation || false;
-                            }
+        const totalEstimatedTime = book.chapters.reduce((sum: number, ch: any) => sum + (ch.estimatedMinutes || 0), 0);
+        const completedTime = book.chapters
+            .filter((ch: any) => ch.isRead)
+            .reduce((sum: number, ch: any) => sum + (ch.estimatedMinutes || 0), 0);
 
-                            // 🆕 개선된 읽기 상태 확인
-                            const isRead = isChapterReadSync ? isChapterReadSync(book, chapter) : false;
-                            const status = planData && getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
+        return {
+            totalChapters,
+            completedChapters,
+            todayChapters,
+            missedChapters,
+            totalEstimatedTime,
+            completedTime,
+            progressPercentage: totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0
+        };
+    }, []);
 
-                            // 디버깅용 로그 (창세기 1장만)
-                            if (book === 1 && chapter === 1) {
-                                console.log(`Old RenderItems: 창세기 1장 - isRead: ${isRead}, status: ${status}, showExclamation: ${showExclamation}`);
-                            }
+    // 상태별 아이콘
+    const getStatusIcon = useCallback((status: string, isRead: boolean) => {
+        switch (status) {
+            case 'completed':
+                return '✅';
+            case 'today':
+                return isRead ? '✅' : '📖';
+            case 'missed':
+                return '⏰';
+            case 'past':
+                return '⏸️';
+            default:
+                return '📝';
+        }
+    }, []);
 
-                            return (
-                                <TouchableOpacity
-                                    key={`${book}-${chapter}-${refreshKey}-${readState?.length || 0}-${isRead ? 'read' : 'unread'}`}
-                                    activeOpacity={0.7}
-                                    style={{
-                                        margin: 2,
-                                        position: 'relative' // 🔥 느낌표 절대 위치를 위해 필요
-                                    }}
-                                    onPress={() => onNavigate(book, chapter)}
-                                >
-                                    {/* 장 번호 버튼 */}
-                                    <View style={chapterStyle}>
-                                        <Text
-                                            textAlign={'center'}
-                                            style={{
-                                                color: chapterStyle.color,
-                                                fontSize: 14,
-                                                fontWeight: status === 'today' ? 'bold' : 'normal'
-                                            }}
-                                        >
-                                            {chapter}
-                                        </Text>
-                                    </View>
-
-                                    {/* 🔥 느낌표 아이콘 (조건부 렌더링) */}
-                                    {showExclamation && (
-                                        <View
-                                            style={{
-                                                position: 'absolute',
-                                                top: -4,
-                                                right: -4,
-                                                width: 20,
-                                                height: 20,
-                                                justifyContent: 'center',
-                                                alignItems: 'center',
-                                            }}
-                                        >
-                                          <FastImage
-                                              source={require('../../../../assets/img/noRead.png')}
-                                              style={{
-                                                  width: 16,
-                                                  height: 16,
-                                              }}
-                                              resizeMode={FastImage.resizeMode.contain}/>
-                                        </View>
-                                    )}
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
-                </View>
-            );
-        },
-        [getChapterStyleLegacy, getChapterStyleWithExclamation, isChapterReadSync, getChapterStatus, planData, onNavigate, refreshKey, readState]
-    );
-
-    // 데이터 메모이제이션
-    const filteredData = useMemo(() => {
-        return filterBooks
-            ? OldBibleStep.filter(book => filterBooks.includes(book.index))
-            : OldBibleStep;
-    }, [filterBooks]);
+    if (!chapterList || chapterList.length === 0) {
+        return (
+            <Box flex={1} justifyContent="center" alignItems="center" p={8}>
+                <Text fontSize={16} color="#6B7280" textAlign="center">
+                    {planData
+                        ? '해당 구간에 읽을 내용이 없습니다.'
+                        : '성경일독 계획을 먼저 설정해주세요.'}
+                </Text>
+            </Box>
+        );
+    }
 
     return (
-        <FlashList
-            renderItem={({ item }) => {
-                return (
-                    <RenderItems
-                        book={item.index}
-                        length={item.count}
-                        title={item.name}
-                    />
-                );
-            }}
-            showsHorizontalScrollIndicator={true}
-            estimatedItemSize={66}
-            data={filteredData}
-            extraData={`${refreshKey}-${planData?.id || 'no-plan'}-${readState?.length || 0}-${visibleChapters.size}-${Object.keys(readingTableData || {}).length}`}
-            keyExtractor={(item, index) => `${item.index}-${refreshKey}-${readState?.length || 0}-${index}`}
-        />
+        <ScrollView style={{ backgroundColor: color.white }} showsVerticalScrollIndicator={false}>
+            <VStack space={3} p={4} pb={8}>
+                {chapterList.map((book) => {
+                    const bookSummary = getBookSummary(book);
+                    const isExpanded = expandedBooks.has(book.bookIndex);
+
+                    return (
+                        <Box key={book.bookIndex} bg="white" borderRadius="lg" borderWidth={1} borderColor="#E5E7EB">
+                            {/* 책 헤더 */}
+                            <Pressable onPress={() => toggleBookExpanded(book.bookIndex)}>
+                                <Box p={4} borderBottomWidth={isExpanded ? 1 : 0} borderBottomColor="#F3F4F6">
+                                    <HStack justifyContent="space-between" alignItems="center">
+                                        <VStack flex={1}>
+                                            <HStack alignItems="center" space={2}>
+                                                <Text fontSize={16} fontWeight={700} color="#1F2937">
+                                                    {book.bookName}
+                                                </Text>
+                                                <Badge colorScheme={bookSummary.progressPercentage === 100 ? "green" : "blue"} borderRadius="full" size="sm">
+                                                    {bookSummary.completedChapters}/{bookSummary.totalChapters}
+                                                </Badge>
+                                            </HStack>
+
+                                            <HStack space={4} mt={1}>
+                                                {bookSummary.todayChapters > 0 && (
+                                                    <Text fontSize={12} color="#D97706">
+                                                        📖 오늘 {bookSummary.todayChapters}장
+                                                    </Text>
+                                                )}
+                                                {bookSummary.missedChapters > 0 && (
+                                                    <Text fontSize={12} color="#DC2626">
+                                                        ⏰ 놓친 {bookSummary.missedChapters}장
+                                                    </Text>
+                                                )}
+                                                {planData && bookSummary.totalEstimatedTime > 0 && (
+                                                    <Text fontSize={12} color="#6B7280">
+                                                        ⏱️ 총 {Math.round(bookSummary.totalEstimatedTime * 10) / 10}분
+                                                    </Text>
+                                                )}
+                                            </HStack>
+                                        </VStack>
+
+                                        <VStack alignItems="flex-end" space={1}>
+                                            <Text fontSize={14} fontWeight={600} color="#4F46E5">
+                                                {bookSummary.progressPercentage}%
+                                            </Text>
+                                            <Text fontSize={12} color="#6B7280">
+                                                {isExpanded ? '접기' : '펼치기'}
+                                            </Text>
+                                        </VStack>
+                                    </HStack>
+                                </Box>
+                            </Pressable>
+
+                            {/* 장 목록 */}
+                            {isExpanded && (
+                                <Box p={4}>
+                                    <VStack space={2}>
+                                        {book.chapters.map((chapter) => (
+                                            <TouchableOpacity
+                                                key={`${book.bookIndex}-${chapter.chapter}`}
+                                                onPress={() => handleChapterPress(book.bookIndex, chapter.chapter, chapter.isRead)}
+                                                activeOpacity={0.7}
+                                            >
+                                                <Box {...getChapterStyle(chapter)}>
+                                                    <HStack justifyContent="space-between" alignItems="center">
+                                                        <HStack alignItems="center" space={3} flex={1}>
+                                                            <Text fontSize={16}>
+                                                                {getStatusIcon(chapter.status, chapter.isRead)}
+                                                            </Text>
+                                                            <VStack flex={1}>
+                                                                <Text
+                                                                    fontSize={14}
+                                                                    fontWeight={600}
+                                                                    color={getChapterTextColor(chapter)}
+                                                                >
+                                                                    {chapter.chapter}장
+                                                                </Text>
+                                                                {chapter.scheduledDate && (
+                                                                    <Text fontSize={11} color="#6B7280">
+                                                                        {new Date(chapter.scheduledDate).toLocaleDateString('ko-KR', {
+                                                                            month: 'short',
+                                                                            day: 'numeric'
+                                                                        })}
+                                                                    </Text>
+                                                                )}
+                                                            </VStack>
+                                                        </HStack>
+
+                                                        <VStack alignItems="flex-end">
+                                                            {chapter.estimatedMinutes > 0 && (
+                                                                <Text fontSize={12} color="#6B7280">
+                                                                    {chapter.displayTime}
+                                                                </Text>
+                                                            )}
+                                                            {chapter.status === 'today' && !chapter.isRead && (
+                                                                <Badge colorScheme="orange" size="xs" borderRadius="full">
+                                                                    Today
+                                                                </Badge>
+                                                            )}
+                                                            {chapter.status === 'missed' && (
+                                                                <Badge colorScheme="red" size="xs" borderRadius="full">
+                                                                    Missed
+                                                                </Badge>
+                                                            )}
+                                                        </VStack>
+                                                    </HStack>
+                                                </Box>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </VStack>
+                                </Box>
+                            )}
+                        </Box>
+                    );
+                })}
+            </VStack>
+        </ScrollView>
     );
 }
-
-export default memo(OldTestament);

@@ -36,6 +36,7 @@ import {
   AdEventType,
   MobileAds,
 } from "react-native-google-mobile-ads";
+import {initializeBibleApp} from "./src/utils/biblePlanIntegration";
 
 const adUnitId = "ca-app-pub-1162719494234001/2683008272";
 const interstitial = InterstitialAd.createForAdRequest(adUnitId);
@@ -289,6 +290,20 @@ function App(): JSX.Element {
   const [user, setUser] = useState([]);
   const [playerInitialized, setPlayerInitialized] = useState(false);
   const [adidError, setAdidError] = useState(false);
+
+  useEffect(() => {
+    const initApp = async () => {
+      try {
+        console.log('📱 앱 시작 - 시간 기반 성경일독 시스템 초기화');
+        await initializeBibleApp();
+        console.log('✅ 시간 기반 시스템 초기화 완료');
+      } catch (error) {
+        console.error('❌ 앱 초기화 실패:', error);
+      }
+    };
+
+    initApp();
+  }, []);
 
   useEffect(() => {
     if (Platform.OS === "android") {

@@ -1,39 +1,44 @@
-// src/components/page/reading/index.tsx - 일독 진행 현황 섹션 수정
+import { useMemo } from "react";// src/components/page/reading/index.tsx
+// 🔥 시간 기반 성경일독 시스템으로 완전 수정
 
 import {useFocusEffect, useIsFocused} from "@react-navigation/native";
 import { useCallback, useEffect, useState } from "react";
-import { bibleSetting, defineSQL, fetchSql } from "../../../utils";
-import FooterLayout from "../../layout/footer/footer";
+import { Platform, View, StyleSheet } from "react-native";
+import { Box, Text, VStack, HStack, Progress, Button, Badge, ScrollView } from "native-base";
+import { Toast } from "react-native-toast-message/lib/src/Toast";
+import dayjs from 'dayjs';
+
+import { useBaseStyle, useNativeNavigation } from "../../../hooks";
+import { defaultStorage } from "../../../utils/mmkv";
+import { useBibleReading } from "../../../utils/useBibleReading";
+import Tabs from "../../layout/tab/tabs";
+import BackHeaderLayout from "../../layout/header/backHeader";
+import BannerAdMain from "../../../adforus/BannerAdMain";
+
+// 사이드 컴포넌트들
 import New from "./_side/new";
 import Old from "./_side/old";
 import SettingSidePage from "./_side/setting";
-import { Platform, View, StyleSheet } from "react-native";
-import { Box, Text, VStack, HStack, Progress, Button, Badge, ScrollView } from "native-base";
-import BannerAdMain from "../../../adforus/BannerAdMain";
-import {
-  loadBiblePlanData,
-  calculateProgress,
-  calculateMissedChapters,
-  formatDate,
-  deleteBiblePlanData
-} from "../../../utils/biblePlanUtils";
-import { useBaseStyle, useNativeNavigation } from "../../../hooks";
-import { Alert } from "react-native";
-import { Toast } from "react-native-toast-message/lib/src/Toast";
-import { useBibleReading } from "../../../utils/useBibleReading";
-import { defaultStorage } from "../../../utils/mmkv";
-import Tabs from "../../layout/tab/tabs";
-import BackHeaderLayout from "../../layout/header/backHeader";
 import ProgressScreen from "../progs";
-import dayjs from 'dayjs';
+
+// 🔥 새로운 시간 기반 시스템 import
+import {
+  getBibleReadingDashboard,
+  markBibleChapterAsRead,
+  markBibleChapterAsUnread,
+  getTodayReadingSummary,
+  loadExistingBiblePlan
+} from "../../../utils/biblePlanIntegration";
 
 export default function ReadingBibleScreen() {
   const [menuIndex, setMenuIndex] = useState<number>(2);
   const [mark, setMark] = useState<any>(null);
   const [planData, setPlanData] = useState<any>(null);
-  const [menuList, setMenuList] = useState<string[]>(["구약", "신약", "설정"]);
+  const [menuList, setMenuList] = useState<string[]>(["구약", "신약", "설정"]); // 초기값 명시적 설정
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [forceUpdateKey, setForceUpdateKey] = useState<number>(0);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+
   const isFocused = useIsFocused();
   const { color } = useBaseStyle();
   const { navigation } = useNativeNavigation();
@@ -44,82 +49,31 @@ export default function ReadingBibleScreen() {
     unregisterGlobalRefreshCallback
   } = useBibleReading(mark);
 
-  // 안전한 메뉴 리스트 확보
-  const safeMenuList = menuList && menuList.length > 0 ? menuList : ["구약", "신약", "설정"];
-
-  // SQL 쿼리 상수
-  const settingSelectSql = `${defineSQL(["*"], "SELECT", "reading_table", {
-    WHERE: { read: "?" }
-  })}`;
-
-  // 일독 타입 이름 변환 함수
-  const getPlanTypeName = useCallback((planType: string): string => {
-    switch (planType) {
-      case 'full_bible': return '성경';
-      case 'old_testament': return '구약';
-      case 'new_testament': return '신약';
-      case 'pentateuch': return '모세오경';
-      case 'psalms': return '시편';
-      default: return '성경';
+  // 안전한 메뉴 리스트 확보 (초기값 보장)
+  const safeMenuList = useMemo(() => {
+    if (menuList && Array.isArray(menuList) && menuList.length > 0) {
+      return menuList;
     }
-  }, []);
+    return ["구약", "신약", "설정"]; // 기본값
+  }, [menuList]);
 
-  // 일독 타입별 설명 가져오기
-  const getPlanTypeDescription = useCallback((planType: string): string => {
-    switch (planType) {
-      case 'full_bible':
-        return '창세기 1장 ~ 요한계시록 22장';
-      case 'old_testament':
-        return '창세기 1장 ~ 말라기 4장';
-      case 'new_testament':
-        return '마태복음 1장 ~ 요한계시록 22장';
-      case 'pentateuch':
-        return '창세기 1장 ~ 신명기 34장';
-      case 'psalms':
-        return '시편 1장 ~ 시편 150장';
-      default:
-        return '창세기 1장 ~ 요한계시록 22장';
-    }
-  }, []);
-
-  // 📚 읽기 상태 로드 함수 - 의존성 제거
-  const loadReadingState = useCallback(async () => {
+  // 🔥 데이터 로드 함수
+  const loadDashboardData = useCallback(async () => {
     try {
       setIsLoading(true);
-      console.log('📚 읽기 상태 로드 시작');
+      console.log('📊 대시보드 데이터 로드 시작');
 
-      const results = await fetchSql(
-          bibleSetting,
-          settingSelectSql,
-          ['TRUE']
-      );
+      // 시간 기반 대시보드 데이터 가져오기
+      const dashboard = getBibleReadingDashboard();
+      setDashboardData(dashboard);
 
-      if (results && Array.isArray(results)) {
-        setMark(results);
-        console.log('📚 읽기 상태 로드 완료:', results.length, '개 항목');
-      } else {
-        setMark([]);
-        console.log('📚 읽기 상태 없음');
-      }
-    } catch (error) {
-      console.error('📚 읽기 상태 로드 오류:', error);
-      setMark([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [settingSelectSql]);
+      if (dashboard.hasPlan && dashboard.planData) {
+        setPlanData(dashboard.planData);
 
-  // 일독 데이터 로드 및 메뉴 설정 - 의존성 제거
-  const updateMenuAndData = useCallback(() => {
-    try {
-      const existingPlan = loadBiblePlanData();
-
-      if (existingPlan) {
-        setPlanData(existingPlan);
-
+        // 메뉴 설정
         let newMenuList: string[] = ["구약", "신약", "설정"];
 
-        switch (existingPlan.planType) {
+        switch (dashboard.planData.planType) {
           case 'full_bible':
             newMenuList = ["성경", "진도"];
             break;
@@ -136,47 +90,55 @@ export default function ReadingBibleScreen() {
             newMenuList = ["시편", "진도"];
             break;
           default:
-            newMenuList = ["구약", "신약", "설정"];
+            newMenuList = ["성경", "진도"];
         }
 
         setMenuList(newMenuList);
-        setMenuIndex(0);
-        console.log('일독 메뉴 업데이트:', newMenuList);
+        setMenuIndex(0); // 첫 번째 탭으로 설정
+        console.log('📊 시간 기반 메뉴 설정:', newMenuList);
+
       } else {
         setPlanData(null);
         setMenuList(["구약", "신약", "설정"]);
-        setMenuIndex(2);
-        console.log('일독 없음 - 기본 메뉴 설정');
+        setMenuIndex(2); // 설정 탭으로 이동
+        console.log('📊 계획 없음 - 설정 탭으로 이동');
       }
+
     } catch (error) {
-      console.error('일독 데이터 업데이트 오류:', error);
+      console.error('❌ 대시보드 데이터 로드 실패:', error);
       setPlanData(null);
+      setDashboardData(null);
       setMenuList(["구약", "신약", "설정"]);
       setMenuIndex(2);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
-  // 전역 새로고침 함수 - 의존성 명시
+  // 전역 새로고침 함수
   const handleGlobalRefresh = useCallback(() => {
     console.log('🔄 ReadingBibleScreen 전역 새로고침 실행');
     setForceUpdateKey(prev => prev + 1);
-    loadReadingState();
-    updateMenuAndData();
-  }, [loadReadingState, updateMenuAndData]);
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   // 메뉴 변경 핸들러
   const handleMenuChange = useCallback((index: number) => {
-    setMenuIndex(index);
-    const currentMenuName = safeMenuList[index];
-    console.log(`메뉴 변경: ${currentMenuName} (인덱스: ${index})`);
+    // 인덱스가 유효한지 확인
+    if (index >= 0 && index < safeMenuList.length) {
+      setMenuIndex(index);
+      const currentMenuName = safeMenuList[index];
+      console.log(`메뉴 변경: ${currentMenuName} (인덱스: ${index})`);
+    } else {
+      console.warn(`유효하지 않은 메뉴 인덱스: ${index}, 현재 메뉴 길이: ${safeMenuList.length}`);
+    }
   }, [safeMenuList]);
 
-  // 🔥 수정된 데이터 업데이트 함수
+  // 🔥 데이터 업데이트 함수
   const handleChangeUpdateData = useCallback(async (targetTabIndex?: number) => {
     try {
       setIsLoading(true);
-      await loadReadingState();
-      updateMenuAndData();
+      await loadDashboardData();
       setForceUpdateKey(prev => prev + 1);
 
       if (typeof targetTabIndex === 'number' && targetTabIndex >= 0) {
@@ -192,502 +154,252 @@ export default function ReadingBibleScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [loadReadingState, updateMenuAndData]);
+  }, [loadDashboardData]);
 
-  // 직접 초기화 함수
-  const handleDirectReset = useCallback(async () => {
+  // 🔥 장 읽기 완료/취소 처리
+  const handleChapterToggle = useCallback(async (bookIndex: number, chapter: number, isCurrentlyRead: boolean) => {
     try {
-      console.log('=== ReadingBibleScreen 직접 초기화 시작 ===');
+      let result;
 
-      Toast.show({
-        type: 'info',
-        text1: '초기화 중...',
-        text2: '잠시만 기다려주세요',
-        autoHide: false
-      });
+      if (isCurrentlyRead) {
+        // 읽기 취소
+        result = markBibleChapterAsUnread(bookIndex, chapter);
+      } else {
+        // 읽기 완료
+        result = markBibleChapterAsRead(bookIndex, chapter);
+      }
 
-      // MMKV 스토리지 정리
-      try {
-        const allKeys = defaultStorage.getAllKeys();
-        const keysToDelete = allKeys.filter(key =>
-            key.startsWith('bible_') ||
-            key.startsWith('reading_') ||
-            key.includes('plan') ||
-            key === 'calender' ||
-            key === 'bible_reading_plan'
-        );
+      if (result.success) {
+        // 데이터 새로고침
+        await loadDashboardData();
 
-        keysToDelete.forEach(key => {
-          defaultStorage.delete(key);
-          console.log('MMKV 키 삭제:', key);
+        Toast.show({
+          type: 'success',
+          text1: isCurrentlyRead ? '읽기를 취소했습니다' : '읽기 완료!',
+          text2: `${bookIndex}권 ${chapter}장`
         });
-      } catch (mmkvError) {
-        console.error('MMKV 정리 오류:', mmkvError);
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: result.errorMessage || '처리 중 오류가 발생했습니다'
+        });
       }
 
-      // SQLite 정리
-      try {
-        const deleteSql = 'DELETE FROM reading_table';
-        await fetchSql(bibleSetting, deleteSql, []);
-        console.log('SQLite reading_table 삭제 완료');
-      } catch (sqlError) {
-        console.error('SQLite 삭제 오류:', sqlError);
-      }
-
-      // 로컬 상태 초기화
-      setPlanData(null);
-      setMenuList(["구약", "신약", "설정"]);
-      setMenuIndex(2);
-      setForceUpdateKey(prev => prev + 1);
-
-      await loadReadingState();
-      updateMenuAndData();
-
-      Toast.hide();
-      Toast.show({
-        type: 'success',
-        text1: '초기화 완료',
-        text2: '모든 데이터가 초기화되었습니다'
-      });
-
-      console.log('=== ReadingBibleScreen 직접 초기화 완료 ===');
     } catch (error) {
-      console.error('직접 초기화 오류:', error);
-      Toast.hide();
+      console.error('❌ 장 읽기 처리 실패:', error);
       Toast.show({
         type: 'error',
-        text1: '초기화 실패',
-        text2: '초기화 중 오류가 발생했습니다'
+        text1: '읽기 처리 중 오류가 발생했습니다'
       });
     }
-  }, [loadReadingState, updateMenuAndData]);
+  }, [loadDashboardData]);
 
-  // ProgressView 컴포넌트 정의
-  const ProgressView = useCallback(() => {
-    if (!planData) {
-      return <ProgressScreen key={`progress-${forceUpdateKey}`} />;
+  // 초기 로드
+  useEffect(() => {
+    if (isFocused) {
+      loadDashboardData();
+    }
+  }, [isFocused, loadDashboardData]);
+
+  // 전역 새로고침 콜백 등록
+  useEffect(() => {
+    registerGlobalRefreshCallback(handleGlobalRefresh);
+    return () => {
+      unregisterGlobalRefreshCallback(handleGlobalRefresh);
+    };
+  }, [registerGlobalRefreshCallback, unregisterGlobalRefreshCallback, handleGlobalRefresh]);
+
+  // 🔥 오늘의 읽기 현황 컴포넌트
+  const TodayReadingStatus = () => {
+    const todaySummary = getTodayReadingSummary();
+
+    if (!todaySummary.hasSchedule) {
+      return null;
     }
 
-    const progress = calculateProgress(planData);
-    const missedCount = calculateMissedChapters(planData);
+    return (
+        <Box bg="#F0FDF4" mx={4} p={4} borderRadius="lg" borderWidth={1} borderColor="#D1FAE5" mb={4}>
+          <HStack justifyContent="space-between" alignItems="center" mb={3}>
+            <Text fontSize={16} fontWeight={600} color="#059669">
+              📖 오늘의 읽기 ({dayjs().format('M월 D일')})
+            </Text>
+            <Badge colorScheme={todaySummary.progressPercentage === 100 ? "green" : "blue"} borderRadius="full">
+              {todaySummary.completedChapters}/{todaySummary.totalChapters}장
+            </Badge>
+          </HStack>
 
-    const getDaysRemaining = () => {
-      const endDate = new Date(planData.endDate || planData.targetDate);
-      const today = new Date();
-      const diffTime = endDate.getTime() - today.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return Math.max(0, diffDays);
-    };
+          {/* 진행률 바 */}
+          <Progress
+              value={todaySummary.progressPercentage}
+              bg="#E5E7EB"
+              _filledTrack={{ bg: "#10B981" }}
+              size="md"
+              mb={3}
+          />
 
-    const getStatusColor = (percentage: number) => {
-      if (percentage >= 80) return '#4CAF50';
-      if (percentage >= 60) return '#FF9800';
-      return '#F44336';
-    };
+          <HStack justifyContent="space-between" mb={3}>
+            <Text fontSize={12} color="#6B7280">
+              완료: {Math.round((todaySummary.completedTime || 0) * 10) / 10}분
+            </Text>
+            <Text fontSize={12} color="#6B7280">
+              남은 시간: {Math.round((todaySummary.remainingTime || 0) * 10) / 10}분
+            </Text>
+          </HStack>
 
-    const getEstimatedMinutes = () => {
-      if (planData.minutesPerDay) {
-        return planData.minutesPerDay;
-      }
-      return Math.round(planData.chaptersPerDay * 4.5);
-    };
+          {/* 동기부여 메시지 */}
+          {todaySummary.motivationalMessage && (
+              <Text fontSize={12} color="#059669" textAlign="center" fontStyle="italic">
+                {todaySummary.motivationalMessage}
+              </Text>
+          )}
+        </Box>
+    );
+  };
 
-    const handleResetPlan = () => {
-      Alert.alert(
-          '일독 초기화',
-          '현재 일독 계획을 초기화하시겠습니까?\n\n⚠️ 이 작업은 되돌릴 수 없습니다.',
-          [
-            { text: '취소', style: 'cancel' },
-            {
-              text: '초기화',
-              style: 'destructive',
-              onPress: handleDirectReset
-            }
-          ]
-      );
-    };
+  // 🔥 전체 진행률 컴포넌트
+  const OverallProgressStatus = () => {
+    if (!dashboardData?.hasPlan) {
+      return null;
+    }
+
+    const { progressInfo, planSummary, readingStreak, missedChapters } = dashboardData;
 
     return (
-        <ScrollView style={{ backgroundColor: color.white, flex: 1 }}>
-          {/* 진행률 카드 */}
-          <Box bg="white" mx={4} mt={4} p={4} borderRadius="md" shadow={1}>
-            <VStack space={3}>
-              <Text fontSize="22" fontWeight="600" color="#333">
-                📊 일독 진행 현황
+        <Box bg="#F8F9FF" mx={4} p={4} borderRadius="lg" borderWidth={1} borderColor="#E0E7FF" mb={4}>
+          <HStack justifyContent="space-between" alignItems="center" mb={3}>
+            <Text fontSize={16} fontWeight={600} color="#4F46E5">
+              🎯 {planSummary.planName} 일독 진행률
+            </Text>
+            <Badge colorScheme="purple" borderRadius="full">
+              {planSummary.currentDay}/{planSummary.totalDays}일차
+            </Badge>
+          </HStack>
+
+          {/* 전체 진행률 */}
+          <Progress
+              value={progressInfo.progressPercentage}
+              bg="#E5E7EB"
+              _filledTrack={{ bg: "#8B5CF6" }}
+              size="lg"
+              mb={3}
+          />
+
+          <HStack justifyContent="space-between" mb={3}>
+            <Text fontSize={14} fontWeight={600} color="#4F46E5">
+              {progressInfo.progressPercentage}% 완료
+            </Text>
+            <Text fontSize={14} color="#6B7280">
+              {progressInfo.readChapters}/{progressInfo.totalChapters}장
+            </Text>
+          </HStack>
+
+          {/* 통계 정보 */}
+          <HStack justifyContent="space-around" pt={2} borderTopWidth={1} borderTopColor="#E0E7FF">
+            <VStack alignItems="center">
+              <Text fontSize={16} fontWeight={700} color="#059669">
+                {readingStreak}
               </Text>
-
-              <Box>
-                <HStack justifyContent="space-between" mb={2}>
-                  <Text fontSize="18" color="#666">
-                    진행률
-                  </Text>
-                  <Text fontSize="18" fontWeight="600" color={getStatusColor(progress.progressPercentage)}>
-                    {progress.progressPercentage.toFixed(1)}%
-                  </Text>
-                </HStack>
-                <Progress
-                    value={progress.progressPercentage}
-                    bg="#E0E0E0"
-                    _filledTrack={{ bg: getStatusColor(progress.progressPercentage) }}
-                    size="md"
-                    borderRadius="full"
-                />
-              </Box>
-
-              <HStack justifyContent="space-around" pt={2}>
-                <VStack alignItems="center">
-                  <Text fontSize="24" fontWeight="600" color="#37C4B9">
-                    {progress.readChapters || progress.completedChapters || 0}
-                  </Text>
-                  <Text fontSize="16" color="#666">
-                    읽은 장
-                  </Text>
-                </VStack>
-                <VStack alignItems="center">
-                  <Text fontSize="24" fontWeight="600" color="#666">
-                    {planData.totalChapters || progress.totalChapters || 0}
-                  </Text>
-                  <Text fontSize="16" color="#666">
-                    전체 장
-                  </Text>
-                </VStack>
-                <VStack alignItems="center">
-                  <Text fontSize="24" fontWeight="600" color="#F44336">
-                    {missedCount || 0}
-                  </Text>
-                  <Text fontSize="16" color="#666">
-                    놓친 장
-                  </Text>
-                </VStack>
-              </HStack>
+              <Text fontSize={12} color="#6B7280">연속일</Text>
             </VStack>
-          </Box>
-
-          {/* 일정 정보 카드 */}
-          <Box bg="white" mx={4} mt={4} p={4} borderRadius="md" shadow={1}>
-            <VStack space={3}>
-              <Text fontSize="22" fontWeight="600" color="#333">
-                📅 일독 정보
+            <VStack alignItems="center">
+              <Text fontSize={16} fontWeight={700} color="#8B5CF6">
+                {Math.round(progressInfo.readTime * 10) / 10}분
               </Text>
-              <VStack space={2}>
-                <HStack justifyContent="space-between">
-                  <Text fontSize="18" color="#666">계획 유형</Text>
-                  <Text fontSize="18" fontWeight="500">{getPlanTypeName(planData.planType)}</Text>
-                </HStack>
-                <HStack justifyContent="space-between">
-                  <Text fontSize="18" color="#666">하루 목표</Text>
-                  <Text fontSize="18" fontWeight="500">{planData.chaptersPerDay}장</Text>
-                </HStack>
-                <HStack justifyContent="space-between">
-                  <Text fontSize="18" color="#666">예상 시간</Text>
-                  <Text fontSize="18" fontWeight="500">{getEstimatedMinutes()}분</Text>
-                </HStack>
-                <HStack justifyContent="space-between">
-                  <Text fontSize="18" color="#666">남은 일수</Text>
-                  <Text fontSize="18" fontWeight="500">{getDaysRemaining()}일</Text>
-                </HStack>
-              </VStack>
+              <Text fontSize={12} color="#6B7280">읽은 시간</Text>
             </VStack>
-          </Box>
-
-          {/* 액션 버튼들 */}
-          <VStack space={3} mx={4} mt={4} mb={6}>
-            <Button
-                onPress={() => {
-                  const today = new Date();
-                  const startDate = new Date(planData.startDate);
-                  const daysPassed = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-                  navigation.navigate('ProgressScreen', {
-                    parcent: daysPassed,
-                    total: planData.totalDays
-                  });
-                }}
-                bg="#37C4B9"
-                _pressed={{ bg: "#2BA89E" }}
-                borderRadius="md"
-                py={3}
-            >
-              <Text color="white" fontSize="20" fontWeight="600">
-                📈 상세 진도 보기
+            <VStack alignItems="center">
+              <Text fontSize={16} fontWeight={700} color={missedChapters > 0 ? "#EF4444" : "#6B7280"}>
+                {missedChapters}
               </Text>
-            </Button>
-
-            <Button
-                onPress={() => setMenuIndex(0)}
-                bg="#4CAF50"
-                _pressed={{ bg: "#45A049" }}
-                borderRadius="md"
-                py={3}
-            >
-              <Text color="white" fontSize="20" fontWeight="600">
-                📖 일독 계속하기
-              </Text>
-            </Button>
-
-            <Button
-                onPress={handleResetPlan}
-                variant="outline"
-                borderColor="#FF5722"
-                _pressed={{ bg: "#FFEBEE" }}
-                borderRadius="md"
-                py={3}
-            >
-              <Text color="#FF5722" fontSize="20" fontWeight="600">
-                🔄 일독 계획 초기화
-              </Text>
-            </Button>
-          </VStack>
-        </ScrollView>
+              <Text fontSize={12} color="#6B7280">놓친 장</Text>
+            </VStack>
+          </HStack>
+        </Box>
     );
-  }, [planData, color.white, navigation, handleDirectReset, getPlanTypeName, calculateProgress, calculateMissedChapters, forceUpdateKey]);
+  };
 
-  // 컴포넌트 렌더링
-  const renderContent = useCallback(() => {
+  // 컨텐츠 렌더링 함수
+  const renderContent = () => {
     if (isLoading) {
       return (
           <Box flex={1} justifyContent="center" alignItems="center">
-            <Text>로딩 중...</Text>
+            <Text fontSize={16} color="#6B7280">로딩 중...</Text>
+          </Box>
+      );
+    }
+
+    // 안전한 인덱스 확인
+    if (menuIndex < 0 || menuIndex >= safeMenuList.length) {
+      console.warn(`유효하지 않은 메뉴 인덱스: ${menuIndex}, 설정 탭으로 이동`);
+      setMenuIndex(safeMenuList.length - 1); // 마지막 탭(설정)으로 이동
+      return (
+          <Box flex={1} justifyContent="center" alignItems="center">
+            <Text fontSize={16} color="#6B7280">메뉴를 준비하는 중...</Text>
           </Box>
       );
     }
 
     const currentMenuName = safeMenuList[menuIndex];
 
+    // 설정 탭
     if (currentMenuName === "설정") {
-      return <SettingSidePage
-          key={`setting-${forceUpdateKey}`}
-          readState={mark}
-          onTrigger={handleChangeUpdateData}
-      />;
+      return <SettingSidePage onTrigger={handleChangeUpdateData} />;
     }
 
+    // 진도 탭
     if (currentMenuName === "진도") {
-      return <ProgressView key={`progress-${forceUpdateKey}`} />;
-    }
-
-    if (planData && menuIndex === 0) {
-      // 🆕 첨부 이미지와 동일한 일독 진행 현황 박스
-      const progressIndicator = (
-          <Box bg="#E8F8F7" mx={4} mt={4} p={4} borderRadius="md">
-            <VStack space={3}>
-              {/* 상단 설명 */}
-
-              <Text fontSize="16" color="#666" textAlign="center">
-                {getPlanTypeDescription(planData.planType)}
-              </Text>
-
-              {/* 중앙 일독 진행중 텍스트 */}
-              <HStack justifyContent="center" alignItems="center" space={2}>
-                <Text fontSize="19" color="#37C4B9">📖</Text>
-                <Text fontSize="19" color="#37C4B9" fontWeight="600">
-                  {getPlanTypeName(planData.planType)} 일독 진행중
-                </Text>
-              </HStack>
-
-              {/* 하단 기간 정보 */}
-              <VStack space={1}>
-                <HStack justifyContent="space-between" alignItems="center">
-                  <Text fontSize="18" color="#666">총 기간 :</Text>
-                  <HStack alignItems="baseline">
-                    <Text fontSize="16" color="#666">
-                      {dayjs(planData.startDate).format('YY.MM.DD')} ~ {dayjs(planData.targetDate).format('YY.MM.DD')}
-                    </Text>
-                    <Text fontSize="18" color="#37C4B9" fontWeight="600" ml={2}>
-                      {planData.totalDays}일
-                    </Text>
-                  </HStack>
-                </HStack>
-
-                <HStack justifyContent="space-between" alignItems="center">
-                  <Text fontSize="18" color="#666">하루목표 :</Text>
-                  <HStack alignItems="baseline">
-                    <Text fontSize="18" color="#37C4B9" fontWeight="700">
-                      {planData.chaptersPerDay}장
-                    </Text>
-                    <Text fontSize="18" color="#37C4B9" ml={1} fontWeight="700">
-                      / {planData.minutesPerDay}분
-                    </Text>
-                  </HStack>
-                </HStack>
-              </VStack>
-            </VStack>
-          </Box>
-      );
-
-      switch (planData.planType) {
-        case 'full_bible':
-          return (
-              <ScrollView
-                  key={`full-bible-${forceUpdateKey}-${mark?.length || 0}`}
-                  style={{ backgroundColor: color.white }}
-              >
-                {progressIndicator}
-                <Box>
-                  {isFocused && mark && (
-                      <Old
-                          key={`plan-old-${forceUpdateKey}-${mark?.length || 0}`}
-                          readState={mark}
-                          menuIndex={menuIndex}
-                      />
-                  )}
-                </Box>
-                <Box>
-                  {isFocused && mark && (
-                      <New
-                          key={`plan-new-${forceUpdateKey}-${mark?.length || 0}`}
-                          readState={mark}
-                          menuIndex={menuIndex}
-                      />
-                  )}
-                </Box>
-              </ScrollView>
-          );
-
-        case 'old_testament':
-          return (
-              <ScrollView
-                  key={`old-testament-${forceUpdateKey}-${mark?.length || 0}`}
-                  style={{ backgroundColor: color.white }}
-              >
-                {progressIndicator}
-                {isFocused && mark && (
-                    <Old
-                        key={`old-only-${forceUpdateKey}-${mark?.length || 0}`}
-                        readState={mark}
-                        menuIndex={menuIndex}
-                    />
-                )}
-              </ScrollView>
-          );
-
-        case 'new_testament':
-          return (
-              <ScrollView
-                  key={`new-testament-${forceUpdateKey}-${mark?.length || 0}`}
-                  style={{ backgroundColor: color.white }}
-              >
-                {progressIndicator}
-                {isFocused && mark && (
-                    <New
-                        key={`new-only-${forceUpdateKey}-${mark?.length || 0}`}
-                        readState={mark}
-                        menuIndex={menuIndex}
-                    />
-                )}
-              </ScrollView>
-          );
-
-        case 'pentateuch':
-          return (
-              <ScrollView
-                  key={`pentateuch-${forceUpdateKey}-${mark?.length || 0}`}
-                  style={{ backgroundColor: color.white }}
-              >
-                {progressIndicator}
-                {isFocused && mark && (
-                    <Old
-                        key={`pentateuch-view-${forceUpdateKey}-${mark?.length || 0}`}
-                        readState={mark}
-                        menuIndex={menuIndex}
-                        filterBooks={[1, 2, 3, 4, 5]}
-                    />
-                )}
-              </ScrollView>
-          );
-
-        case 'psalms':
-          return (
-              <ScrollView
-                  key={`psalms-${forceUpdateKey}-${mark?.length || 0}`}
-                  style={{ backgroundColor: color.white }}
-              >
-                {progressIndicator}
-                {isFocused && mark && (
-                    <Old
-                        key={`psalms-view-${forceUpdateKey}-${mark?.length || 0}`}
-                        readState={mark}
-                        menuIndex={menuIndex}
-                        filterBooks={[19]}
-                    />
-                )}
-              </ScrollView>
-          );
-
-        default:
-          return (
-              <Box flex={1} justifyContent="center" alignItems="center">
-                <Text>알 수 없는 일독 타입입니다.</Text>
-              </Box>
-          );
-      }
-    }
-
-    if (currentMenuName === "구약") {
       return (
-          <ScrollView
-              key={`old-${forceUpdateKey}-${mark?.length || 0}`}
-              style={{ backgroundColor: color.white }}
-          >
-            {isFocused && mark && (
-                <Old
-                    key={`old-${forceUpdateKey}-${mark?.length || 0}`}
-                    readState={mark}
-                    menuIndex={menuIndex}
-                />
-            )}
-          </ScrollView>
+          <ProgressScreen
+              planData={planData}
+              dashboardData={dashboardData}
+              onChapterToggle={handleChapterToggle}
+          />
       );
     }
 
-    if (currentMenuName === "신약") {
-      return (
-          <ScrollView
-              key={`new-${forceUpdateKey}-${mark?.length || 0}`}
-              style={{ backgroundColor: color.white }}
-          >
-            {isFocused && mark && (
-                <New
-                    key={`new-${forceUpdateKey}-${mark?.length || 0}`}
-                    readState={mark}
-                    menuIndex={menuIndex}
-                />
-            )}
-          </ScrollView>
-      );
-    }
-
-    return null;
-  }, [isLoading, safeMenuList, menuIndex, mark, planData, forceUpdateKey, color.white, handleChangeUpdateData, isFocused, ProgressView, getPlanTypeName, getPlanTypeDescription]);
-
-  // 컴포넌트 마운트 시 전역 새로고침 콜백 등록
-  useEffect(() => {
-    console.log('🔄 ReadingBibleScreen 전역 새로고침 콜백 등록');
-    registerGlobalRefreshCallback(handleGlobalRefresh);
-
-    return () => {
-      console.log('🔄 ReadingBibleScreen 전역 새로고침 콜백 해제');
-      unregisterGlobalRefreshCallback();
+    // 읽기 탭들 (구약, 신약, 성경, 모세오경, 시편)
+    const readingProps = {
+      mark,
+      planData,
+      dashboardData,
+      onChapterToggle: handleChapterToggle,
+      onTrigger: handleChangeUpdateData,
+      forceUpdateKey
     };
-  }, [registerGlobalRefreshCallback, unregisterGlobalRefreshCallback, handleGlobalRefresh]);
 
-  // 컴포넌트 포커스 시 데이터 로드
-  useFocusEffect(
-      useCallback(() => {
-        console.log('🎯 ReadingBibleScreen 포커스 - 데이터 로드 시작');
-        updateMenuAndData();
-        loadReadingState();
-
-        return () => {
-          console.log('🎯 ReadingBibleScreen 포커스 해제');
-        };
-      }, [updateMenuAndData, loadReadingState])
-  );
+    switch (currentMenuName) {
+      case "구약":
+        return <Old {...readingProps} />;
+      case "신약":
+        return <New {...readingProps} />;
+      case "성경":
+        // 전체 성경 - 구약+신약 통합 뷰
+        return <Old {...readingProps} showFullBible={true} />;
+      case "모세오경":
+        return <Old {...readingProps} planType="pentateuch" />;
+      case "시편":
+        return <Old {...readingProps} planType="psalms" />;
+      default:
+        return <Old {...readingProps} />;
+    }
+  };
 
   return (
-      <View style={styles.container}>
+      <>
         <BackHeaderLayout title="성경일독" />
 
+        {/* 🔥 시간 기반 상태 표시 */}
+        {dashboardData?.hasPlan && (
+            <ScrollView>
+              <TodayReadingStatus />
+              <OverallProgressStatus />
+            </ScrollView>
+        )}
+
+        {/* 광고 배너 */}
+        <BannerAdMain />
+
+        {/* 탭 및 컨텐츠 */}
         <Tabs
             menus={safeMenuList}
             onSelectHandler={handleMenuChange}
@@ -695,25 +407,6 @@ export default function ReadingBibleScreen() {
         />
 
         {renderContent()}
-
-        <View style={styles.adContainer}>
-          <BannerAdMain />
-        </View>
-
-        <FooterLayout />
-      </View>
+      </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  adContainer: {
-    marginTop: 10,
-    marginBottom: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-});
