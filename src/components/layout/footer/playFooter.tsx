@@ -100,12 +100,6 @@ export const bibleAudioList: string[] = [
 // 플레이어 초기화 함수 - 단순화
 const setupPlayer = async (): Promise<boolean> => {
   try {
-    // 앱이 활성 상태인지 확인
-    if (AppState.currentState !== 'active') {
-      console.log("App is not active, skipping player setup");
-      return false;
-    }
-
     let isSetup = false;
     try {
       isSetup = await TrackPlayer.isServiceRunning();
@@ -114,30 +108,12 @@ const setupPlayer = async (): Promise<boolean> => {
     }
 
     if (!isSetup) {
-      // 백그라운드에서 서비스 시작 방지를 위한 재확인
-      if (AppState.currentState !== 'active') {
-        console.log("App became inactive during setup, aborting");
-        return false;
-      }
+      // 다시 한 번 앱 상태 확인
 
-      try {
-        await TrackPlayer.setupPlayer({
-          autoHandleInterruptions: false,
-          waitForBuffer: true,
-          // Android 전용 옵션 추가
-          android: {
-            appKilledPlaybackBehavior:
-            AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
-          },
-        });
-      } catch (error) {
-        // Android 12+ 백그라운드 서비스 시작 오류 처리
-        if (error.message?.includes('ForegroundServiceStartNotAllowedException')) {
-          console.error("Cannot start foreground service in background");
-          return false;
-        }
-        throw error;
-      }
+      await TrackPlayer.setupPlayer({
+        autoHandleInterruptions: false, // 자동 인터럽션 처리 비활성화
+        waitForBuffer: true,
+      });
     }
 
     await TrackPlayer.updateOptions({
@@ -147,37 +123,31 @@ const setupPlayer = async (): Promise<boolean> => {
         Capability.Stop,
         Capability.SeekTo,
       ],
-      compactCapabilities: [Capability.Play, Capability.Pause, Capability.Stop],
-      progressUpdateEventInterval: 1,
+      compactCapabilities: [Capability.Play, Capability.Pause],
+      progressUpdateEventInterval: 1, // 1초마다 업데이트
       android: {
         // 중요: 앱 종료 시 재생 중지 및 알림 제거
         appKilledPlaybackBehavior:
-        AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+          AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
         alwaysPauseOnInterruption: true,
         stoppingAppPausesPlayback: true,
-        stopForegroundGracePeriod: 5,
       },
-      // iOS 옵션
-      ios: {
-        appKilledPlaybackBehavior:
-        AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
-      },
-      stopWithApp: true,
-      notificationCapabilities: [
-        Capability.Play,
-        Capability.Pause,
-        Capability.Stop,
-      ],
+
+      repeatMode: RepeatMode.Off,
     });
 
-    // 기본 설정
     defaultStorage.set("is_illdoc_player", false);
     defaultStorage.set("auto_next_chapter_enabled", true);
 
     await TrackPlayer.setRepeatMode(RepeatMode.Off);
+
+    console.log(
+      "TrackPlayer initialized successfully - PlayFooterLayout (Simplified)"
+    );
     return true;
   } catch (error) {
-    console.error("Error setting up player:", error);
+    console.error("TrackPlayer 초기화 실패:", error);
+
     return false;
   }
 };
@@ -185,34 +155,11 @@ const setupPlayer = async (): Promise<boolean> => {
 // 플레이어 종료 함수
 const stopAndResetPlayer = async () => {
   try {
-    // 서비스가 실행 중인지 먼저 확인
-    const isServiceRunning = await TrackPlayer.isServiceRunning();
-    if (!isServiceRunning) {
-      console.log("TrackPlayer service is not running");
-      return;
-    }
-
     const state = await TrackPlayer.getState();
-
-    // 상태에 따라 순차적으로 정지
     if (state === State.Playing) {
       await TrackPlayer.pause();
-      // pause 후 잠시 대기
-      await new Promise(resolve => setTimeout(resolve, 100));
     }
-
-    try {
-      await TrackPlayer.stop();
-    } catch (error) {
-      console.log("Stop failed, but continuing:", error);
-    }
-
-    try {
-      await TrackPlayer.reset();
-    } catch (error) {
-      console.log("Reset failed, but continuing:", error);
-    }
-
+    await TrackPlayer.reset();
     console.log("TrackPlayer stopped and reset successfully");
   } catch (error) {
     console.error("TrackPlayer 종료 실패:", error);
@@ -579,27 +526,10 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
       return;
     }
 
-    // 앱이 백그라운드에 있으면 재생하지 않음
-    if (AppState.currentState !== 'active') {
-      console.log("[PLAY] App is not active, cannot start playback");
-      Alert.alert(
-          "재생 불가",
-          "앱이 활성 상태가 아닐 때는 재생을 시작할 수 없습니다.",
-          [{ text: "확인" }]
-      );
-      return;
-    }
-
     try {
       setIsProcessingAction(true);
 
       if (!isPlayerInitialized) {
-        // 앱이 활성 상태인지 다시 확인
-        if (AppState.currentState !== 'active') {
-          console.log("[PLAY] App became inactive, aborting initialization");
-          return;
-        }
-
         const initialized = await setupPlayer();
         if (!initialized) {
           Alert.alert("초기화 오류", "오디오 플레이어를 초기화할 수 없습니다.");
@@ -608,39 +538,10 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
         setIsPlayerInitialized(true);
       }
 
-      // 서비스가 실행 중인지 확인
-      try {
-        const isServiceRunning = await TrackPlayer.isServiceRunning();
-        if (!isServiceRunning) {
-          console.log("[PLAY] Service not running, attempting to initialize");
-
-          // 앱이 여전히 활성 상태인지 확인
-          if (AppState.currentState !== 'active') {
-            console.log("[PLAY] App is not active, cannot start service");
-            return;
-          }
-
-          const initialized = await setupPlayer();
-          if (!initialized) {
-            console.error("[PLAY] Failed to initialize service");
-            return;
-          }
-        }
-      } catch (error) {
-        console.error("[PLAY] Error checking service status:", error);
-      }
-
       if (isPlaying) {
-        // 일시정지는 언제나 가능
         await TrackPlayer.pause();
         console.log("[PLAY] 일시정지");
       } else {
-        // 재생 시작 전 마지막으로 앱 상태 확인
-        if (AppState.currentState !== 'active') {
-          console.log("[PLAY] App is not active before play, aborting");
-          return;
-        }
-
         // 재생 전 큐 확인
         const queue = await TrackPlayer.getQueue();
         if (queue.length === 0) {
@@ -657,35 +558,12 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
         // 이전 처리 기록 초기화 (새로운 재생 시작)
         lastProcessedChapterRef.current = null;
 
-        // 최종 재생 시도
-        try {
-          await TrackPlayer.play();
-          console.log(`[PLAY] 재생 시작: ${currentBook}권 ${currentJang}장`);
-          console.log(`[PLAY] 트랙 정보 업데이트:`, currentTrackRef.current);
-        } catch (playError) {
-          if (playError.message?.includes('ForegroundServiceStartNotAllowedException')) {
-            console.error("[PLAY] Cannot start foreground service");
-            Alert.alert(
-                "재생 오류",
-                "백그라운드에서는 재생을 시작할 수 없습니다. 앱을 활성화한 후 다시 시도해주세요.",
-                [{ text: "확인" }]
-            );
-          } else {
-            throw playError;
-          }
-        }
+        await TrackPlayer.play();
+        console.log(`[PLAY] 재생 시작: ${currentBook}권 ${currentJang}장`);
+        console.log(`[PLAY] 트랙 정보 업데이트:`, currentTrackRef.current);
       }
     } catch (error) {
       console.error("[PLAY] 재생/정지 오류:", error);
-
-      // 사용자에게 오류 알림
-      if (error.message?.includes('ForegroundServiceStartNotAllowedException')) {
-        Alert.alert(
-            "재생 오류",
-            "시스템 제한으로 인해 재생을 시작할 수 없습니다. 잠시 후 다시 시도해주세요.",
-            [{ text: "확인" }]
-        );
-      }
     } finally {
       setTimeout(() => {
         setIsProcessingAction(false);
@@ -1189,60 +1067,41 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
   // 컴포넌트 초기화
   useEffect(() => {
     let isMounted = true;
-    let initializeTimeout: NodeJS.Timeout | null = null;
 
     const initialize = async () => {
       try {
-        // 앱이 활성 상태일 때만 초기화
-        if (AppState.currentState === 'active') {
-          const result = await setupPlayer();
-          if (isMounted && result) {
-            setIsPlayerInitialized(true);
+        // 플레이어 초기 설정
+        const isSetup = await setupPlayer();
+        if (isMounted && isSetup) {
+          setIsPlayerInitialized(true);
 
-            // 명시적 반복 모드 비활성화
-            await TrackPlayer.setRepeatMode(RepeatMode.Off);
+          // 명시적 반복 모드 비활성화
+          await TrackPlayer.setRepeatMode(RepeatMode.Off);
 
-            // 저장된 재생 속도 불러오기
-            const savedSpeed = defaultStorage.getNumber("last_audio_speed") ?? 1;
-            if (savedSpeed !== 1) {
-              setSoundSpeed(savedSpeed);
-              await TrackPlayer.setRate(savedSpeed);
-            }
-
-            // 자동 다음 장 설정 불러오기 - 기본값 true로 설정
-            const savedAutoNext = defaultStorage.getBoolean(
-                "auto_next_chapter_enabled"
-            );
-            if (savedAutoNext !== undefined) {
-              setEnableAutoNext(savedAutoNext);
-            } else {
-              // 기본값을 true로 설정
-              setEnableAutoNext(true);
-              defaultStorage.set("auto_next_chapter_enabled", true);
-            }
-
-            // 성경 플레이어임을 표시 (성경일독과 구분)
-            defaultStorage.set("is_illdoc_player", false);
+          // 저장된 재생 속도 불러오기
+          const savedSpeed = defaultStorage.getNumber("last_audio_speed") ?? 1;
+          if (savedSpeed !== 1) {
+            setSoundSpeed(savedSpeed);
+            await TrackPlayer.setRate(savedSpeed);
           }
-        } else {
-          // 앱이 백그라운드에 있으면 1초 후 재시도
-          console.log("App is not active, retrying initialization in 1 second");
-          initializeTimeout = setTimeout(() => {
-            if (isMounted) {
-              initialize();
-            }
-          }, 1000);
+
+          // 자동 다음 장 설정 불러오기 - 기본값 true로 설정
+          const savedAutoNext = defaultStorage.getBoolean(
+            "auto_next_chapter_enabled"
+          );
+          if (savedAutoNext !== undefined) {
+            setEnableAutoNext(savedAutoNext);
+          } else {
+            // 기본값을 true로 설정
+            setEnableAutoNext(true);
+            defaultStorage.set("auto_next_chapter_enabled", true);
+          }
+
+          // 성경 플레이어임을 표시 (성경일독과 구분)
+          defaultStorage.set("is_illdoc_player", false);
         }
       } catch (error) {
         console.error("Error initializing player:", error);
-        // 오류 발생 시 2초 후 재시도
-        if (isMounted && AppState.currentState === 'active') {
-          initializeTimeout = setTimeout(() => {
-            if (isMounted) {
-              initialize();
-            }
-          }, 2000);
-        }
       }
     };
 
@@ -1250,92 +1109,60 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
     // 앱 상태 변경 감지
     const subscription = AppState.addEventListener(
-        "change",
-        async (nextAppState) => {
-          console.log(
-              "App state changed from",
-              appStateRef.current,
-              "to",
-              nextAppState
-          );
+      "change",
+      async (nextAppState) => {
+        console.log(
+          "App state changed from",
+          appStateRef.current,
+          "to",
+          nextAppState
+        );
 
-          // 앱이 백그라운드로 이동할 때
-          if (
-              appStateRef.current === "active" &&
-              (nextAppState === "background" || nextAppState === "inactive")
-          ) {
-            console.log("App moved to background");
+        // 앱이 백그라운드로 이동할 때
+        if (
+          appStateRef.current === "active" &&
+          (nextAppState === "background" || nextAppState === "inactive")
+        ) {
+          console.log("App moved to background");
 
-            try {
-              // 서비스가 실행 중인지 확인
-              const isServiceRunning = await TrackPlayer.isServiceRunning();
-              if (!isServiceRunning) {
-                console.log("Service is not running, skipping background handling");
-                return;
-              }
+          try {
+            await TrackPlayer.setRepeatMode(RepeatMode.Off);
+            await TrackPlayer.updateOptions({
+              android: {
+                appKilledPlaybackBehavior:
+                  AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+              },
+              notification: {
+                stopWithApp: true,
+              },
+            });
 
-              const state = await TrackPlayer.getState();
-
-              // 재생 중이 아니면 서비스 정리
-              if (state !== State.Playing) {
-                console.log("Not playing, cleaning up service");
-                await TrackPlayer.stop();
-                await TrackPlayer.reset();
-              } else {
-                // 재생 중이어도 앱 종료 시 정리되도록 설정
-                await TrackPlayer.updateOptions({
-                  android: {
-                    appKilledPlaybackBehavior:
-                    AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
-                    stopForegroundGracePeriod: 5,
-                  },
-                  stopWithApp: true,
-                });
-              }
-
-              await TrackPlayer.setRepeatMode(RepeatMode.Off);
-              console.log("Background behavior set");
-            } catch (error) {
-              console.error("Error setting options on background:", error);
-            }
+            console.log("Kill behavior set on background transition");
+          } catch (error) {
+            console.error("Error setting options on background:", error);
           }
-
-          // 앱이 다시 활성화될 때
-          if (
-              appStateRef.current.match(/inactive|background/) &&
-              nextAppState === "active"
-          ) {
-            console.log("App returned to foreground");
-
-            // 플레이어가 초기화되지 않았으면 초기화 시도
-            if (!isPlayerInitialized) {
-              console.log("Player not initialized, attempting initialization");
-              initialize();
-            }
-
-            defaultStorage.set("is_illdoc_player", false);
-            defaultStorage.set("auto_next_chapter_enabled", enableAutoNext);
-          }
-
-          appStateRef.current = nextAppState;
         }
+
+        // 앱이 다시 활성화될 때
+        if (
+          appStateRef.current.match(/inactive|background/) &&
+          nextAppState === "active"
+        ) {
+          console.log("App returned to foreground");
+
+          defaultStorage.set("is_illdoc_player", false);
+          defaultStorage.set("auto_next_chapter_enabled", enableAutoNext);
+        }
+
+        appStateRef.current = nextAppState;
+      }
     );
 
-    // 컴포넌트 언마운트 시 정리
+    // 컴포넌트 언마운트 시 플레이어 정지 및 구독 해제
     return () => {
       isMounted = false;
-
-      // 타임아웃 정리
-      if (initializeTimeout) {
-        clearTimeout(initializeTimeout);
-      }
-
       subscription.remove();
-
-      // 플레이어 정지 및 리셋
-      stopAndResetPlayer().catch(error => {
-        console.error("Error during cleanup:", error);
-      });
+      stopAndResetPlayer();
     };
   }, [enableAutoNext]);
 
