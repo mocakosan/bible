@@ -1,429 +1,391 @@
-// src/components/page/progs/index.tsx
-// 🔥 시간 기반 성경일독 진도 화면으로 완전 수정
+import { Box, HStack, Progress, VStack, Text, Pressable } from 'native-base';
+import FooterLayout from '../../layout/footer/footer';
+import BibleBackHeaderLayout from '../../layout/header/backHeader';
+import { useBaseStyle, useNativeNavigation } from '../../../hooks';
+import { ScrollView } from 'react-native';
+import useSWR from 'swr';
+import { bibleSetting, fetchSql } from '../../../utils';
+import { loadBiblePlanData } from '../../../utils/biblePlanUtils';
+import { useEffect, useState } from 'react';
 
-import { useCallback, useEffect, useState } from "react";
-import { ScrollView, Dimensions } from "react-native";
-import { Box, Text, VStack, HStack, Progress, Badge, Button } from "native-base";
-import { LineChart } from "react-native-chart-kit";
-import dayjs from 'dayjs';
-
-import { useBaseStyle } from "../../../hooks";
-import {
-  getWeeklySchedule,
-  getWeeklyStats,
-  getDayReading,
-  getCurrentDay,
-  formatReadingTime,
-  formatDate
-} from "../../../utils/biblePlanIntegration";
-
-interface Props {
-  planData?: any;
-  dashboardData?: any;
-  onChapterToggle?: (bookIndex: number, chapter: number, isCurrentlyRead: boolean) => void;
-}
-
-export default function ProgressScreen({ planData, dashboardData, onChapterToggle }: Props) {
+export default function ProgressScreen() {
   const { color } = useBaseStyle();
-  const [selectedWeekOffset, setSelectedWeekOffset] = useState(0); // 0: 이번 주, -1: 지난 주, 1: 다음 주
-  const screenWidth = Dimensions.get("window").width;
+  const { route, navigation } = useNativeNavigation();
+  const [planData, setPlanData] = useState<any>(null);
 
-  // 🔥 주간 일정 데이터
-  const [weeklyData, setWeeklyData] = useState<any[]>([]);
-  const [weeklyStats, setWeeklyStats] = useState<any>(null);
+  const selectSql = `SELECT * FROM 'reading_table' where read = 'true'`;
 
-  // 데이터 로드
-  const loadWeeklyData = useCallback(() => {
-    if (!planData || !dashboardData?.hasPlan) {
+  const fetcher = async (url: string) => {
+    const data = await fetchSql(bibleSetting, url, []);
+    return data;
+  };
+
+  const { data } = useSWR(selectSql, fetcher);
+
+  // 일독 계획 데이터 로드
+  useEffect(() => {
+    const existingPlan = loadBiblePlanData();
+    if (existingPlan) {
+      setPlanData(existingPlan);
+    }
+  }, []);
+
+  // 구약 진도 계산
+  const oldChapther = data?.filter((d: any) => d?.book <= 39).length;
+  const oldPercent = (oldChapther / 929) * 100;
+
+  // 신약 진도 계산
+  const newChapther = data?.filter((d: any) => d?.book > 39).length;
+  const newPercent = (newChapther / 260) * 100;
+
+  // 모세오경 진도 계산 (창세기~신명기: 1~5번 책)
+  const pentateuchChapters = data?.filter((d: any) => d?.book >= 1 && d?.book <= 5).length;
+  const pentateuchPercent = (pentateuchChapters / 187) * 100; // 모세오경 총 187장
+
+  // 시편 진도 계산 (시편: 19번 책)
+  const psalmsChapters = data?.filter((d: any) => d?.book === 19).length;
+  const psalmsPercent = (psalmsChapters / 150) * 100; // 시편 총 150장
+
+  const dayPercent = (route.params?.parcent / route.params?.total) * 100;
+
+  // 전체 학습장수 계산
+  const totalChapters = data?.length ?? 0;
+  const totalPercent = (totalChapters / 1189) * 100;
+
+  // 설정된 일독 타입에 따른 강조 색상 반환
+  const getBackgroundColor = (sectionType: string) => {
+    if (!planData?.planType) return color.white;
+
+    // 경과일수는 항상 민트색 (일독이 설정되어 있으면)
+    if (sectionType === 'day') {
+      return '#E8F8F7';
+    }
+
+    switch (planData.planType) {
+      case 'full_bible':
+        return sectionType === 'total' ? '#E8F8F7' : color.white;
+      case 'old_testament':
+        return sectionType === 'old' ? '#E8F8F7' : color.white;
+      case 'new_testament':
+        return sectionType === 'new' ? '#E8F8F7' : color.white;
+      case 'pentateuch':
+        return sectionType === 'pentateuch' ? '#E8F8F7' : color.white;
+      case 'psalms':
+        return sectionType === 'psalms' ? '#E8F8F7' : color.white;
+      default:
+        return color.white;
+    }
+  };
+
+  // 클릭 시 성경일독 화면으로 이동
+  const handleSectionClick = (sectionType: string) => {
+    if (!planData?.planType) return;
+
+    console.log('클릭된 섹션:', sectionType, '일독 타입:', planData.planType);
+
+    // 경과일수는 항상 이동 가능 (첫 번째 탭으로)
+    if (sectionType === 'day') {
+      navigation.navigate('ReadingBibleScreen');
       return;
     }
 
-    try {
-      const currentDay = getCurrentDay(planData);
-      const startDay = Math.max(1, currentDay + (selectedWeekOffset * 7));
+    // 설정된 일독과 클릭한 섹션이 일치하는 경우 해당 화면으로 이동
+    const shouldNavigate =
+        (planData.planType === 'full_bible' && sectionType === 'total') ||
+        (planData.planType === 'old_testament' && sectionType === 'old') ||
+        (planData.planType === 'new_testament' && sectionType === 'new') ||
+        (planData.planType === 'pentateuch' && sectionType === 'pentateuch') ||
+        (planData.planType === 'psalms' && sectionType === 'psalms');
 
-      // 주간 스케줄 가져오기
-      const schedule = getWeeklySchedule(planData, startDay);
-      setWeeklyData(schedule);
+    console.log('이동 가능 여부:', shouldNavigate);
 
-      // 주간 통계 가져오기
-      const stats = getWeeklyStats();
-      setWeeklyStats(stats);
-
-    } catch (error) {
-      console.error('❌ 주간 데이터 로드 실패:', error);
-      setWeeklyData([]);
-      setWeeklyStats(null);
+    if (shouldNavigate) {
+      // ReadingBibleScreen으로 이동
+      navigation.navigate('ReadingBibleScreen');
     }
-  }, [planData, dashboardData, selectedWeekOffset]);
-
-  useEffect(() => {
-    loadWeeklyData();
-  }, [loadWeeklyData]);
-
-  // 주간 네비게이션
-  const handleWeekNavigation = (offset: number) => {
-    setSelectedWeekOffset(offset);
   };
 
-  // 차트 데이터 생성
-  const generateChartData = useCallback(() => {
-    if (!weeklyData || weeklyData.length === 0) {
-      return null;
+  // 섹션이 클릭 가능한지 확인
+  const isClickable = (sectionType: string) => {
+    if (!planData?.planType) return false;
+
+    // 경과일수는 항상 클릭 가능
+    if (sectionType === 'day') {
+      return true;
     }
 
-    const labels = weeklyData.map((day, index) => {
-      const date = new Date(day.date);
-      return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
-    });
-
-    const targetData = weeklyData.map(day => day.targetMinutes);
-    const actualData = weeklyData.map(day => {
-      const completedTime = day.chapters
-          .filter((ch: any) => ch.isRead)
-          .reduce((sum: number, ch: any) => sum + ch.estimatedMinutes, 0);
-      return Math.round(completedTime * 10) / 10;
-    });
-
-    return {
-      labels,
-      datasets: [
-        {
-          data: targetData,
-          color: (opacity = 1) => `rgba(139, 92, 246, ${opacity})`, // 보라색 (목표)
-          strokeWidth: 2
-        },
-        {
-          data: actualData,
-          color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`, // 초록색 (실제)
-          strokeWidth: 3
-        }
-      ],
-      legend: ["목표 시간", "실제 시간"]
-    };
-  }, [weeklyData]);
-
-  const chartData = generateChartData();
-
-  // 일별 상세 정보 컴포넌트
-  const DayDetailCard = ({ dayReading, isToday }: { dayReading: any; isToday: boolean }) => {
-    const completedChapters = dayReading.chapters.filter((ch: any) => ch.isRead).length;
-    const completedTime = dayReading.chapters
-        .filter((ch: any) => ch.isRead)
-        .reduce((sum: number, ch: any) => sum + ch.estimatedMinutes, 0);
-
-    const progressPercentage = dayReading.chapters.length > 0
-        ? Math.round((completedChapters / dayReading.chapters.length) * 100)
-        : 0;
-
     return (
-        <Box
-            bg={isToday ? "#FEF3C7" : "white"}
-            p={4}
-            borderRadius="lg"
-            borderWidth={isToday ? 2 : 1}
-            borderColor={isToday ? "#F59E0B" : "#E5E7EB"}
-            mb={3}
-        >
-          <HStack justifyContent="space-between" alignItems="center" mb={3}>
-            <VStack>
-              <HStack alignItems="center" space={2}>
-                <Text fontSize={14} fontWeight={600} color="#1F2937">
-                  {formatDate(dayReading.date)}
-                </Text>
-                {isToday && (
-                    <Badge colorScheme="orange" size="xs" borderRadius="full">
-                      오늘
-                    </Badge>
-                )}
-              </HStack>
-              <Text fontSize={12} color="#6B7280">
-                {dayReading.day}일차
-              </Text>
-            </VStack>
-
-            <VStack alignItems="flex-end">
-              <Text fontSize={14} fontWeight={600} color={dayReading.isCompleted ? "#059669" : "#6B7280"}>
-                {completedChapters}/{dayReading.chapters.length}장
-              </Text>
-              <Text fontSize={12} color="#6B7280">
-                {formatReadingTime(completedTime)}/{formatReadingTime(dayReading.targetMinutes)}
-              </Text>
-            </VStack>
-          </HStack>
-
-          {/* 진행률 바 */}
-          <Progress
-              value={progressPercentage}
-              bg="#E5E7EB"
-              _filledTrack={{ bg: dayReading.isCompleted ? "#10B981" : "#F59E0B" }}
-              size="sm"
-              mb={3}
-          />
-
-          {/* 장 목록 */}
-          <VStack space={1}>
-            {dayReading.chapters.slice(0, 3).map((chapter: any, index: number) => (
-                <HStack key={index} justifyContent="space-between" alignItems="center">
-                  <HStack alignItems="center" space={2}>
-                    <Text fontSize={12}>
-                      {chapter.isRead ? '✅' : '📖'}
-                    </Text>
-                    <Text
-                        fontSize={12}
-                        color={chapter.isRead ? "#059669" : "#6B7280"}
-                        fontWeight={chapter.isRead ? 600 : 400}
-                    >
-                      {chapter.bookName} {chapter.chapter}장
-                    </Text>
-                  </HStack>
-                  <Text fontSize={11} color="#9CA3AF">
-                    {formatReadingTime(chapter.estimatedMinutes)}
-                  </Text>
-                </HStack>
-            ))}
-
-            {dayReading.chapters.length > 3 && (
-                <Text fontSize={11} color="#6B7280" textAlign="center" mt={1}>
-                  ... 외 {dayReading.chapters.length - 3}장 더
-                </Text>
-            )}
-          </VStack>
-        </Box>
+        (planData.planType === 'full_bible' && sectionType === 'total') ||
+        (planData.planType === 'old_testament' && sectionType === 'old') ||
+        (planData.planType === 'new_testament' && sectionType === 'new') ||
+        (planData.planType === 'pentateuch' && sectionType === 'pentateuch') ||
+        (planData.planType === 'psalms' && sectionType === 'psalms')
     );
   };
-
-  if (!planData || !dashboardData?.hasPlan) {
-    return (
-        <Box flex={1} justifyContent="center" alignItems="center" p={8}>
-          <Text fontSize={16} color="#6B7280" textAlign="center">
-            성경일독 계획을 먼저 설정해주세요.
-          </Text>
-        </Box>
-    );
-  }
-
-  const currentDay = getCurrentDay(planData);
 
   return (
-      <ScrollView style={{ backgroundColor: color.white }} showsVerticalScrollIndicator={false}>
-        <VStack space={4} p={4} pb={8}>
-          {/* 🔥 전체 진행률 요약 */}
-          <Box bg="#F8F9FF" p={4} borderRadius="lg" borderWidth={1} borderColor="#E0E7FF">
-            <HStack justifyContent="space-between" alignItems="center" mb={3}>
-              <Text fontSize={18} fontWeight={700} color="#4F46E5">
-                📊 전체 진행률
-              </Text>
-              <Badge colorScheme="purple" borderRadius="full">
-                {currentDay}/{planData.totalDays}일차
-              </Badge>
-            </HStack>
-
-            <Progress
-                value={dashboardData.progressInfo.progressPercentage}
-                bg="#E5E7EB"
-                _filledTrack={{ bg: "#8B5CF6" }}
-                size="lg"
-                mb={3}
-            />
-
-            <HStack justifyContent="space-between" mb={3}>
-              <Text fontSize={14} fontWeight={600} color="#4F46E5">
-                {dashboardData.progressInfo.progressPercentage}% 완료
-              </Text>
-              <Text fontSize={14} color="#6B7280">
-                {formatReadingTime(dashboardData.progressInfo.readTime)} / {formatReadingTime(dashboardData.progressInfo.totalTime)}
-              </Text>
-            </HStack>
-
-            <HStack justifyContent="space-around" pt={3} borderTopWidth={1} borderTopColor="#E0E7FF">
-              <VStack alignItems="center">
-                <Text fontSize={16} fontWeight={700} color="#059669">
-                  {dashboardData.readingStreak}일
-                </Text>
-                <Text fontSize={12} color="#6B7280">연속 읽기</Text>
-              </VStack>
-              <VStack alignItems="center">
-                <Text fontSize={16} fontWeight={700} color="#8B5CF6">
-                  {dashboardData.progressInfo.readChapters}장
-                </Text>
-                <Text fontSize={12} color="#6B7280">완료한 장</Text>
-              </VStack>
-              <VStack alignItems="center">
-                <Text fontSize={16} fontWeight={700} color={dashboardData.missedChapters > 0 ? "#EF4444" : "#6B7280"}>
-                  {dashboardData.missedChapters}장
-                </Text>
-                <Text fontSize={12} color="#6B7280">놓친 장</Text>
-              </VStack>
-            </HStack>
-          </Box>
-
-          {/* 🔥 주간 통계 */}
-          {weeklyStats && (
-              <Box bg="#F0FDF4" p={4} borderRadius="lg" borderWidth={1} borderColor="#D1FAE5">
-                <Text fontSize={16} fontWeight={600} color="#059669" mb={3}>
-                  📈 최근 7일 통계
-                </Text>
-
-                <HStack justifyContent="space-around">
-                  <VStack alignItems="center">
-                    <Text fontSize={16} fontWeight={700} color="#059669">
-                      {weeklyStats.daysCompleted}일
-                    </Text>
-                    <Text fontSize={12} color="#6B7280">완료한 날</Text>
-                  </VStack>
-                  <VStack alignItems="center">
-                    <Text fontSize={16} fontWeight={700} color="#059669">
-                      {weeklyStats.completionRate}%
-                    </Text>
-                    <Text fontSize={12} color="#6B7280">완료율</Text>
-                  </VStack>
-                  <VStack alignItems="center">
-                    <Text fontSize={16} fontWeight={700} color="#059669">
-                      {formatReadingTime(weeklyStats.averageDailyTime)}
-                    </Text>
-                    <Text fontSize={12} color="#6B7280">일평균</Text>
-                  </VStack>
-                </HStack>
-              </Box>
-          )}
-
-          {/* 🔥 주간 차트 */}
-          {chartData && (
-              <Box bg="white" p={4} borderRadius="lg" borderWidth={1} borderColor="#E5E7EB">
-                <HStack justifyContent="space-between" alignItems="center" mb={4}>
-                  <Text fontSize={16} fontWeight={600} color="#1F2937">
-                    📊 주간 읽기 현황
+      <>
+        <BibleBackHeaderLayout title={'진도현황'} />
+        <ScrollView style={{ backgroundColor: color.white }}>
+          {/* 경과일수 섹션 */}
+          <Pressable
+              onPress={() => handleSectionClick('day')}
+              disabled={!isClickable('day')}
+              _pressed={{ opacity: 0.7 }}
+          >
+            <VStack
+                h={'90px'}
+                borderBottomColor={color.status}
+                borderBottomWidth={1}
+                bg={getBackgroundColor('day')}
+            >
+              <HStack>
+                <Box w={'75%'} bg="transparent">
+                  <Text fontSize={19} marginTop={3} marginLeft={3} fontWeight={600}>
+                    일독 경과일수 {route.params?.parcent || 0}/{route.params?.total || 0}
                   </Text>
+                  <Progress
+                      _filledTrack={{
+                        bg: color.bible
+                      }}
+                      w={'60%'}
+                      value={dayPercent ? dayPercent : 0}
+                      marginTop={3}
+                      marginLeft={3}
+                  />
+                </Box>
 
-                  <HStack space={2}>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        colorScheme="gray"
-                        onPress={() => handleWeekNavigation(-1)}
-                        disabled={selectedWeekOffset <= -4} // 최대 4주 전까지
-                    >
-                      <Text fontSize={12}>이전</Text>
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        colorScheme="gray"
-                        onPress={() => handleWeekNavigation(0)}
-                    >
-                      <Text fontSize={12}>이번주</Text>
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        colorScheme="gray"
-                        onPress={() => handleWeekNavigation(1)}
-                        disabled={selectedWeekOffset >= 2} // 최대 2주 후까지
-                    >
-                      <Text fontSize={12}>다음</Text>
-                    </Button>
-                  </HStack>
-                </HStack>
-
-                <LineChart
-                    data={chartData}
-                    width={screenWidth - 56} // padding 고려
-                    height={220}
-                    chartConfig={{
-                      backgroundColor: "#ffffff",
-                      backgroundGradientFrom: "#ffffff",
-                      backgroundGradientTo: "#ffffff",
-                      decimalPlaces: 0,
-                      color: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-                      labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-                      style: {
-                        borderRadius: 8
-                      },
-                      propsForDots: {
-                        r: "4",
-                        strokeWidth: "2",
-                        stroke: "#ffffff"
-                      }
-                    }}
-                    bezier
-                    style={{
-                      marginVertical: 8,
-                      borderRadius: 8
-                    }}
-                />
-
-                {/* 범례 */}
-                <HStack justifyContent="center" space={6} mt={2}>
-                  <HStack alignItems="center" space={2}>
-                    <Box w={3} h={3} bg="#8B5CF6" borderRadius="full" />
-                    <Text fontSize={12} color="#6B7280">목표 시간</Text>
-                  </HStack>
-                  <HStack alignItems="center" space={2}>
-                    <Box w={3} h={3} bg="#10B981" borderRadius="full" />
-                    <Text fontSize={12} color="#6B7280">실제 시간</Text>
-                  </HStack>
-                </HStack>
-              </Box>
-          )}
-
-          {/* 🔥 일별 상세 현황 */}
-          <Box>
-            <Text fontSize={16} fontWeight={600} color="#1F2937" mb={3}>
-              📅 일별 상세 현황
-            </Text>
-
-            {weeklyData.length > 0 ? (
-                weeklyData.map((dayReading, index) => {
-                  const isToday = dayReading.day === currentDay;
-                  return (
-                      <DayDetailCard
-                          key={dayReading.day}
-                          dayReading={dayReading}
-                          isToday={isToday}
-                      />
-                  );
-                })
-            ) : (
-                <Box p={8} alignItems="center">
-                  <Text fontSize={14} color="#6B7280" textAlign="center">
-                    해당 기간에 일정이 없습니다.
+                <Box
+                    w={'15%'}
+                    height={'100%'}
+                    flex={1}
+                    justifyContent={'center'}
+                    alignSelf={'center'}
+                >
+                  <Text fontSize={26} marginLeft={3} style={{ color: color.black }}>
+                    {(dayPercent ? dayPercent.toFixed(1) : 0)}%
                   </Text>
                 </Box>
-            )}
-          </Box>
+              </HStack>
+            </VStack>
+          </Pressable>
 
-          {/* 🔥 동기부여 메시지 */}
-          {dashboardData.motivationalMessage && (
-              <Box bg="#FEF3C7" p={4} borderRadius="lg" borderWidth={1} borderColor="#FCD34D">
-                <HStack alignItems="center" space={3}>
-                  <Text fontSize={24}>🌟</Text>
-                  <Text fontSize={14} color="#92400E" flex={1} fontStyle="italic">
-                    {dashboardData.motivationalMessage}
+          {/* 구약 진도 섹션 */}
+          <Pressable
+              onPress={() => handleSectionClick('old')}
+              disabled={!isClickable('old')}
+              _pressed={{ opacity: 0.7 }}
+          >
+            <VStack
+                h={'90px'}
+                borderBottomColor={color.status}
+                borderBottomWidth={1}
+                bg={getBackgroundColor('old')}
+            >
+              <HStack>
+                <Box w={'75%'} bg="transparent">
+                  <Text fontSize={19} marginTop={3} marginLeft={3} fontWeight={600}>
+                    구약 {oldChapther || 0}/929
                   </Text>
-                </HStack>
-              </Box>
-          )}
+                  <Progress
+                      _filledTrack={{
+                        bg: color.bible
+                      }}
+                      w={'60%'}
+                      value={oldPercent}
+                      marginTop={3}
+                      marginLeft={3}
+                  />
+                </Box>
 
-          {/* 🔥 목표 달성 예상일 */}
-          {dashboardData.planSummary.estimatedCompletionDate && (
-              <Box bg="#F0F9FF" p={4} borderRadius="lg" borderWidth={1} borderColor="#BFDBFE">
-                <HStack justifyContent="space-between" alignItems="center">
-                  <VStack>
-                    <Text fontSize={14} fontWeight={600} color="#1E40AF">
-                      🎯 예상 완료일
-                    </Text>
-                    <Text fontSize={12} color="#6B7280">
-                      현재 진행 속도 기준
-                    </Text>
-                  </VStack>
-                  <Text fontSize={16} fontWeight={700} color="#1E40AF">
-                    {dayjs(dashboardData.planSummary.estimatedCompletionDate).format('YYYY년 MM월 DD일')}
+                <Box
+                    w={'15%'}
+                    height={'100%'}
+                    flex={1}
+                    justifyContent={'center'}
+                    alignSelf={'center'}
+                >
+                  <Text fontSize={26} marginLeft={3} style={{ color: color.black }}>
+                    {oldPercent ? oldPercent.toFixed(1) : 0}%
                   </Text>
-                </HStack>
-              </Box>
-          )}
-        </VStack>
-      </ScrollView>
+                </Box>
+              </HStack>
+            </VStack>
+          </Pressable>
+
+          {/* 신약 진도 섹션 */}
+          <Pressable
+              onPress={() => handleSectionClick('new')}
+              disabled={!isClickable('new')}
+              _pressed={{ opacity: 0.7 }}
+          >
+            <VStack
+                h={'90px'}
+                borderBottomColor={color.status}
+                borderBottomWidth={1}
+                bg={getBackgroundColor('new')}
+            >
+              <HStack>
+                <Box w={'75%'} bg="transparent">
+                  <Text fontSize={19} marginTop={3} marginLeft={3} fontWeight={600}>
+                    신약 {newChapther || 0}/260
+                  </Text>
+                  <Progress
+                      _filledTrack={{
+                        bg: color.bible
+                      }}
+                      w={'60%'}
+                      value={newPercent}
+                      marginTop={3}
+                      marginLeft={3}
+                  />
+                </Box>
+
+                <Box
+                    w={'15%'}
+                    height={'100%'}
+                    flex={1}
+                    justifyContent={'center'}
+                    alignSelf={'center'}
+                >
+                  <Text fontSize={26} marginLeft={3} style={{ color: color.black }}>
+                    {newPercent ? newPercent.toFixed(1) : 0}%
+                  </Text>
+                </Box>
+              </HStack>
+            </VStack>
+          </Pressable>
+
+          {/* 모세오경 진도 섹션 */}
+          <Pressable
+              onPress={() => handleSectionClick('pentateuch')}
+              disabled={!isClickable('pentateuch')}
+              _pressed={{ opacity: 0.7 }}
+          >
+            <VStack
+                h={'90px'}
+                borderBottomColor={color.status}
+                borderBottomWidth={1}
+                bg={getBackgroundColor('pentateuch')}
+            >
+              <HStack>
+                <Box w={'75%'} bg="transparent">
+                  <Text fontSize={19} marginTop={3} marginLeft={3} fontWeight={600}>
+                    모세오경 {pentateuchChapters || 0}/187
+                  </Text>
+                  <Progress
+                      _filledTrack={{
+                        bg: color.bible
+                      }}
+                      w={'60%'}
+                      value={pentateuchPercent}
+                      marginTop={3}
+                      marginLeft={3}
+                  />
+                </Box>
+
+                <Box
+                    w={'15%'}
+                    height={'100%'}
+                    flex={1}
+                    justifyContent={'center'}
+                    alignSelf={'center'}
+                >
+                  <Text fontSize={26} marginLeft={3} style={{ color: color.black }}>
+                    {pentateuchPercent ? pentateuchPercent.toFixed(1) : 0}%
+                  </Text>
+                </Box>
+              </HStack>
+            </VStack>
+          </Pressable>
+
+          {/* 시편 진도 섹션 */}
+          <Pressable
+              onPress={() => handleSectionClick('psalms')}
+              disabled={!isClickable('psalms')}
+              _pressed={{ opacity: 0.7 }}
+          >
+            <VStack
+                h={'90px'}
+                borderBottomColor={color.status}
+                borderBottomWidth={1}
+                bg={getBackgroundColor('psalms')}
+            >
+              <HStack>
+                <Box w={'75%'} bg="transparent">
+                  <Text fontSize={19} marginTop={3} marginLeft={3} fontWeight={600}>
+                    시편 {psalmsChapters || 0}/150
+                  </Text>
+                  <Progress
+                      _filledTrack={{
+                        bg: color.bible
+                      }}
+                      w={'60%'}
+                      value={psalmsPercent}
+                      marginTop={3}
+                      marginLeft={3}
+                  />
+                </Box>
+
+                <Box
+                    w={'15%'}
+                    height={'100%'}
+                    flex={1}
+                    justifyContent={'center'}
+                    alignSelf={'center'}
+                >
+                  <Text fontSize={26} marginLeft={3} style={{ color: color.black }}>
+                    {psalmsPercent ? psalmsPercent.toFixed(1) : 0}%
+                  </Text>
+                </Box>
+              </HStack>
+            </VStack>
+          </Pressable>
+
+          {/* 전체 학습장수 섹션 */}
+          <Pressable
+              onPress={() => handleSectionClick('total')}
+              disabled={!isClickable('total')}
+              _pressed={{ opacity: 0.7 }}
+          >
+            <VStack
+                h={'90px'}
+                borderBottomColor={color.status}
+                borderBottomWidth={1}
+                bg={getBackgroundColor('total')}
+            >
+              <HStack>
+                <Box w={'75%'} bg="transparent">
+                  <Text fontSize={19} marginTop={3} marginLeft={3} fontWeight={600}>
+                    전체성경 {totalChapters}/1189
+                  </Text>
+                  <Progress
+                      _filledTrack={{
+                        bg: color.bible
+                      }}
+                      w={'60%'}
+                      value={totalPercent}
+                      marginTop={3}
+                      marginLeft={3}
+                  />
+                </Box>
+
+                <Box
+                    w={'15%'}
+                    height={'100%'}
+                    flex={1}
+                    justifyContent={'center'}
+                    alignSelf={'center'}
+                >
+                  <Text fontSize={26} marginLeft={3} style={{ color: color.black }}>
+                    {totalPercent ? totalPercent.toFixed(1) : 0}%
+                  </Text>
+                </Box>
+              </HStack>
+            </VStack>
+          </Pressable>
+        </ScrollView>
+        <FooterLayout />
+      </>
   );
 }

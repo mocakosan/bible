@@ -1,6 +1,4 @@
 // src/components/page/reading/_side/setting.tsx
-// 🔥 기존 UI 완전히 그대로 유지, 로직만 시간 기반으로 수정
-
 import { Box, Button, HStack, Text, VStack, Actionsheet, useDisclose, Badge } from 'native-base';
 import { useBaseStyle, useNativeNavigation } from '../../../../hooks';
 import Calender from '../../../section/calendar';
@@ -11,8 +9,6 @@ import {ScrollView, View, Alert, Image} from 'react-native';
 import { Toast } from 'react-native-toast-message/lib/src/Toast';
 import { bibleSetting, fetchSql } from '../../../../utils';
 import { defaultStorage } from '../../../../utils/mmkv';
-
-// 🔥 기존 import들 그대로 유지하되, 내부적으로 시간 기반 함수 사용
 import {
   loadBiblePlanData,
   saveBiblePlanData,
@@ -30,22 +26,12 @@ import {useBibleReading} from "../../../../utils/useBibleReading";
 import {bibleSelectSlice, bibleTextSlice, illdocSelectSlice} from "../../../../provider/redux/slice";
 import {store} from "../../../../provider/redux/store";
 
-// 🔥 시간 기반 시스템 import (내부적으로만 사용)
-import {
-  initializeBibleApp,
-  getPlanPreview,
-  createAndSaveBiblePlan,
-  loadExistingBiblePlan,
-  deleteBiblePlan,
-  BiblePlanFormData
-} from "../../../../utils/biblePlanIntegration";
-
 interface Props {
   readState: any;
   onTrigger: () => void;
 }
 
-// 🆕 총기간 컨트롤 컴포넌트 (기존 UI 그대로 유지)
+// 🆕 총기간 컨트롤 컴포넌트
 const DurationControlComponent = ({ startDate, endDate, onEndDateChange, planData }: any) => {
   // 문자열 날짜를 dayjs 객체로 변환
   const convertStringToDate = (dateString: string) => {
@@ -127,7 +113,7 @@ const DurationControlComponent = ({ startDate, endDate, onEndDateChange, planDat
                 _pressed={{ bg: "transparent" }}
                 mr={6}
             >
-              <Image source={require('../../../../assets/img/up.png')}/>
+             <Image source={require('../../../../assets/img/up.png')}/>
             </Button>
 
             <Button
@@ -155,16 +141,16 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
   const { navigation } = useNativeNavigation();
   const mmkv = defaultStorage.getString('calender');
 
-  // 바텀시트 상태 관리 (기존과 동일)
+  // 바텀시트 상태 관리
   const { isOpen, onOpen, onClose } = useDisclose();
 
-  // 🔥 성경일독 상태 관리 (기존과 동일하지만 내부적으로 시간 기반)
+  // 성경일독 상태 관리
   const [planData, setPlanData] = useState<any>(null);
   const [selectedPlanType, setSelectedPlanType] = useState<string>('');
   const [missedCount, setMissedCount] = useState(0);
   const [calculationResult, setCalculationResult] = useState<any>(null);
 
-  // ! 시작, 끝 날짜 분리 - 초기값을 null로 설정 (기존과 동일)
+  // ! 시작, 끝 날짜 분리 - 초기값을 null로 설정
   const [calendarState, setCalenderState] = useState<{
     start: string | null;
     end: string | null;
@@ -173,20 +159,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     end: null
   });
 
-  // 🔥 앱 초기화 (시간 기반 시스템)
-  useEffect(() => {
-    const initApp = async () => {
-      try {
-        await initializeBibleApp();
-        console.log('✅ 시간 기반 시스템 초기화 완료');
-      } catch (error) {
-        console.error('❌ 시간 기반 시스템 초기화 실패:', error);
-      }
-    };
-    initApp();
-  }, []);
-
-  // 기존 함수들 그대로 유지
   const convertDate = (type: 'start' | 'end') => {
     const result: { [key: string]: string | null } = calendarState;
     const dateString = result[type];
@@ -239,7 +211,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     return result ? result.toFixed(1) : "0";
   };
 
-  // 🔥 날짜 선택 완료 및 유효성 확인 함수 (기존과 동일)
+  // 🔥 날짜 선택 완료 및 유효성 확인 함수
   const isDatesCompleted = () => {
     // 시작일과 종료일이 모두 선택되었는지 확인
     if (!calendarState.start || !calendarState.end) return false;
@@ -252,7 +224,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     return isEndDateAfterStart;
   };
 
-  // 🔥 일독 설정하기 버튼 클릭 핸들러 (기존과 동일)
+  // 🔥 일독 설정하기 버튼 클릭 핸들러 (유효성 검사 강화)
   const handleSetupBibleReading = () => {
     // 1. 기본 날짜 설정 확인
     if (!calendarState.start || !calendarState.end) {
@@ -280,7 +252,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     onOpen(); // 바텀시트 열기
   };
 
-  // 🔥 일독 설정하기 버튼 렌더링 함수 (기존과 동일)
+  // 🔥 일독 설정하기 버튼 렌더링 함수 (항상 같은 색상, 항상 클릭 가능)
   const renderSetupButton = () => {
     const datesCompleted = isDatesCompleted();
     return (
@@ -306,7 +278,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     );
   };
 
-  // 🆕 종료일 변경 핸들러 추가 (기존과 동일)
+  // 🆕 종료일 변경 핸들러 추가
   const handleEndDateChange = (newEndDate: string) => {
     setCalenderState(prev => ({
       ...prev,
@@ -333,7 +305,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     }
   };
 
-  // 🔥 초기화 (내부적으로 시간 기반 시스템 로드)
   useEffect(() => {
     // 컴포넌트 마운트 시 상태 정리
     const initializeComponent = () => {
@@ -357,58 +328,37 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     initializeComponent();
   }, []);
 
-  // 🔥 시간 기반 계산 (기존 calculateReadingPlan 대신 getPlanPreview 사용)
   useEffect(() => {
     // 선택된 타입과 날짜가 있을 때 계산 수행
     if (selectedPlanType && calendarState.start && calendarState.end) {
       try {
-        const startDate = convertDate('start').toISOString().split('T')[0];
-        const endDate = convertDate('end').toISOString().split('T')[0];
+        const startDate = convertDate('start').toDate();
+        const endDate = convertDate('end').toDate();
 
-        const formData: BiblePlanFormData = {
-          planType: selectedPlanType,
-          startDate,
-          endDate
-        };
-
-        const preview = getPlanPreview(formData);
-
-        if (preview.isValid && preview.preview) {
-          // 🔥 기존 UI와 호환되도록 형식 맞춤
-          const calculation = {
-            totalDays: preview.preview.totalDays,
-            chaptersPerDay: Math.round(preview.preview.totalChapters / preview.preview.totalDays * 10) / 10, // 하루 평균 장수
-            minutesPerDay: Math.round(preview.preview.calculatedMinutesPerDay * 10) / 10, // 🔥 시간 기반 계산
-            dailySchedule: preview.preview.exampleDays,
-            weeklyBreakdown: []
-          };
+        if (endDate > startDate) {
+          const calculation = calculateReadingPlan(selectedPlanType, startDate, endDate);
           setCalculationResult(calculation);
-        } else {
-          console.log('시간 기반 계산 실패:', preview.errorMessage);
-          setCalculationResult(null);
         }
       } catch (error) {
-        console.log('시간 기반 계산 오류:', error);
+        console.log('계산 오류:', error);
         setCalculationResult(null);
       }
     }
   }, [selectedPlanType, calendarState]);
 
-  // 🔥 기존 계획 로드 (시간 기반 시스템)
   const loadExistingPlan = () => {
-    const existingPlan = loadExistingBiblePlan();
+    const existingPlan = loadBiblePlanData();
     if (existingPlan) {
       setPlanData(existingPlan);
       setMissedCount(calculateMissedChapters(existingPlan));
 
       setCalenderState({
         start: dayjs(existingPlan.startDate).format('YYYY년MM월DD일'),
-        end: dayjs(existingPlan.endDate || existingPlan.targetDate).format('YYYY년MM월DD일')
+        end: dayjs(existingPlan.targetDate).format('YYYY년MM월DD일')
       });
     }
   };
 
-  // 기존 날짜 변경 함수 그대로 유지
   const onDateChange = (date: string) => {
     if (open === 1) {
       // 🔥 시작일 선택: 제한 없이 자유롭게 선택 가능 (오늘 날짜도 허용)
@@ -520,7 +470,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     }
   };
 
-  // 🔥 초기화 로직 (시간 기반 시스템)
+  // 🔥 완전히 새로운 초기화 로직 (resetAllData 의존하지 않음)
   const onReset = () => {
     Alert.alert(
         '설정 초기화',
@@ -534,7 +484,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
             style: 'destructive',
             onPress: async () => {
               try {
-                console.log('=== 시간 기반 설정 초기화 시작 ===');
+                console.log('=== 설정 초기화 프로세스 시작 ===');
 
                 // 로딩 상태 표시
                 Toast.show({
@@ -544,45 +494,52 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   autoHide: false
                 });
 
-                // 🔥 시간 기반 계획 삭제
-                const result = deleteBiblePlan();
+                // 🔥 1. MMKV 스토리지 초기화
+                try {
+                  // 일독 관련 MMKV 키들 삭제
+                  const keysToDelete = [
+                    'bible_plan_data',
+                    'bible_reading_cache',
+                    'reading_progress',
+                    'calender'
+                  ];
 
-                if (result.success) {
-                  // 🔥 기존 초기화 로직도 함께 실행 (호환성)
-                  try {
-                    // MMKV 스토리지 초기화
-                    const keysToDelete = [
-                      'bible_plan_data',
-                      'bible_reading_cache',
-                      'reading_progress',
-                      'calender'
-                    ];
-
-                    keysToDelete.forEach(key => {
-                      try {
-                        defaultStorage.delete(key);
-                        console.log(`MMKV 키 삭제 완료: ${key}`);
-                      } catch (keyError) {
-                        console.warn(`MMKV 키 삭제 실패 (무시 가능): ${key}`, keyError);
-                      }
-                    });
-
-                    // SQLite 데이터 초기화
-                    await bibleSetting('UPDATE reading_table SET read = "F"');
-                    console.log('SQLite reading_table 초기화 완료');
-
-                    // Redux 상태 초기화
-                    if (typeof store !== 'undefined' && store.dispatch) {
-                      store.dispatch(bibleSelectSlice.actions.reset());
-                      store.dispatch(illdocSelectSlice.actions.reset());
-                      store.dispatch(bibleTextSlice.actions.reset());
-                      console.log('Redux 상태 초기화 완료');
+                  keysToDelete.forEach(key => {
+                    try {
+                      defaultStorage.delete(key);
+                      console.log(`MMKV 키 삭제 완료: ${key}`);
+                    } catch (keyError) {
+                      console.warn(`MMKV 키 삭제 실패 (무시 가능): ${key}`, keyError);
                     }
-                  } catch (legacyError) {
-                    console.warn('기존 시스템 초기화 중 오류 (계속 진행):', legacyError);
-                  }
+                  });
 
-                  // 로컬 상태 초기화
+                  console.log('MMKV 초기화 완료');
+                } catch (mmkvError) {
+                  console.error('MMKV 초기화 오류 (계속 진행):', mmkvError);
+                }
+
+                // 🔥 2. SQLite 데이터 초기화
+                try {
+                  await bibleSetting('UPDATE reading_table SET read = "F"');
+                  console.log('SQLite reading_table 초기화 완료');
+                } catch (sqlError) {
+                  console.error('SQLite 초기화 오류 (계속 진행):', sqlError);
+                }
+
+                // 🔥 3. Redux 상태 초기화
+                try {
+                  if (typeof store !== 'undefined' && store.dispatch) {
+                    store.dispatch(bibleSelectSlice.actions.reset());
+                    store.dispatch(illdocSelectSlice.actions.reset());
+                    store.dispatch(bibleTextSlice.actions.reset());
+                    console.log('Redux 상태 초기화 완료');
+                  }
+                } catch (reduxError) {
+                  console.error('Redux 초기화 오류 (무시 가능):', reduxError);
+                }
+
+                // 🔥 4. 로컬 컴포넌트 상태 초기화
+                try {
                   setPlanData(null);
                   setMissedCount(0);
                   setSelectedPlanType('');
@@ -594,33 +551,79 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                     end: null
                   });
 
-                  // 바텀시트 닫기
+                  console.log('로컬 상태 초기화 완료');
+                } catch (stateError) {
+                  console.error('로컬 상태 초기화 오류:', stateError);
+                }
+
+                // 🔥 5. 바텀시트 닫기
+                try {
                   if (isOpen && typeof onClose === 'function') {
                     onClose();
                   }
+                } catch (closeError) {
+                  console.warn('바텀시트 닫기 오류 (무시 가능):', closeError);
+                }
 
+                // 🔥 6. 상위 컴포넌트 새로고침 (강화된 버전)
+                const triggerRefresh = () => {
+                  try {
+                    if (typeof onTrigger === 'function') {
+                      onTrigger();
+                    }
+                  } catch (triggerError) {
+                    console.warn('새로고침 트리거 오류:', triggerError);
+                  }
+                };
+
+                // 즉시 실행
+                console.log('🔄 Setting: Triggering immediate refresh');
+                triggerRefresh();
+
+                // 다중 지연 실행으로 확실한 전파
+                const delays = [50, 100, 200, 300, 500, 800, 1200, 2000, 3000];
+                delays.forEach((delay, index) => {
+                  setTimeout(() => {
+                    console.log(`🔄 Setting: Triggering refresh ${index + 1} (${delay}ms 후)`);
+                    triggerRefresh();
+                  }, delay);
+                });
+
+                // 🔥 7. 성공 메시지 표시
+                setTimeout(() => {
+                  Toast.hide();
                   Toast.show({
                     type: 'success',
                     text1: '초기화 완료',
-                    text2: '새로운 시간 기반 계획을 설정해보세요'
+                    text2: '모든 읽기 기록이 초기화되었습니다',
+                    visibilityTime: 3000
                   });
+                }, 1500);
 
-                  // 상위 컴포넌트에 변경사항 알림
-                  onTrigger();
-
-                } else {
-                  Toast.show({
-                    type: 'error',
-                    text1: result.errorMessage || '초기화 실패'
-                  });
-                }
+                console.log('=== 설정 초기화 프로세스 완료 ===');
 
               } catch (error) {
-                console.error('❌ 초기화 실패:', error);
-                Toast.show({
-                  type: 'error',
-                  text1: '초기화 중 오류가 발생했습니다'
-                });
+                console.error('초기화 중 최종 오류 발생:', error);
+
+                // 오류가 발생해도 부분 성공일 수 있으므로 일부 작업은 계속 진행
+                setTimeout(() => {
+                  Toast.hide();
+                  Toast.show({
+                    type: 'error', // 🔥 'warning'을 'error'로 변경
+                    text1: '부분 초기화 완료',
+                    text2: '일부 데이터는 초기화되었습니다. 앱을 재시작하면 완전히 정리됩니다.',
+                    visibilityTime: 4000
+                  });
+                }, 1000);
+
+                // 그래도 새로고침은 시도
+                try {
+                  if (typeof onTrigger === 'function') {
+                    onTrigger();
+                  }
+                } catch (triggerError) {
+                  console.warn('최종 새로고침 트리거 실패:', triggerError);
+                }
               }
             }
           }
@@ -641,7 +644,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     }
   };
 
-  // 🔥 계획 설정 완료 (시간 기반 시스템)
   const handleCompletePlanSetup = () => {
     if (!selectedPlanType) {
       Toast.show({
@@ -659,62 +661,45 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
       return;
     }
 
-    try {
-      const startDate = convertDate('start').toISOString().split('T')[0];
-      const endDate = convertDate('end').toISOString().split('T')[0];
+    const selectedPlan = DETAILED_BIBLE_PLAN_TYPES.find(plan => plan.id === selectedPlanType);
+    if (!selectedPlan) return;
 
-      const formData: BiblePlanFormData = {
-        planType: selectedPlanType,
-        startDate,
-        endDate
-      };
+    const newPlanData = {
+      planType: selectedPlanType,
+      planName: selectedPlan.name,
+      startDate: convertDate('start').toISOString(),
+      targetDate: convertDate('end').toISOString(),
+      totalDays: calculationResult.totalDays,
+      chaptersPerDay: calculationResult.chaptersPerDay,
+      minutesPerDay: calculationResult.minutesPerDay,
+      totalChapters: selectedPlan.totalChapters,
+      currentDay: 1,
+      readChapters: [],
+      createdAt: new Date().toISOString(),
+      dailySchedule: calculationResult.dailySchedule,
+      weeklyBreakdown: calculationResult.weeklyBreakdown
+    };
 
-      const result = createAndSaveBiblePlan(formData);
+    // 데이터 저장
+    saveBiblePlanData(newPlanData);
 
-      if (result.success && result.planData) {
-        // 🔥 기존 UI와 호환되도록 데이터 변환
-        const legacyPlanData = {
-          ...result.planData,
-          targetDate: result.planData.endDate, // 기존 필드명 호환
-          chaptersPerDay: calculationResult.chaptersPerDay,
-          minutesPerDay: calculationResult.minutesPerDay
-        };
+    // 로컬 상태 업데이트
+    setPlanData(newPlanData);
+    setSelectedPlanType('');
+    setCalculationResult(null);
+    onClose();
 
-        // 로컬 상태 업데이트
-        setPlanData(legacyPlanData);
-        setSelectedPlanType('');
-        setCalculationResult(null);
-        onClose();
+    // 성공 메시지
+    Toast.show({
+      type: 'success',
+      text1: `${selectedPlan.name} 일독이 설정되었습니다`,
+      text2: `하루 ${calculationResult.chaptersPerDay}장씩 ${calculationResult.totalDays}일간 진행`
+    });
 
-        const selectedPlan = DETAILED_BIBLE_PLAN_TYPES.find(plan => plan.id === selectedPlanType);
-
-        // 🔥 시간 정보 포함한 성공 메시지
-        Toast.show({
-          type: 'success',
-          text1: `${selectedPlan?.name} 일독이 설정되었습니다`,
-          text2: `하루 평균 ${calculationResult.minutesPerDay}분씩 ${calculationResult.totalDays}일간 진행`
-        });
-
-        // 상위 컴포넌트에 즉시 변경사항 알림
-        onTrigger();
-
-      } else {
-        Toast.show({
-          type: 'error',
-          text1: result.errorMessage || '계획 설정 실패'
-        });
-      }
-
-    } catch (error) {
-      console.error('❌ 시간 기반 계획 설정 실패:', error);
-      Toast.show({
-        type: 'error',
-        text1: '계획 설정 중 오류가 발생했습니다'
-      });
-    }
+    // 상위 컴포넌트에 즉시 변경사항 알림
+    onTrigger();
   };
 
-  // 🔥 기존 UI 코드 완전히 그대로 유지
   return (
       <>
         <ScrollView style={{ backgroundColor: color.white }}>
@@ -919,7 +904,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
           </Box>
         </ScrollView>
 
-        {/* 성경일독 타입 선택 바텀시트 - 기존 UI 완전히 그대로 */}
+        {/* 성경일독 타입 선택 바텀시트 */}
         <Actionsheet isOpen={isOpen} onClose={onClose}>
           <Actionsheet.Content borderTopRadius="15" bg="white">
             {!selectedPlanType ? (
@@ -1027,12 +1012,12 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                           </Text>
                         </Box>
 
-                        {/* 예상 계산결과 - 🔥 시간 기반 정보 표시 */}
+                        {/* 예상 계산결과 - 기존과 동일 */}
                         {calculationResult && (
                             <Box bg="#F0F9FF" p={4} borderRadius="md">
                               <HStack alignItems="center" justifyContent="center" mb={3}>
                                 <Text fontSize="19" color="#37C4B9" fontWeight="600">
-                                  📊 시간 기반 계산결과
+                                  📊 예상 계산결과
                                 </Text>
                               </HStack>
 
