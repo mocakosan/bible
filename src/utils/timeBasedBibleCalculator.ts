@@ -1,686 +1,396 @@
-// src/utils/timeBasedBibleCalculator.ts
-// 🔥 시간 기반 성경 읽기 계획 계산 및 분배
+// utils/timeBasedBibleCalculator.ts
+// 오디오 시간 기반 성경일독 계산 모듈
 
-import { AUDIO_CHAPTER_DATA, getChapterAudioLength, BOOK_ABBREVIATIONS } from './audioChapterData';
+import { BibleStep } from './define';
+import { defaultStorage } from './mmkv';
 
-export interface TimeBasedDailyReading {
-    day: number;
-    date: string;
-    chapters: ChapterReading[];
-    totalMinutes: number;
-    totalSeconds: number;
-}
-
-export interface ChapterReading {
-    book: string;
-    bookName: string;
+// 타입 정의
+export interface AudioChapterData {
+    book: number;
     chapter: number;
     minutes: number;
     seconds: number;
     totalSeconds: number;
-    isRead?: boolean;
 }
 
-export interface TimeBasedBiblePlan {
-    planType: string;
-    planName: string;
-    startDate: string;
-    endDate: string;
-    totalDays: number;
-    targetMinutesPerDay: number;
-    actualMinutesPerDay: number;
-    totalMinutes: number;
-    totalChapters: number;
-    isTimeBasedCalculation: true;
-    currentDay: number;
-    readChapters: ReadChapterStatus[];
-    dailyReadingSchedule: TimeBasedDailyReading[];
-    createdAt: string;
-    version: string;
-}
-
-export interface ReadChapterStatus {
-    book: string;
+export interface TimeBasedReadingStatus {
+    book: number;
     chapter: number;
     date: string;
     isRead: boolean;
     estimatedMinutes: number;
-    day?: number;
 }
 
-/**
- * 성경 계획 타입별 책 목록 정의
- */
-const BIBLE_PLAN_BOOKS: { [key: string]: string[] } = {
-    'whole': [
-        'Gen', 'Exo', 'Lev', 'Num', 'Deu', 'Jos', 'Jdg', 'Rut', '1Sa', '2Sa',
-        '1Ki', '2Ki', '1Ch', '2Ch', 'Ezr', 'Neh', 'Est', 'Job', 'Psa', 'Pro',
-        'Ecc', 'Son', 'Isa', 'Jer', 'Lam', 'Eze', 'Dan', 'Hos', 'Joe', 'Amo',
-        'Oba', 'Jon', 'Mic', 'Nah', 'Hab', 'Zep', 'Hag', 'Zec', 'Mal', 'Mat',
-        'Mar', 'Luk', 'Joh', 'Act', 'Rom', '1Co', '2Co', 'Gal', 'Eph', 'Phi',
-        'Col', '1Th', '2Th', '1Ti', '2Ti', 'Tit', 'Phm', 'Heb', 'Jam', '1Pe',
-        '2Pe', '1Jo', '2Jo', '3Jo', 'Jud', 'Rev'
-    ],
-    'ot': [
-        'Gen', 'Exo', 'Lev', 'Num', 'Deu', 'Jos', 'Jdg', 'Rut', '1Sa', '2Sa',
-        '1Ki', '2Ki', '1Ch', '2Ch', 'Ezr', 'Neh', 'Est', 'Job', 'Psa', 'Pro',
-        'Ecc', 'Son', 'Isa', 'Jer', 'Lam', 'Eze', 'Dan', 'Hos', 'Joe', 'Amo',
-        'Oba', 'Jon', 'Mic', 'Nah', 'Hab', 'Zep', 'Hag', 'Zec', 'Mal'
-    ],
-    'nt': [
-        'Mat', 'Mar', 'Luk', 'Joh', 'Act', 'Rom', '1Co', '2Co', 'Gal', 'Eph',
-        'Phi', 'Col', '1Th', '2Th', '1Ti', '2Ti', 'Tit', 'Phm', 'Heb', 'Jam',
-        '1Pe', '2Pe', '1Jo', '2Jo', '3Jo', 'Jud', 'Rev'
-    ],
-    'psalms': ['Psa'],
-    'gospels': ['Mat', 'Mar', 'Luk', 'Joh'],
-    'pentateuch': ['Gen', 'Exo', 'Lev', 'Num', 'Deu'],
-    'wisdom': ['Job', 'Psa', 'Pro', 'Ecc', 'Son'],
-    'prophets': [
-        'Isa', 'Jer', 'Lam', 'Eze', 'Dan', 'Hos', 'Joe', 'Amo', 'Oba',
-        'Jon', 'Mic', 'Nah', 'Hab', 'Zep', 'Hag', 'Zec', 'Mal'
-    ],
-    'pauline': [
-        'Rom', '1Co', '2Co', 'Gal', 'Eph', 'Phi', 'Col', '1Th', '2Th',
-        '1Ti', '2Ti', 'Tit', 'Phm'
-    ]
-};
+export interface TimeBasedPlanData {
+    planType: string;
+    planName: string;
+    startDate: string;
+    targetDate: string;
+    totalDays: number;
+
+    // 시간 기반 데이터
+    targetMinutesPerDay: number;
+    totalMinutes: number;
+    isTimeBasedCalculation: true;
+
+    // 기존 UI 호환성을 위한 데이터
+    chaptersPerDay: number;
+    totalChapters: number;
+
+    readChapters: TimeBasedReadingStatus[];
+    createdAt: string;
+}
+
+// 오디오 데이터 저장소
+let audioDataMap: Map<string, AudioChapterData> = new Map();
 
 /**
- * 🔥 핵심 함수: 시간 기준으로 장들을 날짜별로 분배
+ * CSV 데이터로부터 오디오 시간 데이터 초기화
  */
-export const divideChaptersByTime = (
-    planType: string,
-    startDate: string,
-    endDate: string
-): TimeBasedBiblePlan => {
-    console.log(`🔥 시간 기반 계획 생성: ${planType}, ${startDate} ~ ${endDate}`);
+export const initializeAudioData = (csvData: any[]) => {
+    audioDataMap.clear();
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (totalDays <= 0) {
-        throw new Error('유효하지 않은 날짜 범위입니다.');
-    }
-
-    // 1. 해당 계획의 모든 장들을 시간 순으로 수집
-    const allChapters = collectAllChapters(planType);
-    console.log(`📚 총 장 수: ${allChapters.length}`);
-
-    // 2. 총 시간 계산
-    const totalSeconds = allChapters.reduce((sum, ch) => sum + ch.totalSeconds, 0);
-    const totalMinutes = Math.round(totalSeconds / 60);
-    const targetMinutesPerDay = Math.round(totalMinutes / totalDays);
-
-    console.log(`⏰ 총 시간: ${totalMinutes}분, 하루 목표: ${targetMinutesPerDay}분`);
-
-    // 3. 시간 기준으로 날짜별 분배
-    const dailySchedule = distributeChaptersByTime(allChapters, totalDays, startDate);
-
-    // 4. 실제 평균 시간 계산
-    const actualMinutesPerDay = Math.round(
-        dailySchedule.reduce((sum, day) => sum + day.totalMinutes, 0) / totalDays
-    );
-
-    const plan: TimeBasedBiblePlan = {
-        planType,
-        planName: getPlanName(planType),
-        startDate,
-        endDate,
-        totalDays,
-        targetMinutesPerDay,
-        actualMinutesPerDay,
-        totalMinutes,
-        totalChapters: allChapters.length,
-        isTimeBasedCalculation: true,
-        currentDay: 1,
-        readChapters: [],
-        dailyReadingSchedule: dailySchedule,
-        createdAt: new Date().toISOString(),
-        version: '3.0_time_based'
+    const bookMapping: { [key: string]: number } = {
+        'Gen': 1, 'Exo': 2, 'Lev': 3, 'Num': 4, 'Deu': 5, 'Jos': 6, 'Jdg': 7, 'Rut': 8,
+        '1Sa': 9, '2Sa': 10, '1Ki': 11, '2Ki': 12, '1Ch': 13, '2Ch': 14, 'Ezr': 15, 'Neh': 16,
+        'Est': 17, 'Job': 18, 'Psa': 19, 'Pro': 20, 'Ecc': 21, 'Son': 22, 'Isa': 23, 'Jer': 24,
+        'Lam': 25, 'Eze': 26, 'Dan': 27, 'Hos': 28, 'Joe': 29, 'Amo': 30, 'Oba': 31, 'Jon': 32,
+        'Mic': 33, 'Nah': 34, 'Hab': 35, 'Zep': 36, 'Hag': 37, 'Zec': 38, 'Mal': 39,
+        'Mat': 40, 'Mar': 41, 'Luk': 42, 'Joh': 43, 'Act': 44, 'Rom': 45, '1Co': 46, '2Co': 47,
+        'Gal': 48, 'Eph': 49, 'Phi': 50, 'Col': 51, '1Th': 52, '2Th': 53, '1Ti': 54, '2Ti': 55,
+        'Tit': 56, 'Phm': 57, 'Heb': 58, 'Jam': 59, '1Pe': 60, '2Pe': 61, '1Jo': 62, '2Jo': 63,
+        '3Jo': 64, 'Jud': 65, 'Rev': 66
     };
 
-    console.log(`✅ 시간 기반 계획 생성 완료: 실제 평균 ${actualMinutesPerDay}분/일`);
-    return plan;
-};
+    csvData.forEach(row => {
+        const filename = row.filename;
+        const duration = row.duration;
 
-/**
- * 계획 타입에 따른 모든 장 수집
- */
-const collectAllChapters = (planType: string): ChapterReading[] => {
-    const books = BIBLE_PLAN_BOOKS[planType] || BIBLE_PLAN_BOOKS['whole'];
-    const chapters: ChapterReading[] = [];
+        if (filename && duration) {
+            const match = filename.match(/^([A-Za-z0-9]+)(\d{3})$/);
+            if (match) {
+                const bookCode = match[1];
+                const chapter = parseInt(match[2], 10);
+                const bookNumber = bookMapping[bookCode];
 
-    books.forEach(bookAbbr => {
-        const bookData = AUDIO_CHAPTER_DATA[bookAbbr];
-        if (bookData && bookData.length > 0) {
-            // 실제 데이터가 있는 경우
-            bookData.forEach(chapterData => {
-                chapters.push({
-                    book: bookAbbr,
-                    bookName: BOOK_ABBREVIATIONS[bookAbbr] || bookAbbr,
-                    chapter: chapterData.chapter,
-                    minutes: chapterData.minutes,
-                    seconds: chapterData.seconds,
-                    totalSeconds: chapterData.totalSeconds,
-                    isRead: false
-                });
-            });
-        } else {
-            // 데이터가 없는 경우 기본 장 수로 생성
-            const defaultChapterCounts = getDefaultChapterCount(bookAbbr);
-            for (let i = 1; i <= defaultChapterCounts; i++) {
-                const estimatedSeconds = getChapterAudioLength(bookAbbr, i);
-                chapters.push({
-                    book: bookAbbr,
-                    bookName: BOOK_ABBREVIATIONS[bookAbbr] || bookAbbr,
-                    chapter: i,
-                    minutes: Math.floor(estimatedSeconds / 60),
-                    seconds: estimatedSeconds % 60,
-                    totalSeconds: estimatedSeconds,
-                    isRead: false
-                });
+                if (bookNumber) {
+                    const [minutes, seconds] = duration.split(':').map(Number);
+                    const totalSeconds = minutes * 60 + seconds;
+
+                    const key = `${bookNumber}_${chapter}`;
+                    audioDataMap.set(key, {
+                        book: bookNumber,
+                        chapter: chapter,
+                        minutes: minutes,
+                        seconds: seconds,
+                        totalSeconds: totalSeconds
+                    });
+                }
             }
         }
     });
 
-    return chapters;
+    console.log(`✅ 오디오 데이터 ${audioDataMap.size}개 초기화 완료`);
 };
 
 /**
- * 책별 기본 장 수 반환
+ * 특정 장의 오디오 재생 시간 가져오기 (분 단위)
  */
-const getDefaultChapterCount = (bookAbbr: string): number => {
-    const chapterCounts: { [key: string]: number } = {
-        'Gen': 50, 'Exo': 40, 'Lev': 27, 'Num': 36, 'Deu': 34,
-        'Jos': 24, 'Jdg': 21, 'Rut': 4, '1Sa': 31, '2Sa': 24,
-        '1Ki': 22, '2Ki': 25, '1Ch': 29, '2Ch': 36, 'Ezr': 10,
-        'Neh': 13, 'Est': 10, 'Job': 42, 'Psa': 150, 'Pro': 31,
-        'Ecc': 12, 'Son': 8, 'Isa': 66, 'Jer': 52, 'Lam': 5,
-        'Eze': 48, 'Dan': 12, 'Hos': 14, 'Joe': 3, 'Amo': 9,
-        'Oba': 1, 'Jon': 4, 'Mic': 7, 'Nah': 3, 'Hab': 3,
-        'Zep': 3, 'Hag': 2, 'Zec': 14, 'Mal': 4, 'Mat': 28,
-        'Mar': 16, 'Luk': 24, 'Joh': 21, 'Act': 28, 'Rom': 16,
-        '1Co': 16, '2Co': 13, 'Gal': 6, 'Eph': 6, 'Phi': 4,
-        'Col': 4, '1Th': 5, '2Th': 3, '1Ti': 6, '2Ti': 4,
-        'Tit': 3, 'Phm': 1, 'Heb': 13, 'Jam': 5, '1Pe': 5,
-        '2Pe': 3, '1Jo': 5, '2Jo': 1, '3Jo': 1, 'Jud': 1, 'Rev': 22
+export const getChapterAudioMinutes = (book: number, chapter: number): number => {
+    const key = `${book}_${chapter}`;
+    const data = audioDataMap.get(key);
+
+    if (data) {
+        return data.minutes + (data.seconds / 60);
+    }
+
+    // 기본값: 평균 3분 30초
+    return 3.5;
+};
+
+/**
+ * 계획 범위의 전체 오디오 시간 계산
+ */
+export const calculateTotalMinutes = (planType: string): number => {
+    const bookRange = getBookRangeForPlan(planType);
+    let totalMinutes = 0;
+
+    for (let book = bookRange.start; book <= bookRange.end; book++) {
+        const bookInfo = BibleStep.find(step => step.index === book);
+        if (bookInfo) {
+            for (let chapter = 1; chapter <= bookInfo.count; chapter++) {
+                totalMinutes += getChapterAudioMinutes(book, chapter);
+            }
+        }
+    }
+
+    return Math.round(totalMinutes);
+};
+
+/**
+ * 계획 유형에 따른 성경 범위 가져오기
+ */
+const getBookRangeForPlan = (planType: string): { start: number; end: number } => {
+    switch (planType) {
+        case 'full_bible':
+            return { start: 1, end: 66 };
+        case 'old_testament':
+            return { start: 1, end: 39 };
+        case 'new_testament':
+            return { start: 40, end: 66 };
+        case 'pentateuch':
+            return { start: 1, end: 5 };
+        case 'psalms':
+            return { start: 19, end: 19 };
+        default:
+            return { start: 1, end: 66 };
+    }
+};
+
+/**
+ * 시간 기반 일독 계획 생성
+ */
+export const createTimeBasedPlan = (
+    planType: string,
+    planName: string,
+    startDate: string,
+    targetDate: string
+): TimeBasedPlanData => {
+    const start = new Date(startDate);
+    const end = new Date(targetDate);
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // 전체 오디오 시간 계산
+    const totalMinutes = calculateTotalMinutes(planType);
+    const targetMinutesPerDay = Math.ceil(totalMinutes / totalDays);
+
+    // 전체 장수 계산 (UI 표시용)
+    const bookRange = getBookRangeForPlan(planType);
+    let totalChapters = 0;
+    for (let book = bookRange.start; book <= bookRange.end; book++) {
+        const bookInfo = BibleStep.find(step => step.index === book);
+        if (bookInfo) {
+            totalChapters += bookInfo.count;
+        }
+    }
+
+    // UI 표시용 평균 장수 계산
+    const averageMinutesPerChapter = totalMinutes / totalChapters;
+    const chaptersPerDay = Math.round(targetMinutesPerDay / averageMinutesPerChapter);
+
+    return {
+        planType,
+        planName,
+        startDate,
+        targetDate,
+        totalDays,
+        targetMinutesPerDay,
+        totalMinutes,
+        isTimeBasedCalculation: true,
+        chaptersPerDay,
+        totalChapters,
+        readChapters: [],
+        createdAt: new Date().toISOString()
     };
-
-    return chapterCounts[bookAbbr] || 1;
 };
 
 /**
- * 🔥 시간 기준으로 장들을 날짜별로 분배하는 핵심 알고리즘
+ * 오늘 읽어야 할 장들 계산 (시간 기반)
  */
-const distributeChaptersByTime = (
-    chapters: ChapterReading[],
-    totalDays: number,
-    startDate: string
-): TimeBasedDailyReading[] => {
-    console.log(`📊 시간 기반 분배 시작: ${chapters.length}장을 ${totalDays}일에 분배`);
+export const getTodayChaptersTimeBase = (planData: TimeBasedPlanData): TimeBasedReadingStatus[] => {
+    const currentDay = getCurrentDay(planData.startDate);
+    const targetMinutes = planData.targetMinutesPerDay;
 
-    const schedule: TimeBasedDailyReading[] = [];
-    const totalSeconds = chapters.reduce((sum, ch) => sum + ch.totalSeconds, 0);
-    const targetSecondsPerDay = Math.round(totalSeconds / totalDays);
-
-    console.log(`⏱️ 하루 목표 시간: ${Math.round(targetSecondsPerDay / 60)}분`);
-
-    let currentDayChapters: ChapterReading[] = [];
-    let currentDaySeconds = 0;
-    let chapterIndex = 0;
-
-    for (let day = 1; day <= totalDays; day++) {
-        const currentDate = new Date(startDate);
-        currentDate.setDate(currentDate.getDate() + day - 1);
-
-        // 하루치 장들 수집
-        while (chapterIndex < chapters.length) {
-            const chapter = chapters[chapterIndex];
-
-            // 현재 장을 추가했을 때 목표 시간을 초과하는지 확인
-            const wouldExceedTarget = currentDaySeconds + chapter.totalSeconds > targetSecondsPerDay;
-            const hasChaptersAlready = currentDayChapters.length > 0;
-            const isLastDay = day === totalDays;
-
-            // 목표 시간 초과 조건
-            if (wouldExceedTarget && hasChaptersAlready && !isLastDay) {
-                // 다음 날로 넘김
-                break;
-            }
-
-            // 장 추가
-            currentDayChapters.push({ ...chapter });
-            currentDaySeconds += chapter.totalSeconds;
-            chapterIndex++;
-
-            // 목표 시간에 도달했고 마지막 날이 아니면 다음 날로
-            if (currentDaySeconds >= targetSecondsPerDay && !isLastDay) {
-                break;
-            }
-        }
-
-        // 최소 1장은 배정되도록 보장
-        if (currentDayChapters.length === 0 && chapterIndex < chapters.length) {
-            const chapter = chapters[chapterIndex];
-            currentDayChapters.push({ ...chapter });
-            currentDaySeconds += chapter.totalSeconds;
-            chapterIndex++;
-        }
-
-        // 하루치 일정 생성
-        const daySchedule: TimeBasedDailyReading = {
-            day,
-            date: currentDate.toISOString().split('T')[0],
-            chapters: [...currentDayChapters],
-            totalMinutes: Math.round(currentDaySeconds / 60),
-            totalSeconds: currentDaySeconds
-        };
-
-        schedule.push(daySchedule);
-
-        console.log(`📅 ${day}일차: ${currentDayChapters.length}장, ${Math.round(currentDaySeconds / 60)}분`);
-
-        // 다음 날을 위해 초기화
-        currentDayChapters = [];
-        currentDaySeconds = 0;
-
-        // 모든 장을 배정했으면 종료
-        if (chapterIndex >= chapters.length) {
-            console.log(`✅ 모든 장 배정 완료 (${day}일차에서 완료)`);
-            break;
-        }
-    }
-
-    console.log(`📊 분배 완료: ${schedule.length}일 일정 생성`);
-    return schedule;
-};
-
-/**
- * 오늘 읽을 장들 가져오기
- */
-export const getTodayChaptersFromPlan = (plan: TimeBasedBiblePlan): ChapterReading[] => {
-    try {
-        const currentDay = getCurrentDayFromPlan(plan);
-        const todaySchedule = plan.dailyReadingSchedule.find(schedule => schedule.day === currentDay);
-
-        if (!todaySchedule) {
-            console.log(`📅 ${currentDay}일차 일정 없음`);
-            return [];
-        }
-
-        // 읽기 상태 업데이트
-        const chaptersWithReadStatus = todaySchedule.chapters.map(chapter => ({
-            ...chapter,
-            isRead: isChapterRead(plan, chapter.book, chapter.chapter)
-        }));
-
-        console.log(`📖 오늘(${currentDay}일차) 읽을 장: ${chaptersWithReadStatus.length}개`);
-        return chaptersWithReadStatus;
-
-    } catch (error) {
-        console.error('오늘 읽을 장 가져오기 오류:', error);
-        return [];
-    }
-};
-
-/**
- * 현재 날짜 계산
- */
-export const getCurrentDayFromPlan = (plan: TimeBasedBiblePlan): number => {
-    try {
-        const today = new Date();
-        const startDate = new Date(plan.startDate);
-
-        // 시간 차이를 일 단위로 계산
-        const timeDiff = today.getTime() - startDate.getTime();
-        const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-
-        // 1일차부터 시작, 총 일수를 넘지 않도록 제한
-        const currentDay = Math.max(1, Math.min(daysDiff + 1, plan.totalDays));
-
-        console.log(`📅 현재 날짜: ${currentDay}일차 (총 ${plan.totalDays}일)`);
-        return currentDay;
-
-    } catch (error) {
-        console.error('현재 날짜 계산 오류:', error);
-        return 1;
-    }
-};
-
-/**
- * 장 읽기 상태 확인
- */
-export const isChapterRead = (plan: TimeBasedBiblePlan, book: string, chapter: number): boolean => {
-    return plan.readChapters.some(
-        read => read.book === book && read.chapter === chapter && read.isRead
-    );
-};
-
-/**
- * 장 읽음 처리
- */
-export const markChapterAsReadInPlan = (
-    plan: TimeBasedBiblePlan,
-    book: string,
-    chapter: number
-): TimeBasedBiblePlan => {
-    try {
-        const chapterSeconds = getChapterAudioLength(book, chapter);
-        const estimatedMinutes = Math.round(chapterSeconds / 60);
-
-        const updatedReadChapters = [...plan.readChapters];
-        const existingIndex = updatedReadChapters.findIndex(
-            r => r.book === book && r.chapter === chapter
-        );
-
-        if (existingIndex >= 0) {
-            // 기존 기록 업데이트
-            updatedReadChapters[existingIndex] = {
-                ...updatedReadChapters[existingIndex],
-                isRead: true,
-                date: new Date().toISOString(),
-                estimatedMinutes
-            };
-        } else {
-            // 새 기록 추가
-            updatedReadChapters.push({
-                book,
-                chapter,
-                date: new Date().toISOString(),
-                isRead: true,
-                estimatedMinutes,
-                day: getCurrentDayFromPlan(plan)
-            });
-        }
-
-        console.log(`✅ 장 읽음 처리: ${book} ${chapter}장 (${estimatedMinutes}분)`);
-
-        return {
-            ...plan,
-            readChapters: updatedReadChapters
-        };
-
-    } catch (error) {
-        console.error('장 읽음 처리 오류:', error);
-        return plan;
-    }
-};
-
-/**
- * 진행률 계산
- */
-export const calculateTimeBasedProgress = (plan: TimeBasedBiblePlan) => {
-    try {
-        const totalChapters = plan.totalChapters;
-        const readChaptersCount = plan.readChapters.filter(r => r.isRead).length;
-        const progressPercentage = totalChapters > 0 ? Math.round((readChaptersCount / totalChapters) * 100) : 0;
-
-        const totalReadMinutes = plan.readChapters
+    // 이미 읽은 장들 제외하고 다음 장부터 시작
+    const readChapterKeys = new Set(
+        planData.readChapters
             .filter(r => r.isRead)
-            .reduce((sum, r) => sum + (r.estimatedMinutes || 0), 0);
+            .map(r => `${r.book}_${r.chapter}`)
+    );
 
-        // 현재 날짜 기준 예상 진행률
-        const currentDay = getCurrentDayFromPlan(plan);
-        const expectedProgressPercentage = Math.round((currentDay / plan.totalDays) * 100);
+    const bookRange = getBookRangeForPlan(planData.planType);
+    const todayChapters: TimeBasedReadingStatus[] = [];
+    let accumulatedMinutes = 0;
 
-        console.log(`📊 진행률: ${progressPercentage}% (${readChaptersCount}/${totalChapters}장)`);
-        console.log(`📊 예상 진행률: ${expectedProgressPercentage}% (${currentDay}일차)`);
+    // 모든 장을 순회하면서 오늘 읽을 장 선택
+    outerLoop: for (let book = bookRange.start; book <= bookRange.end; book++) {
+        const bookInfo = BibleStep.find(step => step.index === book);
+        if (!bookInfo) continue;
 
-        return {
-            progressPercentage,
-            readChapters: readChaptersCount,
-            totalChapters,
-            totalReadMinutes,
-            totalMinutes: plan.totalMinutes,
-            expectedProgressPercentage,
-            currentDay,
-            totalDays: plan.totalDays,
-            isAhead: progressPercentage > expectedProgressPercentage,
-            isBehind: progressPercentage < expectedProgressPercentage - 5, // 5% 이상 뒤처진 경우
-        };
+        for (let chapter = 1; chapter <= bookInfo.count; chapter++) {
+            const key = `${book}_${chapter}`;
 
-    } catch (error) {
-        console.error('진행률 계산 오류:', error);
-        return {
-            progressPercentage: 0,
-            readChapters: 0,
-            totalChapters: plan.totalChapters || 0,
-            totalReadMinutes: 0,
-            totalMinutes: plan.totalMinutes || 0,
-            expectedProgressPercentage: 0,
-            currentDay: 1,
-            totalDays: plan.totalDays || 1,
-            isAhead: false,
-            isBehind: false,
-        };
+            // 이미 읽은 장은 건너뛰기
+            if (readChapterKeys.has(key)) continue;
+
+            const chapterMinutes = getChapterAudioMinutes(book, chapter);
+
+            // 첫 장이거나 시간이 여유있으면 추가
+            if (todayChapters.length === 0 ||
+                accumulatedMinutes + chapterMinutes <= targetMinutes * 1.1) { // 10% 여유
+
+                todayChapters.push({
+                    book,
+                    chapter,
+                    date: new Date().toISOString(),
+                    isRead: false,
+                    estimatedMinutes: Math.round(chapterMinutes)
+                });
+
+                accumulatedMinutes += chapterMinutes;
+
+                // 목표 시간에 충분히 가까우면 종료
+                if (accumulatedMinutes >= targetMinutes * 0.9) {
+                    break outerLoop;
+                }
+            } else {
+                // 목표 시간 초과하면 종료
+                break outerLoop;
+            }
+        }
     }
+
+    return todayChapters;
 };
 
 /**
- * 장 상태 확인 (오늘/어제/놓친/미래/완료)
+ * 장 상태 확인 (시간 기반)
  */
-export const getChapterStatusFromPlan = (
-    plan: TimeBasedBiblePlan,
-    book: string,
+export const getChapterStatusTimeBase = (
+    planData: TimeBasedPlanData,
+    book: number,
     chapter: number
 ): 'today' | 'yesterday' | 'missed' | 'completed' | 'future' | 'normal' => {
-    try {
-        // 읽기 완료 확인
-        if (isChapterRead(plan, book, chapter)) {
-            return 'completed';
+    // 읽기 완료 확인
+    const isRead = planData.readChapters.some(
+        r => r.book === book && r.chapter === chapter && r.isRead
+    );
+    if (isRead) return 'completed';
+
+    // 오늘 읽을 장 확인
+    const todayChapters = getTodayChaptersTimeBase(planData);
+    const isToday = todayChapters.some(
+        ch => ch.book === book && ch.chapter === chapter
+    );
+    if (isToday) return 'today';
+
+    // 계획 범위 내인지 확인
+    const bookRange = getBookRangeForPlan(planData.planType);
+    if (book < bookRange.start || book > bookRange.end) return 'normal';
+
+    // 읽어야 했던 장인지 확인 (시간 기준)
+    const totalReadMinutes = planData.readChapters
+        .filter(r => r.isRead)
+        .reduce((sum, r) => sum + r.estimatedMinutes, 0);
+
+    const currentDay = getCurrentDay(planData.startDate);
+    const shouldHaveReadMinutes = Math.min(
+        currentDay * planData.targetMinutesPerDay,
+        planData.totalMinutes
+    );
+
+    // 이 장까지의 누적 시간 계산
+    let cumulativeMinutes = 0;
+    for (let b = bookRange.start; b <= book; b++) {
+        const bookInfo = BibleStep.find(step => step.index === b);
+        if (!bookInfo) continue;
+
+        const maxChapter = (b === book) ? chapter : bookInfo.count;
+        for (let c = 1; c <= maxChapter; c++) {
+            cumulativeMinutes += getChapterAudioMinutes(b, c);
         }
-
-        const currentDay = getCurrentDayFromPlan(plan);
-
-        // 해당 장이 몇 일차에 해당하는지 찾기
-        let chapterDay = 0;
-        for (const schedule of plan.dailyReadingSchedule) {
-            const found = schedule.chapters.find(ch => ch.book === book && ch.chapter === chapter);
-            if (found) {
-                chapterDay = schedule.day;
-                break;
-            }
-        }
-
-        if (chapterDay === 0) return 'normal'; // 계획에 없는 장
-
-        if (chapterDay === currentDay) return 'today';
-        if (chapterDay === currentDay - 1) return 'yesterday';
-        if (chapterDay < currentDay) return 'missed';
-        if (chapterDay > currentDay) return 'future';
-
-        return 'normal';
-
-    } catch (error) {
-        console.error('장 상태 확인 오류:', error);
-        return 'normal';
     }
+
+    // 읽어야 했던 시간 범위에 포함되는지 확인
+    if (cumulativeMinutes <= shouldHaveReadMinutes) {
+        return 'missed';
+    }
+
+    return 'future';
 };
 
 /**
- * 계획 이름 가져오기
+ * 진행률 계산 (시간 기반)
  */
-const getPlanName = (planType: string): string => {
-    const names: { [key: string]: string } = {
-        'whole': '성경 전체',
-        'ot': '구약성경',
-        'nt': '신약성경',
-        'psalms': '시편',
-        'gospels': '사복음서',
-        'pentateuch': '모세오경',
-        'wisdom': '지혜서',
-        'prophets': '예언서',
-        'pauline': '바울서신'
+export const calculateProgressTimeBase = (planData: TimeBasedPlanData) => {
+    const readChapters = planData.readChapters.filter(r => r.isRead);
+    const readMinutes = readChapters.reduce((sum, r) => sum + r.estimatedMinutes, 0);
+
+    const currentDay = getCurrentDay(planData.startDate);
+    const daysPercentage = Math.min((currentDay / planData.totalDays) * 100, 100);
+
+    return {
+        // 기존 UI 호환성을 위한 데이터
+        chaptersPerDay: planData.chaptersPerDay,
+        totalChapters: planData.totalChapters,
+        readChapters: readChapters.length,
+        progressPercentage: (readChapters.length / planData.totalChapters) * 100,
+
+        // 시간 기반 데이터
+        readMinutes: Math.round(readMinutes),
+        totalMinutes: Math.round(planData.totalMinutes),
+        targetMinutesPerDay: planData.targetMinutesPerDay,
+        timeProgressPercentage: (readMinutes / planData.totalMinutes) * 100,
+
+        daysProgress: {
+            current: currentDay,
+            total: planData.totalDays,
+            percentage: daysPercentage
+        }
     };
-
-    return names[planType] || '성경 읽기';
 };
 
 /**
- * 시간 포맷팅 유틸리티
+ * 현재 날짜 기준 일차 계산
  */
-export const formatTime = (seconds: number): string => {
-    try {
-        if (seconds < 60) {
-            return `${seconds}초`;
-        }
-
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-
-        if (remainingSeconds === 0) {
-            return `${minutes}분`;
-        } else {
-            return `${minutes}분 ${remainingSeconds}초`;
-        }
-
-    } catch (error) {
-        console.error('시간 포맷팅 오류:', error);
-        return '0초';
-    }
+const getCurrentDay = (startDate: string): number => {
+    const start = new Date(startDate);
+    const today = new Date();
+    return Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 };
 
 /**
- * 날짜 포맷팅 유틸리티
+ * 놓친 장 개수 계산 (시간 기반)
  */
-export const formatDate = (dateString: string): string => {
-    try {
-        const date = new Date(dateString);
-        const month = date.getMonth() + 1;
-        const day = date.getDate();
-        const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-        const weekday = weekdays[date.getDay()];
+export const calculateMissedChaptersTimeBase = (planData: TimeBasedPlanData): number => {
+    let missedCount = 0;
+    const bookRange = getBookRangeForPlan(planData.planType);
 
-        return `${month}월 ${day}일 (${weekday})`;
+    // 읽은 장들 Set
+    const readChapterKeys = new Set(
+        planData.readChapters
+            .filter(r => r.isRead)
+            .map(r => `${r.book}_${r.chapter}`)
+    );
 
-    } catch (error) {
-        console.error('날짜 포맷팅 오류:', error);
-        return dateString;
-    }
-};
+    // 현재까지 읽어야 할 시간
+    const currentDay = getCurrentDay(planData.startDate);
+    const shouldHaveReadMinutes = Math.min(
+        currentDay * planData.targetMinutesPerDay,
+        planData.totalMinutes
+    );
 
-/**
- * 계획 유효성 검증
- */
-export const validateTimeBasedPlan = (plan: any): plan is TimeBasedBiblePlan => {
-    try {
-        return (
-            plan &&
-            typeof plan === 'object' &&
-            plan.isTimeBasedCalculation === true &&
-            typeof plan.planType === 'string' &&
-            typeof plan.startDate === 'string' &&
-            typeof plan.endDate === 'string' &&
-            typeof plan.totalDays === 'number' &&
-            Array.isArray(plan.dailyReadingSchedule) &&
-            Array.isArray(plan.readChapters)
-        );
-    } catch (error) {
-        console.error('계획 유효성 검증 오류:', error);
-        return false;
-    }
-};
+    // 순차적으로 장을 확인하면서 놓친 장 계산
+    let accumulatedMinutes = 0;
+    for (let book = bookRange.start; book <= bookRange.end; book++) {
+        const bookInfo = BibleStep.find(step => step.index === book);
+        if (!bookInfo) continue;
 
-/**
- * 통계 정보 계산
- */
-export const calculatePlanStatistics = (plan: TimeBasedBiblePlan) => {
-    try {
-        const progress = calculateTimeBasedProgress(plan);
-        const currentDay = getCurrentDayFromPlan(plan);
+        for (let chapter = 1; chapter <= bookInfo.count; chapter++) {
+            const key = `${book}_${chapter}`;
+            const chapterMinutes = getChapterAudioMinutes(book, chapter);
 
-        // 읽기 속도 계산 (장/일)
-        const daysElapsed = Math.max(1, currentDay - 1);
-        const readingVelocity = daysElapsed > 0 ? progress.readChapters / daysElapsed : 0;
-
-        // 예상 완료일 계산
-        const remainingChapters = plan.totalChapters - progress.readChapters;
-        const estimatedDaysToComplete = readingVelocity > 0 ? Math.ceil(remainingChapters / readingVelocity) : 0;
-
-        // 일정 준수율
-        const adherenceRate = progress.expectedProgressPercentage > 0
-            ? Math.round((progress.progressPercentage / progress.expectedProgressPercentage) * 100)
-            : 100;
-
-        return {
-            ...progress,
-            readingVelocity: Math.round(readingVelocity * 10) / 10, // 소수점 1자리
-            estimatedDaysToComplete,
-            adherenceRate: Math.min(100, adherenceRate), // 100% 초과 방지
-            daysElapsed,
-            remainingDays: Math.max(0, plan.totalDays - currentDay + 1)
-        };
-
-    } catch (error) {
-        console.error('통계 계산 오류:', error);
-        return calculateTimeBasedProgress(plan);
-    }
-};
-
-/**
- * 일정 재조정 (늦어진 경우)
- */
-export const adjustPlanSchedule = (plan: TimeBasedBiblePlan): TimeBasedBiblePlan => {
-    try {
-        const currentDay = getCurrentDayFromPlan(plan);
-        const progress = calculateTimeBasedProgress(plan);
-
-        // 5% 이상 뒤처진 경우에만 재조정
-        if (!progress.isBehind) {
-            return plan;
-        }
-
-        console.log('📈 일정 재조정 시작...');
-
-        // 읽지 않은 장들 수집
-        const unreadChapters: ChapterReading[] = [];
-
-        plan.dailyReadingSchedule.forEach(daySchedule => {
-            if (daySchedule.day >= currentDay) {
-                daySchedule.chapters.forEach(chapter => {
-                    if (!isChapterRead(plan, chapter.book, chapter.chapter)) {
-                        unreadChapters.push(chapter);
-                    }
-                });
+            if (accumulatedMinutes + chapterMinutes <= shouldHaveReadMinutes) {
+                if (!readChapterKeys.has(key)) {
+                    missedCount++;
+                }
+                accumulatedMinutes += chapterMinutes;
+            } else {
+                // 읽어야 할 시간을 초과하면 중단
+                return missedCount;
             }
-        });
-
-        // 남은 일수 계산
-        const remainingDays = Math.max(1, plan.totalDays - currentDay + 1);
-
-        // 새로운 일정 생성
-        const adjustedSchedule = distributeChaptersByTime(
-            unreadChapters,
-            remainingDays,
-            new Date().toISOString().split('T')[0]
-        );
-
-        // 기존 완료된 일정과 새 일정 합치기
-        const finalSchedule = [...plan.dailyReadingSchedule];
-
-        adjustedSchedule.forEach((newDay, index) => {
-            const targetDayIndex = currentDay - 1 + index;
-            if (targetDayIndex < finalSchedule.length) {
-                finalSchedule[targetDayIndex] = {
-                    ...newDay,
-                    day: currentDay + index,
-                    date: finalSchedule[targetDayIndex].date
-                };
-            }
-        });
-
-        console.log('✅ 일정 재조정 완료');
-
-        return {
-            ...plan,
-            dailyReadingSchedule: finalSchedule,
-            version: plan.version + '_adjusted'
-        };
-
-    } catch (error) {
-        console.error('일정 재조정 오류:', error);
-        return plan;
+        }
     }
+
+    return missedCount;
 };

@@ -1,4 +1,4 @@
-// src/components/page/reading/index.tsx - 일독 진행 현황 섹션 수정
+// src/components/page/reading/index.tsx - 일독 진행 현황 섹션
 
 import {useFocusEffect, useIsFocused} from "@react-navigation/native";
 import { useCallback, useEffect, useState } from "react";
@@ -286,9 +286,14 @@ export default function ReadingBibleScreen() {
     };
 
     const getEstimatedMinutes = () => {
+      // 🔥 수정: minutesPerDay 또는 targetMinutesPerDay 사용
       if (planData.minutesPerDay) {
         return planData.minutesPerDay;
       }
+      if (planData.targetMinutesPerDay) {
+        return planData.targetMinutesPerDay;
+      }
+      // 기본값 (장당 4.5분 추정)
       return Math.round(planData.chaptersPerDay * 4.5);
     };
 
@@ -316,10 +321,32 @@ export default function ReadingBibleScreen() {
                 📊 일독 진행 현황
               </Text>
 
+              {/* 🔥 추가: 시간 기반 진행률 표시 */}
+              {planData.isTimeBasedCalculation && progress.timeProgressPercentage !== undefined && (
+                  <Box>
+                    <HStack justifyContent="space-between" mb={2}>
+                      <Text fontSize="18" color="#666">
+                        시간 진행률
+                      </Text>
+                      <Text fontSize="18" fontWeight="600" color={getStatusColor(progress.timeProgressPercentage)}>
+                        {progress.timeProgressPercentage.toFixed(1)}%
+                      </Text>
+                    </HStack>
+                    <Progress
+                        value={progress.timeProgressPercentage}
+                        bg="#E0E0E0"
+                        _filledTrack={{ bg: '#2196F3' }}
+                        size="sm"
+                        borderRadius="full"
+                    />
+                  </Box>
+              )}
+
+              {/* 기존 장 기반 진행률 */}
               <Box>
                 <HStack justifyContent="space-between" mb={2}>
                   <Text fontSize="18" color="#666">
-                    진행률
+                    {planData.isTimeBasedCalculation ? '장 진행률' : '진행률'}
                   </Text>
                   <Text fontSize="18" fontWeight="600" color={getStatusColor(progress.progressPercentage)}>
                     {progress.progressPercentage.toFixed(1)}%
@@ -343,6 +370,19 @@ export default function ReadingBibleScreen() {
                     읽은 장
                   </Text>
                 </VStack>
+
+                {/* 🔥 추가: 읽은 시간 표시 */}
+                {planData.isTimeBasedCalculation && progress.readMinutes !== undefined && (
+                    <VStack alignItems="center">
+                      <Text fontSize="24" fontWeight="600" color="#2196F3">
+                        {progress.readMinutes}
+                      </Text>
+                      <Text fontSize="16" color="#666">
+                        읽은 시간(분)
+                      </Text>
+                    </VStack>
+                )}
+
                 <VStack alignItems="center">
                   <Text fontSize="24" fontWeight="600" color="#666">
                     {planData.totalChapters || progress.totalChapters || 0}
@@ -506,7 +546,7 @@ export default function ReadingBibleScreen() {
                       {planData.chaptersPerDay}장
                     </Text>
                     <Text fontSize="18" color="#37C4B9" ml={1} fontWeight="700">
-                      / {planData.minutesPerDay}분
+                      / {planData.minutesPerDay || planData.targetMinutesPerDay || Math.round(planData.chaptersPerDay * 4.5)}분
                     </Text>
                   </HStack>
                 </HStack>
