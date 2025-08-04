@@ -307,6 +307,10 @@ const generateDailyReadingPlan = (
 
 // ==================== 오늘 읽을 장 계산 ====================
 export const getTodayChapters = (planData: TimeBasedBiblePlan): TimeBasedReadingStatus[] => {
+    // 데이터 검증
+    if (!planData) return [];
+    if (!planData.readChapters) planData.readChapters = [];
+
     if (!planData.isTimeBasedCalculation) {
         // 기존 로직 사용
         return getTodayChaptersLegacy(planData);
@@ -337,8 +341,8 @@ const calculateTodayChaptersDynamic = (planData: TimeBasedBiblePlan): TimeBasedR
 
     // 이미 읽은 장들 제외
     const readKeys = new Set(
-        planData.readChapters
-            .filter(r => r.isRead)
+        (planData.readChapters || [])
+            .filter(r => r && r.isRead)
             .map(r => `${r.book}_${r.chapter}`)
     );
 
@@ -381,6 +385,10 @@ export const getChapterStatus = (
     book: number,
     chapter: number
 ): 'today' | 'yesterday' | 'missed' | 'completed' | 'future' | 'normal' => {
+    // 데이터 검증
+    if (!planData) return 'normal';
+    if (!planData.readChapters) planData.readChapters = [];
+
     // 읽기 완료 확인
     if (isChapterRead(planData, book, chapter)) {
         return 'completed';
@@ -398,14 +406,14 @@ export const getChapterStatus = (
     if (planData.isTimeBasedCalculation && planData.dailyReadingPlan) {
         // 오늘 읽을 장
         const todayPlan = planData.dailyReadingPlan[currentDay - 1];
-        if (todayPlan?.chapters.some(ch => ch.book === book && ch.chapter === chapter)) {
+        if (todayPlan?.chapters?.some(ch => ch.book === book && ch.chapter === chapter)) {
             return 'today';
         }
 
         // 어제 읽어야 했던 장
         if (currentDay > 1) {
             const yesterdayPlan = planData.dailyReadingPlan[currentDay - 2];
-            if (yesterdayPlan?.chapters.some(ch => ch.book === book && ch.chapter === chapter)) {
+            if (yesterdayPlan?.chapters?.some(ch => ch.book === book && ch.chapter === chapter)) {
                 return 'yesterday';
             }
         }
@@ -413,7 +421,7 @@ export const getChapterStatus = (
         // 과거에 읽어야 했던 장
         for (let day = 0; day < currentDay - 2; day++) {
             const dayPlan = planData.dailyReadingPlan[day];
-            if (dayPlan?.chapters.some(ch => ch.book === book && ch.chapter === chapter)) {
+            if (dayPlan?.chapters?.some(ch => ch.book === book && ch.chapter === chapter)) {
                 return 'missed';
             }
         }
@@ -427,7 +435,24 @@ export const getChapterStatus = (
 
 // ==================== 진행률 계산 ====================
 export const calculateProgress = (planData: TimeBasedBiblePlan) => {
-    const readChapters = planData.readChapters.filter(r => r.isRead);
+    // 데이터 검증
+    if (!planData) {
+        return {
+            chaptersPerDay: 0,
+            totalChapters: 0,
+            readChapters: 0,
+            completedChapters: 0,
+            progressPercentage: 0,
+            daysProgress: {
+                current: 0,
+                total: 0,
+                percentage: 0
+            }
+        };
+    }
+    if (!planData.readChapters) planData.readChapters = [];
+
+    const readChapters = (planData.readChapters || []).filter(r => r && r.isRead);
     const currentDay = getCurrentDay(planData.startDate);
 
     // 시간 기반 계산
@@ -476,6 +501,10 @@ export const calculateProgress = (planData: TimeBasedBiblePlan) => {
 
 // ==================== 놓친 장 계산 ====================
 export const calculateMissedChapters = (planData: TimeBasedBiblePlan): number => {
+    // 데이터 검증
+    if (!planData) return 0;
+    if (!planData.readChapters) planData.readChapters = [];
+
     const currentDay = getCurrentDay(planData.startDate);
     let missedCount = 0;
 
@@ -483,20 +512,85 @@ export const calculateMissedChapters = (planData: TimeBasedBiblePlan): number =>
         // 오늘 이전까지의 모든 장 확인
         for (let day = 0; day < currentDay - 1 && day < planData.dailyReadingPlan.length; day++) {
             const dayPlan = planData.dailyReadingPlan[day];
-            dayPlan.chapters.forEach(ch => {
-                if (!isChapterRead(planData, ch.book, ch.chapter)) {
-                    missedCount++;
-                }
-            });
+            if (dayPlan?.chapters) {
+                dayPlan.chapters.forEach(ch => {
+                    if (!isChapterRead(planData, ch.book, ch.chapter)) {
+                        missedCount++;
+                    }
+                });
+            }
         }
     } else {
         // 기존 로직
         const shouldHaveRead = Math.min((currentDay - 1) * planData.chaptersPerDay, planData.totalChapters);
-        const actuallyRead = planData.readChapters.filter(r => r.isRead).length;
+        const actuallyRead = (planData.readChapters || []).filter(r => r && r.isRead).length;
         missedCount = Math.max(0, shouldHaveRead - actuallyRead);
     }
 
     return missedCount;
+};
+
+// ==================== 읽기 상태 업데이트 ====================
+export const markChapterAsRead = (
+    planData: TimeBasedBiblePlan,
+    book: number,
+    chapter: number
+): TimeBasedBiblePlan => {
+    // 데이터 검증
+    if (!planData.readChapters) planData.readChapters = [];
+
+    const updatedReadChapters = [...planData.readChapters];
+    const existingIndex = updatedReadChapters.findIndex(
+        r => r && r.book === book && r.chapter === chapter
+    );
+
+    const estimatedMinutes = getChapterAudioMinutes(book, chapter);
+
+    if (existingIndex >= 0) {
+        updatedReadChapters[existingIndex] = {
+            ...updatedReadChapters[existingIndex],
+            isRead: true,
+            date: new Date().toISOString(),
+            estimatedMinutes
+        };
+    } else {
+        updatedReadChapters.push({
+            book,
+            chapter,
+            date: new Date().toISOString(),
+            isRead: true,
+            estimatedMinutes
+        });
+    }
+
+    const updatedPlan = {
+        ...planData,
+        readChapters: updatedReadChapters
+    };
+
+    saveBiblePlanData(updatedPlan);
+    return updatedPlan;
+};
+
+export const markChapterAsUnread = (
+    planData: TimeBasedBiblePlan,
+    book: number,
+    chapter: number
+): TimeBasedBiblePlan => {
+    // 데이터 검증
+    if (!planData.readChapters) planData.readChapters = [];
+
+    const updatedReadChapters = planData.readChapters.filter(
+        r => !(r && r.book === book && r.chapter === chapter)
+    );
+
+    const updatedPlan = {
+        ...planData,
+        readChapters: updatedReadChapters
+    };
+
+    saveBiblePlanData(updatedPlan);
+    return updatedPlan;
 };
 
 // ==================== 유틸리티 함수 ====================
@@ -517,7 +611,7 @@ const getBookRangeForPlan = (planType: string): { start: number; end: number } =
     }
 };
 
-const getCurrentDay = (startDate: string): number => {
+export const getCurrentDay = (startDate: string): number => {
     const start = new Date(startDate);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -526,8 +620,13 @@ const getCurrentDay = (startDate: string): number => {
 };
 
 const isChapterRead = (planData: TimeBasedBiblePlan, book: number, chapter: number): boolean => {
+    // 방어적 코딩: readChapters가 없거나 배열이 아닌 경우
+    if (!planData || !planData.readChapters || !Array.isArray(planData.readChapters)) {
+        return false;
+    }
+
     return planData.readChapters.some(
-        r => r.book === book && r.chapter === chapter && r.isRead
+        r => r && r.book === book && r.chapter === chapter && r.isRead === true
     );
 };
 
@@ -610,8 +709,22 @@ export const saveBiblePlanData = (planData: TimeBasedBiblePlan): void => {
 };
 
 export const loadBiblePlanData = (): TimeBasedBiblePlan | null => {
-    const savedPlan = defaultStorage.getString('bible_reading_plan');
-    return savedPlan ? JSON.parse(savedPlan) : null;
+    try {
+        const savedPlan = defaultStorage.getString('bible_reading_plan');
+        if (!savedPlan) return null;
+
+        const planData = JSON.parse(savedPlan);
+
+        // 데이터 무결성 검사
+        if (!planData.readChapters) {
+            planData.readChapters = [];
+        }
+
+        return planData;
+    } catch (error) {
+        console.error('계획 데이터 로드 실패:', error);
+        return null;
+    }
 };
 
 export const deleteBiblePlanData = (): void => {
