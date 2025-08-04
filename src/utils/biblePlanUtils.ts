@@ -21,6 +21,14 @@ import {
     markChapterAsRead as markChapterAsReadTimeBase,
     markChapterAsUnread as markChapterAsUnreadTimeBase
 } from './timeBasedBibleSystem';
+import {STYLE_PRIORITY} from "./bibleColors";
+
+export interface ChapterStyleInfo {
+    color: string;
+    showExclamation: boolean;
+    priority: number;
+    statusText: string;
+}
 
 // 성경일독 타입 정의 (기존 인터페이스 확장)
 export interface BiblePlanType {
@@ -225,62 +233,71 @@ export const getChapterStyleInfo = (
         bible: string;      // 초록색 (읽은 장)
         blue: string;       // 파란색 (어제 읽어야 했던 장)
         red: string;        // 빨간색 (오늘 읽을 장)
-        gray?: string;      // 회색 (미래 장)
+        gray?: string;      // 회색 (필요시)
         white?: string;     // 흰색 (텍스트용)
     }
 ): ChapterStyleInfo => {
-    // 기본값
+    // 기본값 - 안 읽은 장
     const defaultStyle: ChapterStyleInfo = {
         color: colorTheme.black,
         showExclamation: false,
-        priority: 0,
+        priority: STYLE_PRIORITY.UNREAD,
         statusText: '읽지 않음'
     };
 
-    // 읽은 장은 항상 초록색 (최우선)
+    // 1. 읽은 장은 항상 초록색 (최우선)
     if (isRead) {
         return {
             color: colorTheme.bible, // #4CAF50
             showExclamation: false,
-            priority: 1,
+            priority: STYLE_PRIORITY.READ,
             statusText: '읽음'
         };
     }
 
-    // 계획이 없으면 검정색
+    // 2. 계획이 없으면 검정색
     if (!planData) {
         return defaultStyle;
     }
 
     const status = getChapterStatus(planData, book, chapter);
 
-    // 상태별 스타일 정의 (기존 코드 기준)
+    // 3. 상태별 스타일 정의
     switch (status) {
         case 'today':
-            // 오늘 읽을 장 - 빨간색 (#F44336)
+            // 하루 목표 - 빨간색 (최우선 색깔)
             return {
-                color: colorTheme.red,
+                color: colorTheme.red, // #F44336
                 showExclamation: false,
-                priority: 4,
+                priority: STYLE_PRIORITY.TODAY,
                 statusText: '오늘 읽을 장'
             };
 
         case 'yesterday':
-            // 어제 읽어야 했던 장 - 파란색 (#2196F3) + 느낌표
+            // 어제 읽어야 했던 장 - 파란색 + 느낌표
             return {
-                color: colorTheme.blue,
+                color: colorTheme.blue, // #2196F3
                 showExclamation: true,
-                priority: 3,
+                priority: STYLE_PRIORITY.YESTERDAY,
                 statusText: '어제 읽어야 했던 장'
             };
 
         case 'missed':
-            // 놓친 장 - 검정색 (#000000 or #333333) + 느낌표
+            // 이전에 못 읽은 장 - 검정색 + 느낌표
+            return {
+                color: colorTheme.black, // #000000
+                showExclamation: true,
+                priority: STYLE_PRIORITY.MISSED,
+                statusText: '놓친 장'
+            };
+
+        case 'future':
+            // 미래 장 - 검정색 (안 읽은 장과 동일)
             return {
                 color: colorTheme.black,
-                showExclamation: true,
-                priority: 2,
-                statusText: '놓친 장'
+                showExclamation: false,
+                priority: STYLE_PRIORITY.UNREAD,
+                statusText: '미래 장'
             };
 
         case 'completed':
@@ -288,22 +305,12 @@ export const getChapterStyleInfo = (
             return {
                 color: colorTheme.bible,
                 showExclamation: false,
-                priority: 1,
+                priority: STYLE_PRIORITY.READ,
                 statusText: '읽음'
             };
 
-        case 'future':
-            // 미래 장 - 검정색
-            return {
-                color: colorTheme.black,
-                showExclamation: false,
-                priority: 0,
-                statusText: '예정된 장'
-            };
-
-        case 'normal':
         default:
-            // 계획에 포함되지 않은 장 - 검정색
+            // 안 읽은 장 - 검정색
             return defaultStyle;
     }
 };
