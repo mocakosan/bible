@@ -183,34 +183,19 @@ export const calculateProgress = (planData: BiblePlanData) => {
     if (!planData) {
         return {
             progressPercentage: 0,
-            schedulePercentage: 0,
             readChapters: 0,
-            totalChapters: 0,
-            isOnTrack: false,
-            todayProgress: 0,
-            estimatedTimeToday: '0분',
-            remainingDays: 0
+            totalChapters: 0
         };
     }
 
-    if (planData.isTimeBasedCalculation && planData.dailyPlan) {
-        const completedChapters = planData.readChapters.filter(ch => ch.isRead);
-        const info = calculateProgressInfo(planData.dailyPlan, completedChapters);
+    const readChaptersCount = planData.readChapters?.filter(r => r.isRead).length || 0;
+    const totalChapters = planData.totalChapters || 1189;
 
-        return {
-            progressPercentage: info.totalProgress,
-            schedulePercentage: info.totalProgress, // 시간 기반에서는 동일
-            readChapters: completedChapters.length,
-            totalChapters: planData.totalChapters,
-            isOnTrack: info.isOnTrack,
-            todayProgress: info.todayProgress,
-            estimatedTimeToday: info.estimatedTimeToday,
-            remainingDays: info.remainingDays
-        };
-    }
-
-    // 기존 장 기반 로직
-    return calculateLegacyProgress(planData);
+    return {
+        progressPercentage: (readChaptersCount / totalChapters) * 100,
+        readChapters: readChaptersCount,
+        totalChapters: totalChapters
+    };
 };
 
 /**

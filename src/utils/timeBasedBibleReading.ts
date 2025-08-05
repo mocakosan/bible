@@ -1,7 +1,7 @@
 // utils/timeBasedBibleReading.ts
-// 시간 기반 성경 일독 계산 시스템
+// 시간 기반 성경 일독 계산 시스템 - 개선된 버전
 
-// import { parseCSVTime } from './csvDataParser';
+import { BibleStep } from './define';
 
 // CSV 데이터 타입 정의
 interface ChapterTimeData {
@@ -27,26 +27,6 @@ export interface DailyReadingPlan {
     totalMinutes: number;
     totalSeconds: number;
     formattedTime: string;
-}
-
-// 성경 책별 장 수
-const BIBLE_CHAPTERS: { [key: number]: number } = {
-    1: 50, 2: 40, 3: 27, 4: 36, 5: 34, 6: 24, 7: 21, 8: 4,
-    9: 31, 10: 24, 11: 22, 12: 25, 13: 29, 14: 36, 15: 10, 16: 13,
-    17: 10, 18: 42, 19: 150, 20: 31, 21: 12, 22: 8, 23: 66, 24: 52,
-    25: 5, 26: 48, 27: 12, 28: 14, 29: 3, 30: 9, 31: 1, 32: 4,
-    33: 7, 34: 3, 35: 3, 36: 3, 37: 2, 38: 14, 39: 4,
-    40: 28, 41: 16, 42: 24, 43: 21, 44: 28, 45: 16, 46: 16, 47: 13,
-    48: 6, 49: 6, 50: 4, 51: 4, 52: 5, 53: 3, 54: 6, 55: 4,
-    56: 3, 57: 1, 58: 13, 59: 5, 60: 5, 61: 3, 62: 5, 63: 1,
-    64: 1, 65: 1, 66: 22
-};
-
-// CSV 시간 문자열을 파싱하는 함수
-function parseTimeString(timeStr: string): { minutes: number; seconds: number; totalSeconds: number } {
-    const [minutes, seconds] = timeStr.split(':').map(Number);
-    const totalSeconds = minutes * 60 + seconds;
-    return { minutes, seconds, totalSeconds };
 }
 
 // 시간을 포맷팅하는 함수
@@ -85,11 +65,13 @@ export function createTimeBasedReadingPlan(
     let dailyChapters: DailyReadingPlan['chapters'] = [];
     let dailyTotalSeconds = 0;
 
-    // 선택된 범위의 모든 장을 순회
+    // 선택된 범위의 책들을 순회
     for (let bookNum = selectedBooks[0]; bookNum <= selectedBooks[1]; bookNum++) {
-        const maxChapter = BIBLE_CHAPTERS[bookNum] || 0;
+        const bookInfo = BibleStep.find(step => step.index === bookNum);
+        if (!bookInfo) continue;
 
-        for (let chapter = 1; chapter <= maxChapter; chapter++) {
+        // 각 책의 장들을 순회
+        for (let chapter = 1; chapter <= bookInfo.count; chapter++) {
             // 해당 장의 시간 데이터 찾기
             const timeData = chapterTimeData.find(
                 data => data.book === bookNum && data.chapter === chapter
@@ -97,13 +79,9 @@ export function createTimeBasedReadingPlan(
 
             if (!timeData) continue;
 
-            // 현재 장을 추가했을 때 목표 시간을 초과하는지 확인
-            const wouldExceedTarget = dailyTotalSeconds + timeData.totalSeconds > targetSecondsPerDay;
-
-            // 목표 시간의 90% 이상이면 다음 날로 넘어감 (약간의 유연성 제공)
-            const shouldStartNewDay = wouldExceedTarget && dailyTotalSeconds >= targetSecondsPerDay * 0.9;
-
-            if (shouldStartNewDay && dailyChapters.length > 0) {
+            // 현재 장을 추가했을 때 목표 시간을 크게 초과하는지 확인
+            // 14분을 초과한 상태에서 새로운 장을 추가하려고 할 때
+            if (dailyTotalSeconds > 14 * 60 && timeData.totalSeconds > 0) {
                 // 현재까지의 일일 계획 저장
                 plan.push({
                     day: currentDay,
@@ -149,7 +127,7 @@ export function createTimeBasedReadingPlan(
 }
 
 /**
- * 성경 일독 설정 화면용 예상 계산
+ * 성경 일독 설정 화면용 예상 계산 (하루 목표 시간 정확히 계산)
  */
 export function calculateReadingEstimate(
     targetMinutesPerDay: number,
@@ -160,6 +138,7 @@ export function calculateReadingEstimate(
     endDate: Date;
     averageTimePerDay: string;
     totalReadingTime: string;
+    dailyTimeMinutes: number;
 } {
     const startDate = new Date();
     const plan = createTimeBasedReadingPlan(
@@ -175,14 +154,16 @@ export function calculateReadingEstimate(
     // 전체 읽기 시간 계산
     const totalSeconds = plan.reduce((sum, day) => sum + day.totalSeconds, 0);
 
-    // 평균 일일 읽기 시간
+    // 평균 일일 읽기 시간 (실제 계획된 시간)
     const avgSecondsPerDay = totalDays > 0 ? Math.round(totalSeconds / totalDays) : 0;
+    const avgMinutesPerDay = Math.round(avgSecondsPerDay / 60);
 
     return {
         totalDays,
         endDate,
         averageTimePerDay: formatTime(avgSecondsPerDay),
-        totalReadingTime: formatTime(totalSeconds)
+        totalReadingTime: formatTime(totalSeconds),
+        dailyTimeMinutes: avgMinutesPerDay
     };
 }
 
@@ -198,6 +179,7 @@ export function calculateProgressInfo(
     estimatedTimeToday: string;
     remainingDays: number;
     isOnTrack: boolean;
+    todayPlan?: DailyReadingPlan;
 } {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -245,7 +227,8 @@ export function calculateProgressInfo(
         todayProgress: Math.round(todayProgress),
         estimatedTimeToday: todayPlan.formattedTime,
         remainingDays,
-        isOnTrack
+        isOnTrack,
+        todayPlan
     };
 }
 
@@ -280,28 +263,6 @@ export function generateExamplePlan(): void {
 // UI 컴포넌트용 헬퍼 함수들
 
 /**
- * 성경 리스트 화면에서 각 장의 상태 결정
- */
-export function getChapterStatus(
-    book: number,
-    chapter: number,
-    todayChapters: { book: number; chapter: number }[],
-    completedChapters: { book: number; chapter: number }[]
-): 'today' | 'completed' | 'future' {
-    const isCompleted = completedChapters.some(
-        c => c.book === book && c.chapter === chapter
-    );
-    if (isCompleted) return 'completed';
-
-    const isToday = todayChapters.some(
-        c => c.book === book && c.chapter === chapter
-    );
-    if (isToday) return 'today';
-
-    return 'future';
-}
-
-/**
  * 하루 목표 시간 표시 포맷
  */
 export function formatDailyTarget(minutes: number): string {
@@ -311,4 +272,37 @@ export function formatDailyTarget(minutes: number): string {
         return mins > 0 ? `${hours}시간 ${mins}분` : `${hours}시간`;
     }
     return `${minutes}분`;
+}
+
+/**
+ * 성경 리스트 화면에서 하루 목표 시간 계산
+ */
+export function calculateDailyTargetTime(dailyPlan: DailyReadingPlan): string {
+    return formatTime(dailyPlan.totalSeconds);
+}
+
+/**
+ * 성경 일독 설정 바텀시트 모달창에서 예상 계산 결과 표시
+ */
+export function getEstimatedPlanInfo(
+    planType: string,
+    startDate: Date,
+    endDate: Date,
+    chapterTimeData: ChapterTimeData[]
+): {
+    dailyTargetTime: string;
+    totalDays: number;
+    estimatedEndDate: Date;
+} {
+    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // 전체 시간 계산
+    const totalSeconds = chapterTimeData.reduce((sum, ch) => sum + ch.totalSeconds, 0);
+    const dailyTargetSeconds = Math.ceil(totalSeconds / totalDays);
+
+    return {
+        dailyTargetTime: formatTime(dailyTargetSeconds),
+        totalDays,
+        estimatedEndDate: endDate
+    };
 }

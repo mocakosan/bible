@@ -30,6 +30,22 @@ export interface BiblePlanTypeDetail {
     bookRange?: [number, number];
 }
 
+// 추가 타입 정의
+export interface ChapterReading {
+    bookIndex: number;
+    bookName: string;
+    chapter: number;
+    isCompleted?: boolean;
+}
+
+export interface DailyReading {
+    date: Date;
+    dayNumber: number;
+    chapters: ChapterReading[];
+    totalChapters: number;
+    completedChapters?: number;
+}
+
 // 성경 일독 계획 타입 상세 정보
 export const DETAILED_BIBLE_PLAN_TYPES: BiblePlanTypeDetail[] = [
     {
@@ -208,6 +224,60 @@ export function getTotalChaptersForPlanType(planType: string): number {
 }
 
 /**
+ * 특정 날짜의 읽기 계획 가져오기
+ */
+export function getDailyReading(
+    planType: string,
+    startDate: Date,
+    targetDate: Date
+): DailyReading {
+    const plan = DETAILED_BIBLE_PLAN_TYPES.find(p => p.id === planType);
+    if (!plan) {
+        throw new Error(`Invalid plan type: ${planType}`);
+    }
+
+    // 날짜 차이 계산
+    const dayNumber = Math.floor((targetDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // 전체 일독 계획 일수 계산
+    const totalDays = plan.estimatedDays;
+    const chaptersPerDay = Math.ceil(plan.totalChapters / totalDays);
+
+    // 해당 날짜의 시작 장과 끝 장 계산
+    const startChapterIndex = (dayNumber - 1) * chaptersPerDay;
+    const endChapterIndex = Math.min(startChapterIndex + chaptersPerDay, plan.totalChapters);
+
+    const chapters: ChapterReading[] = [];
+    let currentChapterIndex = 0;
+
+    // 각 책별로 장 계산
+    for (const book of plan.books) {
+        const bookInfo = BibleStep.find(b => b.index === book);
+        if (!bookInfo) continue;
+
+        for (let chapter = 1; chapter <= bookInfo.count; chapter++) {
+            if (currentChapterIndex >= startChapterIndex && currentChapterIndex < endChapterIndex) {
+                chapters.push({
+                    bookIndex: book,
+                    bookName: bookInfo.name,
+                    chapter: chapter,
+                    isCompleted: false
+                });
+            }
+            currentChapterIndex++;
+        }
+    }
+
+    return {
+        date: targetDate,
+        dayNumber,
+        chapters,
+        totalChapters: chapters.length,
+        completedChapters: 0
+    };
+}
+
+/**
  * 진도 계산 - 통합 버전
  */
 export function calculateProgressWithPlanType(
@@ -321,4 +391,21 @@ export function estimateCompletionDate(
     completionDate.setDate(completionDate.getDate() + estimatedDaysToComplete);
 
     return completionDate;
+}
+
+/**
+ * 진도 계산 - biblePlanCalculator 버전 (useBibleReading과의 호환성)
+ */
+export function calculateProgress(
+    planType: string,
+    startDate: Date,
+    currentDate: Date,
+    readChapters: Array<{ book: number; chapter: number; isRead: boolean }>
+): {
+    scheduledProgress: number;
+    actualProgress: number;
+    isAhead: boolean;
+    daysBehind: number;
+} {
+    return calculateProgressWithPlanType(planType, startDate, currentDate, readChapters);
 }

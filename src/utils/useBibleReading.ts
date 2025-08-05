@@ -1,9 +1,18 @@
+// src/utils/useBibleReading.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Toast } from 'react-native-toast-message/lib/src/Toast';
 import { AppState } from 'react-native';
-import { BiblePlanData, calculateMissedChapters, loadBiblePlanData, saveBiblePlanData, deleteBiblePlanData } from "./biblePlanUtils";
 import {
-    calculateProgress, ChapterReading,
+    BiblePlanData,
+    calculateMissedChapters,
+    loadBiblePlanData,
+    saveBiblePlanData,
+    deleteBiblePlanData,
+    calculateProgress  // biblePlanUtils에서 가져옴
+} from "./biblePlanUtils";
+import {
+    // calculateProgress 제거 - biblePlanUtils에서 이미 가져옴
+    ChapterReading,
     DailyReading,
     DETAILED_BIBLE_PLAN_TYPES,
     estimateCompletionDate,
@@ -180,41 +189,44 @@ export const useBibleReading = (readState?: any) => {
         }
 
         try {
-            // 🔥 planType이 문자열인지 확인하고 변환
-            let planTypeString: string;
+            // calculateProgress는 이제 biblePlanUtils에서 가져온 함수 사용
+            const progress = calculateProgress(planData);
 
-            if (typeof planData.planType === 'string') {
-                planTypeString = planData.planType;
-            } else if (typeof planData.planType === 'object' && planData.planType?.id) {
-                planTypeString = planData.planType.id;
-            } else {
-                console.error('올바르지 않은 planType 형식:', planData.planType);
-                setProgressInfo(null);
-                return;
-            }
-
-            console.log('진행률 계산 - planType:', planTypeString);
-
+            // 예상 완료일 계산
             const currentDate = new Date();
             const startDate = new Date(planData.startDate);
+            const totalDays = planData.totalDays;
+            const daysElapsed = Math.floor((currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            const remainingDays = Math.max(0, totalDays - daysElapsed);
 
-            const progress = calculateProgress(
-                planTypeString,  // 🔥 문자열로 전달
-                startDate,
-                currentDate,
-                planData.readChapters
-            );
+            // 현재 진행 속도로 예상 완료일 계산
+            const readingRate = progress.readChapters / daysElapsed;
+            const remainingChapters = progress.totalChapters - progress.readChapters;
+            const estimatedDaysToComplete = readingRate > 0
+                ? Math.ceil(remainingChapters / readingRate)
+                : remainingDays;
 
-            const estimatedCompletion = estimateCompletionDate(
-                planTypeString,  // 🔥 문자열로 전달
-                startDate,
-                currentDate,
-                planData.readChapters
-            );
+            const estimatedCompletion = new Date();
+            estimatedCompletion.setDate(estimatedCompletion.getDate() + estimatedDaysToComplete);
 
             setProgressInfo({
-                ...progress,
-                estimatedCompletion
+                progressPercentage: progress.progressPercentage,
+                schedulePercentage: (daysElapsed / totalDays) * 100,
+                readChapters: progress.readChapters,
+                totalChapters: progress.totalChapters,
+                isOnTrack: progress.progressPercentage >= ((daysElapsed / totalDays) * 100 - 5), // 5% 여유
+                estimatedCompletion: estimatedCompletion.toISOString(),
+                currentDay: daysElapsed,
+                totalDays: totalDays,
+                remainingDays: remainingDays,
+
+                // 시간 기반 추가 정보
+                todayProgress: progress.todayProgress || 0,
+                estimatedTimeToday: progress.estimatedTimeToday || '0분',
+                totalReadMinutes: progress.totalReadMinutes || 0,
+                expectedProgressPercentage: (daysElapsed / totalDays) * 100,
+                isAhead: progress.progressPercentage > ((daysElapsed / totalDays) * 100 + 5),
+                isBehind: progress.progressPercentage < ((daysElapsed / totalDays) * 100 - 5)
             });
 
         } catch (error) {
@@ -774,9 +786,9 @@ export const useBibleReading = (readState?: any) => {
             }, 100);
 
             return false;
-        }catch (error) {
+        } catch (error) {
             console.error('useBibleReading 초기화 오류:', error);
-            return false; // 🔥 누락되었던 부분 추가
+            return false;
         }
     }, [updateAppBadge, loadPlan, loadAllReadingTableData, globalRefreshCallback]);
 

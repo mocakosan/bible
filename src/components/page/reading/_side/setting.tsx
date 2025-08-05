@@ -25,7 +25,8 @@ import {
 import {useBibleReading} from "../../../../utils/useBibleReading";
 import {bibleSelectSlice, bibleTextSlice, illdocSelectSlice} from "../../../../provider/redux/slice";
 import {store} from "../../../../provider/redux/store";
-import {loadChapterTimeDataFromCSV} from "../../../../utils/csvDataLoader";
+import {getChapterTimeDataForPlan, loadChapterTimeDataFromCSV} from "../../../../utils/csvDataLoader";
+import {createTimeBasedReadingPlan} from "../../../../utils/timeBasedBibleReading";
 
 interface Props {
   readState: any;
@@ -348,25 +349,68 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
   }, []);
 
   useEffect(() => {
-    // 선택된 타입과 날짜가 있을 때 계산 수행
-    if (selectedPlanType && calendarState.start && calendarState.end) {
+    if (selectedPlanType && calendarState.start && calendarState.end && isTimeDataLoaded) {
       try {
         const startDate = convertDate('start').toDate();
         const endDate = convertDate('end').toDate();
 
         if (endDate > startDate) {
-          // 🔥 calculateReadingPlan이 내부적으로 시간을 정확히 계산하도록 수정됨
-          const calculation = calculateReadingPlan(selectedPlanType, startDate, endDate);
+          const selectedPlan = DETAILED_BIBLE_PLAN_TYPES.find(p => p.id === selectedPlanType);
+          if (!selectedPlan) return;
 
-          // 🔥 로그로 계산 결과 확인
-          console.log(`📊 ${selectedPlanType} 계산 결과:`, {
-            totalDays: calculation.totalDays,
-            chaptersPerDay: calculation.chaptersPerDay,
-            minutesPerDay: calculation.minutesPerDay,
-            totalChapters: calculation.totalChapters
-          });
+          // 전체 기간 계산
+          const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-          setCalculationResult(calculation);
+          // 시간 데이터 가져오기
+          const timeData = getChapterTimeDataForPlan(
+              selectedPlan.bookRange![0],
+              selectedPlan.bookRange![1]
+          );
+
+          if (timeData && timeData.length > 0) {
+            // 전체 읽기 시간 계산
+            const totalSeconds = timeData.reduce((sum, chapter) => sum + chapter.totalSeconds, 0);
+            const totalMinutes = totalSeconds / 60;
+
+            // 하루 목표 시간 계산
+            const targetMinutesPerDay = Math.ceil(totalMinutes / totalDays);
+
+            // 실제 일별 계획 생성
+            const dailyPlan = createTimeBasedReadingPlan(
+                targetMinutesPerDay,
+                timeData,
+                startDate,
+                selectedPlan.bookRange
+            );
+
+            // 일별 계획을 기반으로 하루 평균 장수 계산
+            const totalChaptersInPlan = dailyPlan.reduce((sum, day) => sum + day.chapters.length, 0);
+            const avgChaptersPerDay = Math.round(totalChaptersInPlan / dailyPlan.length);
+
+            // 실제 일별 평균 시간 (14분대로 맞춰진 값)
+            const avgSecondsPerDay = dailyPlan.reduce((sum, day) => sum + day.totalSeconds, 0) / dailyPlan.length;
+            const avgMinutesPerDay = Math.round(avgSecondsPerDay / 60);
+
+            setCalculationResult({
+              planType: selectedPlanType,
+              totalDays: dailyPlan.length,  // 실제 계획 일수
+              totalChapters: selectedPlan.totalChapters,
+              chaptersPerDay: avgChaptersPerDay,
+              minutesPerDay: avgMinutesPerDay,  // 실제 평균 시간
+              isTimeBasedCalculation: true,
+              dailyPlan: dailyPlan  // 일별 상세 계획
+            });
+
+            console.log(`📊 시간 기반 계산 결과:
+            - 총 기간: ${dailyPlan.length}일
+            - 하루 평균: ${avgChaptersPerDay}장 / ${avgMinutesPerDay}분
+            - 목표 시간: ${targetMinutesPerDay}분
+          `);
+          } else {
+            // CSV 데이터가 없는 경우 기존 방식으로 계산
+            const calculation = calculateReadingPlan(selectedPlanType, startDate, endDate);
+            setCalculationResult(calculation);
+          }
         }
       } catch (error) {
         console.log('계산 오류:', error);
@@ -374,7 +418,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
       }
     }
   }, [selectedPlanType, calendarState, isTimeDataLoaded]);
-
   const loadExistingPlan = () => {
     const existingPlan = loadBiblePlanData();
     if (existingPlan) {
@@ -705,8 +748,12 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
       currentDay: 1,
       readChapters: [],
       createdAt: new Date().toISOString(),
-      dailySchedule: calculationResult.dailySchedule,
-      weeklyBreakdown: calculationResult.weeklyBreakdown
+
+      // 시간 기반 추가 데이터
+      isTimeBasedCalculation: calculationResult.isTimeBasedCalculation,
+      dailyPlan: calculationResult.dailyPlan,  // 일별 상세 계획
+      targetMinutesPerDay: calculationResult.targetMinutesPerDay,
+      bookRange: selectedPlan.bookRange
     };
 
     // 데이터 저장
@@ -722,7 +769,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     Toast.show({
       type: 'success',
       text1: `${selectedPlan.name} 일독이 설정되었습니다`,
-      text2: `하루 ${calculationResult.chaptersPerDay}장씩 ${calculationResult.totalDays}일간 진행`
+      text2: `하루 ${calculationResult.chaptersPerDay}장씩 ${calculationResult.minutesPerDay}분 목표`
     });
 
     // 상위 컴포넌트에 즉시 변경사항 알림
@@ -1074,6 +1121,15 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                                     </Text>
                                   </HStack>
                                 </HStack>
+
+                                {/* 시간 기반 계산인 경우 추가 정보 표시 */}
+                                {calculationResult.isTimeBasedCalculation && (
+                                    <HStack justifyContent="space-between" alignItems="center">
+                                      <Text fontSize="14" color="#999">
+                                        ※ 실제 읽기 시간 기준으로 계산됨
+                                      </Text>
+                                    </HStack>
+                                )}
                               </VStack>
                             </Box>
                         )}
