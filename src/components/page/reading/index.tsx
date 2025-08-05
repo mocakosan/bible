@@ -15,7 +15,9 @@ import {
   calculateProgress,
   calculateMissedChapters,
   formatDate,
-  deleteBiblePlanData
+  deleteBiblePlanData,
+  getTodayChapters,
+  formatTime
 } from "../../../utils/biblePlanUtils";
 import { useBaseStyle, useNativeNavigation } from "../../../hooks";
 import { Alert } from "react-native";
@@ -262,7 +264,7 @@ export default function ReadingBibleScreen() {
     }
   }, [loadReadingState, updateMenuAndData]);
 
-  // ProgressView 컴포넌트 정의
+  // 🔥 수정된 ProgressView 컴포넌트 - 시간 기반 계산 통합
   const ProgressView = useCallback(() => {
     if (!planData) {
       return <ProgressScreen key={`progress-${forceUpdateKey}`} />;
@@ -270,6 +272,7 @@ export default function ReadingBibleScreen() {
 
     const progress = calculateProgress(planData);
     const missedCount = calculateMissedChapters(planData);
+    const todayChapters = getTodayChapters(planData);
 
     const getDaysRemaining = () => {
       const endDate = new Date(planData.endDate || planData.targetDate);
@@ -285,7 +288,11 @@ export default function ReadingBibleScreen() {
       return '#F44336';
     };
 
+    // 🔥 시간 기반 계산 지원
     const getEstimatedMinutes = () => {
+      if (planData.isTimeBasedCalculation && planData.targetMinutesPerDay) {
+        return planData.targetMinutesPerDay;
+      }
       if (planData.minutesPerDay) {
         return planData.minutesPerDay;
       }
@@ -334,6 +341,27 @@ export default function ReadingBibleScreen() {
                 />
               </Box>
 
+              {/* 🔥 시간 기반일 때 오늘 진도 추가 표시 */}
+              {planData.isTimeBasedCalculation && progress.todayProgress > 0 && (
+                  <Box>
+                    <HStack justifyContent="space-between" mb={2}>
+                      <Text fontSize="18" color="#666">
+                        오늘 진도
+                      </Text>
+                      <Text fontSize="18" fontWeight="600" color="#4CAF50">
+                        {progress.todayProgress.toFixed(1)}%
+                      </Text>
+                    </HStack>
+                    <Progress
+                        value={progress.todayProgress}
+                        bg="#E0E0E0"
+                        _filledTrack={{ bg: "#4CAF50" }}
+                        size="sm"
+                        borderRadius="full"
+                    />
+                  </Box>
+              )}
+
               <HStack justifyContent="space-around" pt={2}>
                 <VStack alignItems="center">
                   <Text fontSize="24" fontWeight="600" color="#37C4B9">
@@ -376,15 +404,37 @@ export default function ReadingBibleScreen() {
                 </HStack>
                 <HStack justifyContent="space-between">
                   <Text fontSize="18" color="#666">하루 목표</Text>
-                  <Text fontSize="18" fontWeight="500">{planData.chaptersPerDay}장</Text>
+                  <Text fontSize="18" fontWeight="500">
+                    {planData.isTimeBasedCalculation
+                        ? formatTime(planData.targetMinutesPerDay || 0)
+                        : `${planData.chaptersPerDay}장`
+                    }
+                  </Text>
                 </HStack>
                 <HStack justifyContent="space-between">
                   <Text fontSize="18" color="#666">예상 시간</Text>
-                  <Text fontSize="18" fontWeight="500">{getEstimatedMinutes()}분</Text>
+                  <Text fontSize="18" fontWeight="500">
+                    {planData.isTimeBasedCalculation && progress.estimatedTimeToday
+                        ? progress.estimatedTimeToday
+                        : `${getEstimatedMinutes()}분`
+                    }
+                  </Text>
                 </HStack>
                 <HStack justifyContent="space-between">
                   <Text fontSize="18" color="#666">남은 일수</Text>
                   <Text fontSize="18" fontWeight="500">{getDaysRemaining()}일</Text>
+                </HStack>
+                {/* 🔥 진도 상태 추가 */}
+                <HStack justifyContent="space-between">
+                  <Text fontSize="18" color="#666">진도 상태</Text>
+                  <Badge
+                      colorScheme={progress.isOnTrack ? "green" : "orange"}
+                      variant="subtle"
+                  >
+                    <Text fontSize="16" fontWeight="500">
+                      {progress.isOnTrack ? "정상 진행중" : "진도 뒤처짐"}
+                    </Text>
+                  </Badge>
                 </HStack>
               </VStack>
             </VStack>
@@ -440,7 +490,71 @@ export default function ReadingBibleScreen() {
           </VStack>
         </ScrollView>
     );
-  }, [planData, color.white, navigation, handleDirectReset, getPlanTypeName, calculateProgress, calculateMissedChapters, forceUpdateKey]);
+  }, [planData, color.white, navigation, handleDirectReset, getPlanTypeName, calculateProgress, calculateMissedChapters, getTodayChapters, formatTime, forceUpdateKey]);
+
+  // 🔥 수정된 일독 진행 현황 박스 - 시간 기반 계산 지원
+  const renderProgressIndicator = useCallback((planData: any) => {
+    return (
+        <Box bg="#E8F8F7" mx={4} mt={4} p={4} borderRadius="md">
+          <VStack space={3}>
+            {/* 상단 설명 */}
+            <Text fontSize="16" color="#666" textAlign="center">
+              {getPlanTypeDescription(planData.planType)}
+            </Text>
+
+            {/* 중앙 일독 진행중 텍스트 */}
+            <HStack justifyContent="center" alignItems="center" space={2}>
+              <Text fontSize="19" color="#37C4B9">📖</Text>
+              <Text fontSize="19" color="#37C4B9" fontWeight="600">
+                {getPlanTypeName(planData.planType)} 일독 진행중
+              </Text>
+            </HStack>
+
+            {/* 하단 기간 정보 */}
+            <VStack space={1}>
+              <HStack justifyContent="space-between" alignItems="center">
+                <Text fontSize="18" color="#666">총 기간 :</Text>
+                <HStack alignItems="baseline">
+                  <Text fontSize="16" color="#666">
+                    {dayjs(planData.startDate).format('YY.MM.DD')} ~ {dayjs(planData.endDate || planData.targetDate).format('YY.MM.DD')}
+                  </Text>
+                  <Text fontSize="18" color="#37C4B9" fontWeight="600" ml={2}>
+                    {planData.totalDays}일
+                  </Text>
+                </HStack>
+              </HStack>
+
+              <HStack justifyContent="space-between" alignItems="center">
+                <Text fontSize="18" color="#666">하루목표 :</Text>
+                <HStack alignItems="baseline">
+                  {planData.isTimeBasedCalculation ? (
+                      <>
+                        <Text fontSize="18" color="#37C4B9" fontWeight="700">
+                          {planData.targetMinutesPerDay}분
+                        </Text>
+                        {planData.averageTimePerDay && (
+                            <Text fontSize="14" color="#666" ml={1}>
+                              (평균 {planData.averageTimePerDay})
+                            </Text>
+                        )}
+                      </>
+                  ) : (
+                      <>
+                        <Text fontSize="18" color="#37C4B9" fontWeight="700">
+                          {planData.chaptersPerDay}장
+                        </Text>
+                        <Text fontSize="18" color="#37C4B9" ml={1} fontWeight="700">
+                          / {planData.minutesPerDay || Math.round(planData.chaptersPerDay * 4.5)}분
+                        </Text>
+                      </>
+                  )}
+                </HStack>
+              </HStack>
+            </VStack>
+          </VStack>
+        </Box>
+    );
+  }, [getPlanTypeName, getPlanTypeDescription]);
 
   // 컴포넌트 렌더링
   const renderContent = useCallback(() => {
@@ -467,53 +581,7 @@ export default function ReadingBibleScreen() {
     }
 
     if (planData && menuIndex === 0) {
-      // 🆕 첨부 이미지와 동일한 일독 진행 현황 박스
-      const progressIndicator = (
-          <Box bg="#E8F8F7" mx={4} mt={4} p={4} borderRadius="md">
-            <VStack space={3}>
-              {/* 상단 설명 */}
-
-              <Text fontSize="16" color="#666" textAlign="center">
-                {getPlanTypeDescription(planData.planType)}
-              </Text>
-
-              {/* 중앙 일독 진행중 텍스트 */}
-              <HStack justifyContent="center" alignItems="center" space={2}>
-                <Text fontSize="19" color="#37C4B9">📖</Text>
-                <Text fontSize="19" color="#37C4B9" fontWeight="600">
-                  {getPlanTypeName(planData.planType)} 일독 진행중
-                </Text>
-              </HStack>
-
-              {/* 하단 기간 정보 */}
-              <VStack space={1}>
-                <HStack justifyContent="space-between" alignItems="center">
-                  <Text fontSize="18" color="#666">총 기간 :</Text>
-                  <HStack alignItems="baseline">
-                    <Text fontSize="16" color="#666">
-                      {dayjs(planData.startDate).format('YY.MM.DD')} ~ {dayjs(planData.targetDate).format('YY.MM.DD')}
-                    </Text>
-                    <Text fontSize="18" color="#37C4B9" fontWeight="600" ml={2}>
-                      {planData.totalDays}일
-                    </Text>
-                  </HStack>
-                </HStack>
-
-                <HStack justifyContent="space-between" alignItems="center">
-                  <Text fontSize="18" color="#666">하루목표 :</Text>
-                  <HStack alignItems="baseline">
-                    <Text fontSize="18" color="#37C4B9" fontWeight="700">
-                      {planData.chaptersPerDay}장
-                    </Text>
-                    <Text fontSize="18" color="#37C4B9" ml={1} fontWeight="700">
-                      / {planData.minutesPerDay}분
-                    </Text>
-                  </HStack>
-                </HStack>
-              </VStack>
-            </VStack>
-          </Box>
-      );
+      const progressIndicator = renderProgressIndicator(planData);
 
       switch (planData.planType) {
         case 'full_bible':
@@ -658,7 +726,7 @@ export default function ReadingBibleScreen() {
     }
 
     return null;
-  }, [isLoading, safeMenuList, menuIndex, mark, planData, forceUpdateKey, color.white, handleChangeUpdateData, isFocused, ProgressView, getPlanTypeName, getPlanTypeDescription]);
+  }, [isLoading, safeMenuList, menuIndex, mark, planData, forceUpdateKey, color.white, handleChangeUpdateData, isFocused, ProgressView, renderProgressIndicator]);
 
   // 컴포넌트 마운트 시 전역 새로고침 콜백 등록
   useEffect(() => {

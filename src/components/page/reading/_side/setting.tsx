@@ -25,6 +25,7 @@ import {
 import {useBibleReading} from "../../../../utils/useBibleReading";
 import {bibleSelectSlice, bibleTextSlice, illdocSelectSlice} from "../../../../provider/redux/slice";
 import {store} from "../../../../provider/redux/store";
+import {loadChapterTimeDataFromCSV} from "../../../../utils/csvDataLoader";
 
 interface Props {
   readState: any;
@@ -158,6 +159,24 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     start: null,
     end: null
   });
+
+  const [isTimeDataLoaded, setIsTimeDataLoaded] = useState(false);
+
+  // 컴포넌트 마운트 시 CSV 데이터 로드
+  useEffect(() => {
+    const loadTimeData = async () => {
+      try {
+        const success = await loadChapterTimeDataFromCSV();
+        setIsTimeDataLoaded(success);
+        console.log('⏱️ 시간 데이터 로드:', success ? '성공' : '실패');
+      } catch (error) {
+        console.error('시간 데이터 로드 오류:', error);
+        setIsTimeDataLoaded(false);
+      }
+    };
+
+    loadTimeData();
+  }, []);
 
   const convertDate = (type: 'start' | 'end') => {
     const result: { [key: string]: string | null } = calendarState;
@@ -336,7 +355,17 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
         const endDate = convertDate('end').toDate();
 
         if (endDate > startDate) {
+          // 🔥 calculateReadingPlan이 내부적으로 시간을 정확히 계산하도록 수정됨
           const calculation = calculateReadingPlan(selectedPlanType, startDate, endDate);
+
+          // 🔥 로그로 계산 결과 확인
+          console.log(`📊 ${selectedPlanType} 계산 결과:`, {
+            totalDays: calculation.totalDays,
+            chaptersPerDay: calculation.chaptersPerDay,
+            minutesPerDay: calculation.minutesPerDay,
+            totalChapters: calculation.totalChapters
+          });
+
           setCalculationResult(calculation);
         }
       } catch (error) {
@@ -344,7 +373,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
         setCalculationResult(null);
       }
     }
-  }, [selectedPlanType, calendarState]);
+  }, [selectedPlanType, calendarState, isTimeDataLoaded]);
 
   const loadExistingPlan = () => {
     const existingPlan = loadBiblePlanData();
