@@ -1,13 +1,12 @@
-// utils/bibleColors.ts
 export const BIBLE_COLORS = {
     // 읽기 상태 색상
     READ: '#4CAF50',         // 초록색 - 읽은 장
     UNREAD: '#000000',       // 검은색 - 안 읽은 장
 
     // 일독 계획 색상
-    TODAY: '#F44336',        // 빨간색 - 오늘 읽을 장 (하루 목표)
-    YESTERDAY: '#2196F3',    // 파란색 - 어제 읽어야 했던 장
-    MISSED: '#000000',       // 검은색 - 이전에 못 읽은 장
+    TODAY: '#F44336',        // 빨간색 - 오늘 읽을 장
+    YESTERDAY: '#2196F3',    // 파란색 - 어제 읽을 장
+    MISSED: '#333333',       // 진한 회색 - 놓친 장 (텍스트)
     MISSED_ICON_BG: '#F44336', // 빨간색 - 놓친 장 느낌표 아이콘 배경
 
     // 테두리 및 배경
@@ -15,16 +14,18 @@ export const BIBLE_COLORS = {
     TRANSPARENT: 'transparent', // 투명 - 기본 배경
 
     // 기타
+    FUTURE: '#000000',       // 검은색 - 미래에 읽을 장
     WHITE: '#FFFFFF',        // 흰색 - 아이콘 색상 등
 };
 
-// 스타일 우선순위 (높을수록 우선)
+// 스타일 우선순위
 export const STYLE_PRIORITY = {
-    READ: 5,         // 최우선 - 읽은 상태
-    TODAY: 4,        // 오늘 읽을 장 (하루 목표)
-    YESTERDAY: 3,    // 어제 읽어야 했던 장
-    MISSED: 2,       // 놓친 장
-    UNREAD: 1,       // 일반 안 읽은 장
+    READ: 1,         // 최우선 - 읽은 상태
+    TODAY: 2,        // 오늘 읽을 장
+    YESTERDAY: 3,    // 어제 읽을 장
+    MISSED: 4,       // 놓친 장
+    FUTURE: 5,       // 미래 장
+    UNREAD: 6,       // 일반 안 읽은 장
 };
 
 // 느낌표 아이콘 스타일

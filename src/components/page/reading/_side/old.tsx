@@ -328,13 +328,13 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                                                 alignItems: 'center',
                                             }}
                                         >
-                                            <FastImage
-                                                source={require('../../../../assets/img/noRead.png')}
-                                                style={{
-                                                    width: 16,
-                                                    height: 16,
-                                                }}
-                                                resizeMode={FastImage.resizeMode.contain}/>
+                                          <FastImage
+                                              source={require('../../../../assets/img/noRead.png')}
+                                              style={{
+                                                  width: 16,
+                                                  height: 16,
+                                              }}
+                                              resizeMode={FastImage.resizeMode.contain}/>
                                         </View>
                                     )}
                                 </TouchableOpacity>

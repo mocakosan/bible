@@ -36,7 +36,6 @@ import {
   AdEventType,
   MobileAds,
 } from "react-native-google-mobile-ads";
-import {initializeBibleAudioDataOnAppStart} from "./src/utils/initializeBibleAudioData";
 
 const adUnitId = "ca-app-pub-1162719494234001/2683008272";
 const interstitial = InterstitialAd.createForAdRequest(adUnitId);
@@ -311,37 +310,6 @@ function App(): JSX.Element {
 
       return () => backHandler.remove();
     }
-  }, []);
-
-  // 🔥 CSV 데이터 초기화를 위한 useEffect 추가
-  useEffect(() => {
-    const initializeAudioData = async () => {
-      try {
-        // CSV 데이터 초기화 (비동기)
-        const audioInitialized = await initializeBibleAudioDataOnAppStart();
-
-        if (!audioInitialized) {
-          console.log('⚠️ 오디오 데이터 초기화 실패. 기본 시간값 사용');
-          // 필요시 사용자에게 알림
-          // Toast.show({
-          //     type: 'info',
-          //     text1: '성경 오디오 데이터를 사용할 수 없습니다',
-          //     text2: '기본 시간값으로 일독 계획이 생성됩니다'
-          // });
-        } else {
-          console.log('✅ 성경 오디오 데이터 초기화 완료');
-        }
-      } catch (error) {
-        console.error('오디오 데이터 초기화 중 오류:', error);
-      }
-    };
-
-    // 앱 시작 후 1초 뒤에 초기화 (다른 초기화 작업과 충돌 방지)
-    const timer = setTimeout(() => {
-      initializeAudioData();
-    }, 1000);
-
-    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {

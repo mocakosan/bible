@@ -282,8 +282,8 @@ function NewTestament({ readState, menuIndex }: Props) {
                                             <FastImage
                                                 source={require('../../../../assets/img/noRead.png')}
                                                 style={{
-                                                    width: 16,
-                                                    height: 16,
+                                                width: 16,
+                                                height: 16,
                                                 }}
                                                 resizeMode={FastImage.resizeMode.contain}/>
                                         </View>
