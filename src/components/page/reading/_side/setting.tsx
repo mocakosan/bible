@@ -115,7 +115,7 @@ const DurationControlComponent = ({ startDate, endDate, onEndDateChange, planDat
                 _pressed={{ bg: "transparent" }}
                 mr={6}
             >
-             <Image source={require('../../../../assets/img/up.png')}/>
+              <Image source={require('../../../../assets/img/up.png')}/>
             </Button>
 
             <Button
@@ -348,76 +348,76 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     initializeComponent();
   }, []);
 
+  // 🔥 수정된 계산 로직 - CSV 시간 데이터만 사용
   useEffect(() => {
     if (selectedPlanType && calendarState.start && calendarState.end && isTimeDataLoaded) {
       try {
         const startDate = convertDate('start').toDate();
         const endDate = convertDate('end').toDate();
 
-        if (endDate > startDate) {
+        if (endDate >= startDate) {
           const selectedPlan = DETAILED_BIBLE_PLAN_TYPES.find(p => p.id === selectedPlanType);
           if (!selectedPlan) return;
 
-          // 전체 기간 계산
+          // 전체 기간 계산 (시작일과 종료일 모두 포함)
           const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-          // 시간 데이터 가져오기
+          // CSV 데이터에서 시간 정보 가져오기
           const timeData = getChapterTimeDataForPlan(
               selectedPlan.bookRange![0],
               selectedPlan.bookRange![1]
           );
 
-          if (timeData && timeData.length > 0) {
-            // 전체 읽기 시간 계산
-            const totalSeconds = timeData.reduce((sum, chapter) => sum + chapter.totalSeconds, 0);
-            const totalMinutes = totalSeconds / 60;
-
-            // 하루 목표 시간 계산
-            const targetMinutesPerDay = Math.ceil(totalMinutes / totalDays);
-
-            // 실제 일별 계획 생성
-            const dailyPlan = createTimeBasedReadingPlan(
-                targetMinutesPerDay,
-                timeData,
-                startDate,
-                selectedPlan.bookRange
-            );
-
-            // 일별 계획을 기반으로 하루 평균 장수 계산
-            const totalChaptersInPlan = dailyPlan.reduce((sum, day) => sum + day.chapters.length, 0);
-            const avgChaptersPerDay = Math.round(totalChaptersInPlan / dailyPlan.length);
-
-            // 실제 일별 평균 시간 (14분대로 맞춰진 값)
-            const avgSecondsPerDay = dailyPlan.reduce((sum, day) => sum + day.totalSeconds, 0) / dailyPlan.length;
-            const avgMinutesPerDay = Math.round(avgSecondsPerDay / 60);
-
-            setCalculationResult({
-              planType: selectedPlanType,
-              totalDays: dailyPlan.length,  // 실제 계획 일수
-              totalChapters: selectedPlan.totalChapters,
-              chaptersPerDay: avgChaptersPerDay,
-              minutesPerDay: avgMinutesPerDay,  // 실제 평균 시간
-              isTimeBasedCalculation: true,
-              dailyPlan: dailyPlan  // 일별 상세 계획
-            });
-
-            console.log(`📊 시간 기반 계산 결과:
-            - 총 기간: ${dailyPlan.length}일
-            - 하루 평균: ${avgChaptersPerDay}장 / ${avgMinutesPerDay}분
-            - 목표 시간: ${targetMinutesPerDay}분
-          `);
-          } else {
-            // CSV 데이터가 없는 경우 기존 방식으로 계산
-            const calculation = calculateReadingPlan(selectedPlanType, startDate, endDate);
-            setCalculationResult(calculation);
+          if (!timeData || timeData.length === 0) {
+            console.error('CSV 데이터가 없습니다');
+            setCalculationResult(null);
+            return;
           }
+
+          // 실제 총 시간 계산 (초 단위)
+          const totalSeconds = timeData.reduce((sum, chapter) => sum + chapter.totalSeconds, 0);
+          const totalMinutes = totalSeconds / 60;
+
+          // 전체 장수
+          const totalChapters = timeData.length;  // CSV 데이터의 실제 장수 사용
+
+          // 정확한 하루 평균 계산
+          const chaptersPerDayExact = totalChapters / totalDays;
+          const chaptersPerDay = Math.ceil(chaptersPerDayExact);  // 올림 처리
+
+          // 하루 평균 시간 계산
+          const minutesPerDayExact = totalMinutes / totalDays;
+          const minutesPerDay = Math.ceil(minutesPerDayExact);
+
+          setCalculationResult({
+            planType: selectedPlanType,
+            totalDays: totalDays,
+            totalChapters: totalChapters,
+            chaptersPerDay: chaptersPerDay,
+            chaptersPerDayExact: chaptersPerDayExact,
+            minutesPerDay: minutesPerDay,
+            minutesPerDayExact: minutesPerDayExact,
+            totalTimeMinutes: Math.round(totalMinutes),
+            totalTimeSeconds: totalSeconds,
+            isTimeBasedCalculation: true,
+            hasActualTimeData: true
+          });
+
+          console.log(`📊 CSV 기반 일독 계산 결과:
+            - 계획: ${selectedPlan.name} (${totalChapters}장)
+            - 총 기간: ${totalDays}일
+            - 전체 시간: ${Math.round(totalMinutes)}분 (${Math.round(totalMinutes / 60)}시간 ${Math.round(totalMinutes % 60)}분)
+            - 하루 평균: ${chaptersPerDayExact.toFixed(2)}장 → ${chaptersPerDay}장
+            - 예상 시간: ${minutesPerDayExact.toFixed(1)}분 → ${minutesPerDay}분/일
+          `);
         }
       } catch (error) {
-        console.log('계산 오류:', error);
+        console.error('계산 오류:', error);
         setCalculationResult(null);
       }
     }
   }, [selectedPlanType, calendarState, isTimeDataLoaded]);
+
   const loadExistingPlan = () => {
     const existingPlan = loadBiblePlanData();
     if (existingPlan) {
@@ -743,17 +743,17 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
       targetDate: convertDate('end').toISOString(),
       totalDays: calculationResult.totalDays,
       chaptersPerDay: calculationResult.chaptersPerDay,
+      chaptersPerDayExact: calculationResult.chaptersPerDayExact,  // 정확한 값도 저장
       minutesPerDay: calculationResult.minutesPerDay,
+      minutesPerDayExact: calculationResult.minutesPerDayExact,  // 정확한 분도 저장
       totalChapters: selectedPlan.totalChapters,
       currentDay: 1,
       readChapters: [],
       createdAt: new Date().toISOString(),
-
-      // 시간 기반 추가 데이터
-      isTimeBasedCalculation: calculationResult.isTimeBasedCalculation,
-      dailyPlan: calculationResult.dailyPlan,  // 일별 상세 계획
-      targetMinutesPerDay: calculationResult.targetMinutesPerDay,
-      bookRange: selectedPlan.bookRange
+      bookRange: selectedPlan.bookRange,
+      isTimeBasedCalculation: true,
+      totalTimeMinutes: calculationResult.totalTimeMinutes,
+      totalTimeSeconds: calculationResult.totalTimeSeconds
     };
 
     // 데이터 저장
@@ -905,6 +905,12 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                       </Text>
                     </HStack>
                     <HStack justifyContent="space-between">
+                      <Text fontSize="14" color="#666">전체 장수:</Text>
+                      <Text fontSize="14" color="#333333" fontWeight="500">
+                        {calculationResult.totalChapters}장
+                      </Text>
+                    </HStack>
+                    <HStack justifyContent="space-between">
                       <Text fontSize="14" color="#666">하루 평균:</Text>
                       <Text fontSize="14" color="#333333" fontWeight="500">
                         {calculationResult.chaptersPerDay}장
@@ -916,6 +922,14 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                         {calculationResult.minutesPerDay}분/일
                       </Text>
                     </HStack>
+                    {calculationResult.totalTimeMinutes && (
+                        <HStack justifyContent="space-between">
+                          <Text fontSize="14" color="#666">전체 시간:</Text>
+                          <Text fontSize="14" color="#333333" fontWeight="500">
+                            {Math.round(calculationResult.totalTimeMinutes / 60)}시간 {Math.round(calculationResult.totalTimeMinutes % 60)}분
+                          </Text>
+                        </HStack>
+                    )}
                   </VStack>
                 </Box>
             )}
@@ -1122,14 +1136,12 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                                   </HStack>
                                 </HStack>
 
-                                {/* 시간 기반 계산인 경우 추가 정보 표시 */}
-                                {calculationResult.isTimeBasedCalculation && (
-                                    <HStack justifyContent="space-between" alignItems="center">
-                                      <Text fontSize="14" color="#999">
-                                        ※ 실제 읽기 시간 기준으로 계산됨
-                                      </Text>
-                                    </HStack>
-                                )}
+                                {/* CSV 시간 데이터 기반 표시 */}
+                                <HStack justifyContent="space-between" alignItems="center">
+                                  <Text fontSize="14" color="#999">
+                                    ※ 실제 오디오 시간 기준으로 계산됨
+                                  </Text>
+                                </HStack>
                               </VStack>
                             </Box>
                         )}

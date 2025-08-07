@@ -1,5 +1,5 @@
 // src/utils/biblePlanCalculator.ts
-// 성경 일독 계획 계산 로직 - 시간 기반 계산 추가
+// 성경 일독 계획 계산 로직 - 수정된 버전
 
 import { BibleStep } from './define';
 import { calculateReadingEstimate, createTimeBasedReadingPlan } from './timeBasedBibleReading';
@@ -11,6 +11,7 @@ export interface BibleReadingPlanCalculation {
     totalDays: number;
     totalChapters: number;
     chaptersPerDay: number;
+    chaptersPerDayExact: number;  // 정확한 소수점 값 추가
     estimatedEndDate?: Date;
 
     // 시간 기반 필드
@@ -96,82 +97,116 @@ export const DETAILED_BIBLE_PLAN_TYPES: BiblePlanTypeDetail[] = [
 ];
 
 /**
- * 성경 일독 계획 계산 - 통합 버전
+ * 성경 일독 계획 계산 - 수정된 버전
  */
 export function calculateReadingPlan(
     planType: string,
     startDate: Date,
     endDate: Date,
     targetMinutesPerDay?: number
-): {
-    planType: string;
-    totalDays: number;
-    totalChapters: number;
-    chaptersPerDay: number;
-    minutesPerDay: number;
-    isTimeBasedCalculation: boolean
-} {
+): BibleReadingPlanCalculation {
     const plan = DETAILED_BIBLE_PLAN_TYPES.find(p => p.id === planType);
     if (!plan) {
         throw new Error(`Invalid plan type: ${planType}`);
     }
 
+    // 총 일수 계산 (시작일과 종료일 모두 포함)
     const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const chaptersPerDay = Math.ceil(plan.totalChapters / totalDays);
 
-    // 🔥 정확한 시간 계산을 위한 로직 추가
-    let minutesPerDay = 0;
+    // 정확한 하루 평균 장수 계산
+    const chaptersPerDayExact = plan.totalChapters / totalDays;
+    const chaptersPerDay = Math.ceil(chaptersPerDayExact);  // 올림 처리
 
-    try {
-        // CSV 데이터에서 실제 시간 데이터 가져오기
-        const timeData = getChapterTimeDataForPlan(plan.bookRange![0], plan.bookRange![1]);
+    const result: BibleReadingPlanCalculation = {
+        planType,
+        totalDays,
+        totalChapters: plan.totalChapters,
+        chaptersPerDay,
+        chaptersPerDayExact,
+        estimatedEndDate: endDate,
+        isTimeBasedCalculation: false
+    };
 
-        if (timeData && timeData.length > 0) {
-            // 전체 읽기 시간 계산 (초 단위)
-            const totalSeconds = timeData.reduce((sum, chapter) => sum + chapter.totalSeconds, 0);
+    // 시간 기반 계산이 있는 경우
+    if (targetMinutesPerDay) {
+        const avgMinutesPerChapter = getAverageMinutesPerChapter(planType);
+        const estimatedMinutesPerDay = chaptersPerDayExact * avgMinutesPerChapter;
+        const totalMinutes = plan.totalChapters * avgMinutesPerChapter;
 
-            // 전체 분으로 변환
-            const totalMinutes = totalSeconds / 60;
-
-            // 하루 평균 시간 계산
-            minutesPerDay = Math.round(totalMinutes / totalDays);
-
-            console.log(`📊 ${planType} 계산 결과:
-        - 총 ${timeData.length}장
-        - 총 읽기 시간: ${Math.floor(totalMinutes / 60)}시간 ${Math.round(totalMinutes % 60)}분
-        - 하루 평균: ${minutesPerDay}분
-      `);
-        } else {
-            // CSV 데이터가 없는 경우 기본 추정치 사용
-            // 성경별 평균 읽기 시간 (분/장)
-            const estimatedMinutesPerChapter = getEstimatedMinutesPerChapter(planType);
-            minutesPerDay = Math.round(chaptersPerDay * estimatedMinutesPerChapter);
-
-            console.log(`⚠️ ${planType} 기본 추정치 사용: ${estimatedMinutesPerChapter}분/장`);
-        }
-    } catch (error) {
-        console.error('시간 계산 오류:', error);
-        // 오류 시 기본값 사용
-        minutesPerDay = Math.round(chaptersPerDay * 4.5);
+        result.targetMinutesPerDay = targetMinutesPerDay;
+        result.isTimeBasedCalculation = true;
+        result.averageTimePerDay = formatMinutes(estimatedMinutesPerDay);
+        result.totalReadingTime = formatMinutes(totalMinutes);
     }
+
+    return result;
+}
+
+/**
+ * 시간 기반 계산 (명확한 분리)
+ */
+export function calculateTimeBasedReadingPlan(
+    planType: string,
+    startDate: Date,
+    endDate: Date,
+    targetMinutesPerDay: number
+): BibleReadingPlanCalculation {
+    const plan = DETAILED_BIBLE_PLAN_TYPES.find(p => p.id === planType);
+    if (!plan) {
+        throw new Error(`Invalid plan type: ${planType}`);
+    }
+
+    // 총 일수 계산
+    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // 평균 장당 시간 가져오기
+    const avgMinutesPerChapter = getAverageMinutesPerChapter(planType);
+
+    // 목표 시간으로 읽을 수 있는 장수 계산
+    const chaptersBasedOnTime = targetMinutesPerDay / avgMinutesPerChapter;
+    const chaptersPerDay = Math.ceil(chaptersBasedOnTime);  // 올림 처리
+
+    // 실제 필요한 일수 계산
+    const actualDaysNeeded = Math.ceil(plan.totalChapters / chaptersPerDay);
+    const actualEndDate = new Date(startDate);
+    actualEndDate.setDate(actualEndDate.getDate() + actualDaysNeeded - 1);
 
     return {
         planType,
         totalDays,
         totalChapters: plan.totalChapters,
         chaptersPerDay,
-        minutesPerDay, // 🔥 정확히 계산된 값
-        isTimeBasedCalculation: false
+        chaptersPerDayExact: chaptersBasedOnTime,
+        estimatedEndDate: actualEndDate,
+        targetMinutesPerDay,
+        isTimeBasedCalculation: true,
+        averageTimePerDay: formatMinutes(targetMinutesPerDay),
+        totalReadingTime: formatMinutes(plan.totalChapters * avgMinutesPerChapter)
     };
 }
 
-// 🔥 성경 타입별 예상 시간 (CSV 데이터가 없을 때 사용)
-function getEstimatedMinutesPerChapter(planType: string): number {
+/**
+ * 분을 시간:분 형식으로 변환
+ */
+function formatMinutes(minutes: number): string {
+    const hours = Math.floor(minutes / 60);
+    const mins = Math.round(minutes % 60);
+
+    if (hours > 0) {
+        return mins > 0 ? `${hours}시간 ${mins}분` : `${hours}시간`;
+    }
+    return `${mins}분`;
+}
+
+/**
+ * 계획별 평균 분/장 계산
+ */
+function getAverageMinutesPerChapter(planType: string): number {
     switch (planType) {
         case 'psalms':
-            return 3.0; // 시편은 평균적으로 짧음
+            return 2.5; // 시편은 짧음
         case 'pentateuch':
-            return 5.5; // 모세오경은 긴 장들이 많음
+            return 5.0; // 모세오경은 김
         case 'old_testament':
             return 4.8; // 구약은 평균적으로 김
         case 'new_testament':
@@ -180,31 +215,6 @@ function getEstimatedMinutesPerChapter(planType: string): number {
         default:
             return 4.5; // 전체 평균
     }
-}
-
-/**
- * 기존 장 기반 계산 (Legacy)
- */
-function calculateLegacyReadingPlan(
-    planType: string,
-    startDate: Date,
-    endDate: Date
-): BibleReadingPlanCalculation {
-    const plan = DETAILED_BIBLE_PLAN_TYPES.find(p => p.id === planType);
-    if (!plan) {
-        throw new Error(`Invalid plan type: ${planType}`);
-    }
-
-    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const chaptersPerDay = Math.ceil(plan.totalChapters / totalDays);
-
-    return {
-        planType,
-        totalDays,
-        totalChapters: plan.totalChapters,
-        chaptersPerDay,
-        isTimeBasedCalculation: false
-    };
 }
 
 /**
@@ -224,7 +234,7 @@ export function getTotalChaptersForPlanType(planType: string): number {
 }
 
 /**
- * 특정 날짜의 읽기 계획 가져오기
+ * 특정 날짜의 읽기 계획 가져오기 - 수정된 버전
  */
 export function getDailyReading(
     planType: string,
@@ -239,8 +249,12 @@ export function getDailyReading(
     // 날짜 차이 계산
     const dayNumber = Math.floor((targetDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
+    // 종료일 계산 (임시로 1년으로 설정)
+    const endDate = new Date(startDate);
+    endDate.setFullYear(endDate.getFullYear() + 1);
+
     // 전체 일독 계획 일수 계산
-    const totalDays = plan.estimatedDays;
+    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const chaptersPerDay = Math.ceil(plan.totalChapters / totalDays);
 
     // 해당 날짜의 시작 장과 끝 장 계산
@@ -275,137 +289,4 @@ export function getDailyReading(
         totalChapters: chapters.length,
         completedChapters: 0
     };
-}
-
-/**
- * 진도 계산 - 통합 버전
- */
-export function calculateProgressWithPlanType(
-    planType: string,
-    startDate: Date,
-    currentDate: Date,
-    readChapters: Array<{ book: number; chapter: number; isRead: boolean }>,
-    targetMinutesPerDay?: number
-): {
-    scheduledProgress: number;
-    actualProgress: number;
-    isAhead: boolean;
-    daysBehind: number;
-} {
-    const plan = DETAILED_BIBLE_PLAN_TYPES.find(type => type.id === planType);
-    if (!plan) {
-        throw new Error(`Invalid plan type: ${planType}`);
-    }
-
-    const completedChapters = readChapters.filter(ch => ch.isRead).length;
-    const actualProgress = (completedChapters / plan.totalChapters) * 100;
-
-    if (targetMinutesPerDay && targetMinutesPerDay > 0) {
-        // 시간 기반 진도 계산
-        const daysPassed = Math.floor((currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        const timeData = getChapterTimeDataForPlan(plan.bookRange![0], plan.bookRange![1]);
-        const totalMinutes = timeData.reduce((sum, ch) => sum + (ch.totalSeconds / 60), 0);
-        const minutesPerDay = totalMinutes / plan.estimatedDays;
-
-        const expectedMinutes = daysPassed * targetMinutesPerDay;
-        const actualMinutes = readChapters
-            .filter(ch => ch.isRead)
-            .reduce((sum, ch) => {
-                const chapterData = timeData.find(t => t.book === ch.book && t.chapter === ch.chapter);
-                return sum + (chapterData ? chapterData.totalSeconds / 60 : 4); // 기본 4분
-            }, 0);
-
-        const scheduledProgress = Math.min((expectedMinutes / totalMinutes) * 100, 100);
-        const isAhead = actualMinutes >= expectedMinutes;
-        const minutesBehind = Math.max(0, expectedMinutes - actualMinutes);
-        const daysBehind = Math.ceil(minutesBehind / targetMinutesPerDay);
-
-        return {
-            scheduledProgress: Math.round(scheduledProgress),
-            actualProgress: Math.round(actualProgress),
-            isAhead,
-            daysBehind
-        };
-    }
-
-    // 기존 장 기반 진도 계산
-    const daysPassed = Math.floor((currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const chaptersPerDay = plan.totalChapters / plan.estimatedDays;
-    const scheduledChapters = Math.min(daysPassed * chaptersPerDay, plan.totalChapters);
-    const scheduledProgress = (scheduledChapters / plan.totalChapters) * 100;
-
-    const isAhead = completedChapters >= scheduledChapters;
-    const chaptersBehind = Math.max(0, scheduledChapters - completedChapters);
-    const daysBehind = Math.ceil(chaptersBehind / chaptersPerDay);
-
-    return {
-        scheduledProgress: Math.round(scheduledProgress),
-        actualProgress: Math.round(actualProgress),
-        isAhead,
-        daysBehind
-    };
-}
-
-/**
- * 예상 완료일 계산
- */
-export function estimateCompletionDate(
-    planType: string,
-    startDate: Date,
-    currentDate: Date,
-    readChapters: Array<{ book: number; chapter: number; isRead: boolean }>,
-    targetMinutesPerDay?: number
-): Date {
-    const plan = DETAILED_BIBLE_PLAN_TYPES.find(type => type.id === planType);
-    if (!plan) throw new Error(`Invalid plan type: ${planType}`);
-
-    const completedChapters = readChapters.filter(ch => ch.isRead).length;
-    const remainingChapters = plan.totalChapters - completedChapters;
-
-    if (remainingChapters <= 0) return currentDate;
-
-    if (targetMinutesPerDay && targetMinutesPerDay > 0) {
-        // 시간 기반 예상 완료일
-        const timeData = getChapterTimeDataForPlan(plan.bookRange![0], plan.bookRange![1]);
-        const remainingMinutes = readChapters
-            .filter(ch => !ch.isRead)
-            .reduce((sum, ch) => {
-                const chapterData = timeData.find(t => t.book === ch.book && t.chapter === ch.chapter);
-                return sum + (chapterData ? chapterData.totalSeconds / 60 : 4);
-            }, 0);
-
-        const daysToComplete = Math.ceil(remainingMinutes / targetMinutesPerDay);
-        const completionDate = new Date(currentDate);
-        completionDate.setDate(completionDate.getDate() + daysToComplete);
-
-        return completionDate;
-    }
-
-    // 기존 장 기반 예상 완료일
-    const recentReadings = readChapters.filter(ch => ch.isRead).length;
-    const daysPassed = Math.max(1, Math.floor((currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-    const avgChaptersPerDay = recentReadings / daysPassed;
-
-    const estimatedDaysToComplete = Math.ceil(remainingChapters / Math.max(avgChaptersPerDay, 1));
-    const completionDate = new Date(currentDate);
-    completionDate.setDate(completionDate.getDate() + estimatedDaysToComplete);
-
-    return completionDate;
-}
-
-/**
- * 진도 계산 - biblePlanCalculator 버전 (useBibleReading과의 호환성)
- */
-export function calculateProgress(
-    planType: string,
-    startDate: Date,
-    currentDate: Date,
-    readChapters: Array<{ book: number; chapter: number; isRead: boolean }>
-): {
-    scheduledProgress: number;
-    actualProgress: number;
-    isAhead: boolean;
-    daysBehind: number;
-} {
-    return calculateProgressWithPlanType(planType, startDate, currentDate, readChapters);
 }
