@@ -252,7 +252,7 @@ export default function ReadingBibleScreen() {
     }
   }, [loadReadingState, updateMenuAndData]);
 
-  // 🔥 수정된 ProgressView 컴포넌트 - 시간 기반 계산 통합 (반올림 제거)
+  // 🔥 수정된 ProgressView 컴포넌트 - 시간 기반 계산 통합
   const ProgressView = useCallback(() => {
     if (!planData) {
       return <ProgressScreen key={`progress-${forceUpdateKey}`} />;
@@ -289,7 +289,7 @@ export default function ReadingBibleScreen() {
       return '#F44336';
     };
 
-    // 🔥 수정: 시간 계산 로직 개선 (반올림 제거)
+    // 🔥 수정: 시간 계산 로직 개선
     const getDailyTargetDisplay = () => {
       // dailyPlan이 있는 경우
       if (planData.isTimeBasedCalculation && planData.dailyPlan && todayChapters.length > 0) {
@@ -311,13 +311,13 @@ export default function ReadingBibleScreen() {
         }
       }
 
-      // 🔥 기본값 - 저장된 값 사용 (반올림 없이)
+      // 🔥 기본값 - 저장된 값 사용
       const chapters = planData.chaptersPerDay || Math.ceil(planData.totalChapters / planData.totalDays);
-      const minutes = planData.minutesPerDay || planData.minutesPerDayExact || (chapters * 4.5);
+      const minutes = planData.minutesPerDay || Math.round(planData.minutesPerDayExact) || Math.round(chapters * 4.5);
 
       return {
         chapters: chapters,
-        time: `${minutes.toFixed(1)}분`,  // 🔥 소수점 1자리까지 표시
+        time: `${minutes}분`,
         isTimeBase: planData.isTimeBasedCalculation || false
       };
     };
@@ -437,7 +437,7 @@ export default function ReadingBibleScreen() {
                 <HStack justifyContent="space-between">
                   <Text fontSize="18" color="#666">오늘 목표</Text>
                   <Text fontSize="18" fontWeight="500">
-                    {dailyTarget.chapters}장 ({dailyTarget.time})
+                    {dailyTarget.chapters}장 /{dailyTarget.time.toString().split('.')[0]}분
                   </Text>
                 </HStack>
 
@@ -516,7 +516,7 @@ export default function ReadingBibleScreen() {
     );
   }, [planData, color.white, navigation, handleDirectReset, getPlanTypeName, calculateProgress, calculateMissedChapters, getTodayChapters, formatTime, formatDailyTarget, forceUpdateKey]);
 
-  // 🔥 수정된 일독 진행 현황 박스 - 시간 기반 계산 지원 (반올림 제거)
+  // 🔥 수정된 일독 진행 현황 박스 - 시간 기반 계산 지원
   const renderProgressIndicator = useCallback((planData: any) => {
     // 🔥 디버그 로그 추가
     console.log(`
@@ -535,7 +535,7 @@ export default function ReadingBibleScreen() {
       =====================================
     `);
 
-    // 🔥 오늘의 계획 정보 가져오기 (반올림 제거)
+    // 🔥 오늘의 계획 정보 가져오기
     const getTodayPlanInfo = () => {
       // dailyPlan이 있는 경우 (시간 기반 상세 계획)
       if (planData.isTimeBasedCalculation && planData.dailyPlan) {
@@ -557,19 +557,13 @@ export default function ReadingBibleScreen() {
         }
       }
 
-      // 🔥 기본값 사용 - 저장된 값 우선 사용 (반올림 없이)
+      // 🔥 기본값 사용 - 저장된 값 우선 사용
       const chapters = planData.chaptersPerDay || Math.ceil(planData.totalChapters / planData.totalDays);
-      const minutes = planData.minutesPerDay || planData.minutesPerDayExact || (chapters * 4.5);
-
-      // 🔥 시간 포맷팅 함수
-      const formatMinutes = (mins: number) => {
-        if (typeof mins !== 'number') return '0분';
-        return `${mins.toFixed(1)}분`;
-      };
+      const minutes = planData.minutesPerDay || Math.round(planData.minutesPerDayExact) || Math.round(chapters * 4.5);
 
       return {
         chapters: chapters,
-        time: formatMinutes(minutes),
+        time: formatDailyTarget ? formatDailyTarget(minutes) : `${minutes}분`,
         isActual: false
       };
     };
@@ -624,27 +618,15 @@ export default function ReadingBibleScreen() {
                     {todayInfo.chapters}장
                   </Text>
                   <Text fontSize="18" color="#37C4B9" ml={1} fontWeight="700">
-                    / {todayInfo.time}
+                    / {todayInfo.time.toString().split('.')[0]}분
                   </Text>
                 </HStack>
               </HStack>
-
-              {/* 🔥 개발 디버그 정보 (프로덕션에서는 제거) */}
-              {__DEV__ && (
-                  <VStack space={1} mt={2} p={2} bg="rgba(0,0,0,0.05)" borderRadius="md">
-                    <Text fontSize="10" color="#999">
-                      [디버그] 정확한 값: {planData.chaptersPerDayExact?.toFixed(2)}장/일
-                    </Text>
-                    <Text fontSize="10" color="#999">
-                      [디버그] 시간: {planData.minutesPerDayExact?.toFixed(1)}분/일
-                    </Text>
-                  </VStack>
-              )}
             </VStack>
           </VStack>
         </Box>
     );
-  }, [getPlanTypeName, getPlanTypeDescription]);
+  }, [getPlanTypeName, getPlanTypeDescription, formatDailyTarget]);
 
   // 컴포넌트 렌더링
   const renderContent = useCallback(() => {
