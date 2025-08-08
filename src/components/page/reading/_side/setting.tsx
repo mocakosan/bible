@@ -163,13 +163,55 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
 
   const [isTimeDataLoaded, setIsTimeDataLoaded] = useState(false);
 
-  // 컴포넌트 마운트 시 CSV 데이터 로드
+  // 🔥 CSV 데이터 기반 실제 장수 저장 (정확한 값으로 수정)
+  const [actualChapterCounts, setActualChapterCounts] = useState<{ [key: string]: number }>({
+    full_bible: 1189,  // 921 + 268
+    old_testament: 921,  // 🔥 수정
+    new_testament: 268,  // 🔥 수정
+    pentateuch: 187,
+    psalms: 150
+  });
+
+  // 컴포넌트 마운트 시 CSV 데이터 로드 및 실제 장수 계산
   useEffect(() => {
     const loadTimeData = async () => {
       try {
         const success = await loadChapterTimeDataFromCSV();
         setIsTimeDataLoaded(success);
         console.log('⏱️ 시간 데이터 로드:', success ? '성공' : '실패');
+
+        if (success) {
+          // 🔥 각 계획별 실제 장수 계산
+          const counts: { [key: string]: number } = {};
+
+          for (const planType of DETAILED_BIBLE_PLAN_TYPES) {
+            const timeData = getChapterTimeDataForPlan(
+                planType.bookRange![0],
+                planType.bookRange![1]
+            );
+
+            if (timeData && timeData.length > 0) {
+              counts[planType.id] = timeData.length;
+              console.log(`📊 ${planType.name} 실제 장수: ${timeData.length}장`);
+            } else {
+              counts[planType.id] = planType.totalChapters; // fallback
+            }
+          }
+
+          setActualChapterCounts(counts);
+
+          console.log(`
+            =====================================
+            📚 CSV 기반 실제 장수
+            =====================================
+            성경 전체: ${counts.full_bible}장
+            구약: ${counts.old_testament}장
+            신약: ${counts.new_testament}장
+            모세오경: ${counts.pentateuch}장
+            시편: ${counts.psalms}장
+            =====================================
+          `);
+        }
       } catch (error) {
         console.error('시간 데이터 로드 오류:', error);
         setIsTimeDataLoaded(false);
@@ -385,9 +427,28 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
           const chaptersPerDayExact = totalChapters / totalDays;
           const chaptersPerDay = Math.ceil(chaptersPerDayExact);  // 올림 처리
 
-          // 하루 평균 시간 계산
+          // 하루 평균 시간 계산 (반올림/반내림 없이 정확한 값)
           const minutesPerDayExact = totalMinutes / totalDays;
-          const minutesPerDay = Math.ceil(minutesPerDayExact);
+          const minutesPerDay = minutesPerDayExact;  // 🔥 올림 제거, 정확한 값 사용
+
+          // 🔥 디버그 로그 추가
+          console.log(`
+            =====================================
+            📊 일독 계산 디버그
+            =====================================
+            계획: ${selectedPlan.name}
+            전체 장수: ${totalChapters}장
+            총 일수: ${totalDays}일
+            
+            장수 계산:
+            - 정확한 값: ${chaptersPerDayExact.toFixed(2)}장/일
+            - 올림 값: ${chaptersPerDay}장/일
+            
+            시간 계산:
+            - 전체 시간: ${totalMinutes.toFixed(1)}분 (${(totalMinutes / 60).toFixed(1)}시간)
+            - 하루 시간: ${minutesPerDayExact.toFixed(1)}분/일
+            =====================================
+          `);
 
           setCalculationResult({
             planType: selectedPlanType,
@@ -395,21 +456,13 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
             totalChapters: totalChapters,
             chaptersPerDay: chaptersPerDay,
             chaptersPerDayExact: chaptersPerDayExact,
-            minutesPerDay: minutesPerDay,
+            minutesPerDay: minutesPerDay,  // 🔥 정확한 값
             minutesPerDayExact: minutesPerDayExact,
-            totalTimeMinutes: Math.round(totalMinutes),
+            totalTimeMinutes: totalMinutes,  // 🔥 반올림 제거
             totalTimeSeconds: totalSeconds,
             isTimeBasedCalculation: true,
             hasActualTimeData: true
           });
-
-          console.log(`📊 CSV 기반 일독 계산 결과:
-            - 계획: ${selectedPlan.name} (${totalChapters}장)
-            - 총 기간: ${totalDays}일
-            - 전체 시간: ${Math.round(totalMinutes)}분 (${Math.round(totalMinutes / 60)}시간 ${Math.round(totalMinutes % 60)}분)
-            - 하루 평균: ${chaptersPerDayExact.toFixed(2)}장 → ${chaptersPerDay}장
-            - 예상 시간: ${minutesPerDayExact.toFixed(1)}분 → ${minutesPerDay}분/일
-          `);
         }
       } catch (error) {
         console.error('계산 오류:', error);
@@ -426,7 +479,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
 
       setCalenderState({
         start: dayjs(existingPlan.startDate).format('YYYY년MM월DD일'),
-        end: dayjs(existingPlan.targetDate).format('YYYY년MM월DD일')
+        end: dayjs(existingPlan.targetDate || existingPlan.endDate).format('YYYY년MM월DD일')
       });
     }
   };
@@ -570,6 +623,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 try {
                   // 일독 관련 MMKV 키들 삭제
                   const keysToDelete = [
+                    'bible_reading_plan',
                     'bible_plan_data',
                     'bible_reading_cache',
                     'reading_progress',
@@ -736,24 +790,41 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     const selectedPlan = DETAILED_BIBLE_PLAN_TYPES.find(plan => plan.id === selectedPlanType);
     if (!selectedPlan) return;
 
+    // 🔥 디버그 로그 추가
+    console.log(`
+      =====================================
+      💾 일독 계획 저장
+      =====================================
+      계획 타입: ${selectedPlan.name}
+      시작일: ${convertDate('start').format('YYYY-MM-DD')}
+      종료일: ${convertDate('end').format('YYYY-MM-DD')}
+      총 일수: ${calculationResult.totalDays}일
+      총 장수: ${calculationResult.totalChapters}장
+      하루 장수: ${calculationResult.chaptersPerDay}장 (정확: ${calculationResult.chaptersPerDayExact.toFixed(2)})
+      하루 시간: ${calculationResult.minutesPerDay}분 (정확: ${calculationResult.minutesPerDayExact.toFixed(1)})
+      =====================================
+    `);
+
     const newPlanData = {
       planType: selectedPlanType,
       planName: selectedPlan.name,
       startDate: convertDate('start').toISOString(),
       targetDate: convertDate('end').toISOString(),
+      endDate: convertDate('end').toISOString(), // 🔥 endDate도 추가
       totalDays: calculationResult.totalDays,
       chaptersPerDay: calculationResult.chaptersPerDay,
       chaptersPerDayExact: calculationResult.chaptersPerDayExact,  // 정확한 값도 저장
       minutesPerDay: calculationResult.minutesPerDay,
       minutesPerDayExact: calculationResult.minutesPerDayExact,  // 정확한 분도 저장
-      totalChapters: selectedPlan.totalChapters,
+      totalChapters: calculationResult.totalChapters, // 🔥 실제 CSV 장수 사용
       currentDay: 1,
       readChapters: [],
       createdAt: new Date().toISOString(),
       bookRange: selectedPlan.bookRange,
       isTimeBasedCalculation: true,
       totalTimeMinutes: calculationResult.totalTimeMinutes,
-      totalTimeSeconds: calculationResult.totalTimeSeconds
+      totalTimeSeconds: calculationResult.totalTimeSeconds,
+      hasActualTimeData: true // 🔥 CSV 데이터 사용 플래그
     };
 
     // 데이터 저장
@@ -769,7 +840,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     Toast.show({
       type: 'success',
       text1: `${selectedPlan.name} 일독이 설정되었습니다`,
-      text2: `하루 ${calculationResult.chaptersPerDay}장씩 ${calculationResult.minutesPerDay}분 목표`
+      text2: `하루 ${calculationResult.chaptersPerDay}장씩 ${calculationResult.minutesPerDay.toFixed(1)}분 목표`
     });
 
     // 상위 컴포넌트에 즉시 변경사항 알림
@@ -919,14 +990,14 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                     <HStack justifyContent="space-between">
                       <Text fontSize="14" color="#666">예상 시간:</Text>
                       <Text fontSize="14" color="#333333" fontWeight="500">
-                        {calculationResult.minutesPerDay}분/일
+                        {calculationResult.minutesPerDay.toFixed(1)}분/일
                       </Text>
                     </HStack>
                     {calculationResult.totalTimeMinutes && (
                         <HStack justifyContent="space-between">
                           <Text fontSize="14" color="#666">전체 시간:</Text>
                           <Text fontSize="14" color="#333333" fontWeight="500">
-                            {Math.round(calculationResult.totalTimeMinutes / 60)}시간 {Math.round(calculationResult.totalTimeMinutes % 60)}분
+                            {(calculationResult.totalTimeMinutes / 60).toFixed(1)}시간 ({calculationResult.totalTimeMinutes.toFixed(0)}분)
                           </Text>
                         </HStack>
                     )}
@@ -998,7 +1069,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
         <Actionsheet isOpen={isOpen} onClose={onClose}>
           <Actionsheet.Content borderTopRadius="15" bg="white">
             {!selectedPlanType ? (
-                // 첫 번째 단계: 타입 선택 화면 (기존 디자인 유지)
+                // 첫 번째 단계: 타입 선택 화면 (CSV 데이터 기반 장수 표시)
                 <>
                   <Box w="100%" h={60} px={4} justifyContent="center" alignItems="center" borderBottomWidth={1} borderBottomColor="#F0F0F0">
                     <Text fontSize={18} fontWeight="600" color="#333333">
@@ -1007,7 +1078,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   </Box>
 
                   <View style={{ width: '100%', padding: 16 }}>
-                    {/* 🔥 카테고리 버튼들 - 기존 디자인에 선택 상태만 추가 */}
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                       {DETAILED_BIBLE_PLAN_TYPES.map((planType) => (
                           <Button
@@ -1015,24 +1085,34 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                               w="48%"
                               h={65}
                               mb={3}
-                              bg={selectedPlanType === planType.id ? "#37C4B9" : "#F8F9FA"}  // 🔥 선택된 상태만 색상 변경
+                              bg={selectedPlanType === planType.id ? "#37C4B9" : "#F8F9FA"}
                               borderRadius="md"
-                              borderWidth={selectedPlanType === planType.id ? 2 : 1}  // 🔥 선택된 상태 테두리 강화
+                              borderWidth={selectedPlanType === planType.id ? 2 : 1}
                               borderColor={selectedPlanType === planType.id ? "#37C4B9" : "#E0E0E0"}
                               _pressed={{ bg: selectedPlanType === planType.id ? "#2BA89E" : "#F0F0F0" }}
-                              onPress={() => handleSelectBibleCategory(planType.name)}  // 🔥 기존 함수 사용
+                              onPress={() => handleSelectBibleCategory(planType.name)}
                           >
                             <VStack alignItems="center" space={1}>
+                              <HStack alignItems="baseline" space={1}>
+                                <Text
+                                    color={selectedPlanType === planType.id ? "#FFFFFF" : "#333333"}
+                                    fontSize="15"
+                                    fontWeight="600"
+                                    textAlign="center"
+                                >
+                                  {planType.name}
+                                </Text>
+                                {/* 🔥 CSV 데이터 기반 실제 장수 표시 */}
+                                <Text
+                                    color={selectedPlanType === planType.id ? "#E8F8FF" : "#37C4B9"}
+                                    fontSize="12"
+                                    fontWeight="600"
+                                >
+                                  {actualChapterCounts[planType.id]}장
+                                </Text>
+                              </HStack>
                               <Text
-                                  color={selectedPlanType === planType.id ? "#FFFFFF" : "#333333"}  // 🔥 선택된 상태 텍스트 색상
-                                  fontSize="15"
-                                  fontWeight="600"
-                                  textAlign="center"
-                              >
-                                {planType.name}
-                              </Text>
-                              <Text
-                                  color={selectedPlanType === planType.id ? "#F0F9FF" : "#666666"}  // 🔥 선택된 상태 설명 색상
+                                  color={selectedPlanType === planType.id ? "#F0F9FF" : "#666666"}
                                   fontSize="11"
                                   textAlign="center"
                                   numberOfLines={2}
@@ -1043,10 +1123,17 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                           </Button>
                       ))}
                     </View>
+
+                    {/* 🔥 CSV 데이터 로드 상태 표시 */}
+                    {isTimeDataLoaded && (
+                        <Text fontSize="10" color="#999" textAlign="center" mt={2}>
+                          ※ 실제 오디오 성경 기준 장수
+                        </Text>
+                    )}
                   </View>
                 </>
             ) : (
-                // 두 번째 단계: 선택된 타입의 상세 정보 화면 (기존 디자인 완전 유지)
+                // 두 번째 단계: 선택된 타입의 상세 정보 화면
                 <>
                   <Box w="100%" h={60} px={4} justifyContent="center" alignItems="center" borderBottomWidth={1} borderBottomColor="#F0F0F0">
                     <Text fontSize={18} fontWeight="600" color="#333333">
@@ -1056,12 +1143,11 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
 
                   <ScrollView style={{ width: '100%', maxHeight: 500 }}>
                     <View style={{ padding: 16 }}>
-                      {/* 선택된 타입 정보 - 기존과 동일 */}
                       <VStack space={3} mb={4}>
-                        {/* 🔥 성경/구약/신약/모세오경/시편 박스들 - 클릭 가능하도록 수정 */}
+                        {/* 🔥 성경/구약/신약/모세오경/시편 박스들 - CSV 데이터 기반 장수 표시 */}
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                           {DETAILED_BIBLE_PLAN_TYPES.map((planType) => (
-                              <Button  // 🔥 Box를 Button으로 변경하여 클릭 가능하게
+                              <Button
                                   key={planType.id}
                                   w="48%"
                                   h={20}
@@ -1073,7 +1159,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                                   _pressed={{ bg: selectedPlanType === planType.id ? "#2BA89E" : "#E0E0E0" }}
                                   onPress={() => {
                                     console.log("🔄 타입 변경:", planType.name);
-                                    setSelectedPlanType(planType.id);  // 🔥 직접 상태 변경
+                                    setSelectedPlanType(planType.id);
                                   }}
                               >
                                 <VStack alignItems="center">
@@ -1088,21 +1174,28 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                                       color={selectedPlanType === planType.id ? "white" : "#999999"}
                                       fontSize="19"
                                   >
-                                    {planType.totalChapters}장
+                                    {/* 🔥 CSV 데이터 기반 실제 장수 */}
+                                    {actualChapterCounts[planType.id]}장
                                   </Text>
                                 </VStack>
                               </Button>
                           ))}
                         </View>
 
-                        {/* 선택된 타입의 상세 설명 - 기존과 동일 */}
+                        {/* 선택된 타입의 상세 설명 */}
                         <Box bg="#F8F9FA" p={3} borderRadius="md">
                           <Text fontSize="16" color="#666" textAlign="center">
                             {DETAILED_BIBLE_PLAN_TYPES.find(t => t.id === selectedPlanType)?.description}
                           </Text>
+                          {/* 🔥 실제 장수와 기본값이 다른 경우 추가 정보 표시 */}
+                          {actualChapterCounts[selectedPlanType] !== DETAILED_BIBLE_PLAN_TYPES.find(t => t.id === selectedPlanType)?.totalChapters && (
+                              <Text fontSize="12" color="#37C4B9" textAlign="center" mt={1}>
+                                (오디오 성경 기준 {actualChapterCounts[selectedPlanType]}장)
+                              </Text>
+                          )}
                         </Box>
 
-                        {/* 예상 계산결과 - 기존과 동일 */}
+                        {/* 예상 계산결과 */}
                         {calculationResult && (
                             <Box bg="#F0F9FF" p={4} borderRadius="md">
                               <HStack alignItems="center" justifyContent="center" mb={3}>
@@ -1124,6 +1217,14 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                                   </HStack>
                                 </HStack>
 
+                                {/* 🔥 총 장수 표시 추가 */}
+                                <HStack justifyContent="space-between" alignItems="center">
+                                  <Text fontSize="18" color="#666">총 장수 :</Text>
+                                  <Text fontSize="18" color="#37C4B9" fontWeight="600">
+                                    {calculationResult.totalChapters}장
+                                  </Text>
+                                </HStack>
+
                                 <HStack justifyContent="space-between" alignItems="center">
                                   <Text fontSize="18" color="#666">하루목표 :</Text>
                                   <HStack alignItems="baseline">
@@ -1131,10 +1232,25 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                                       {calculationResult.chaptersPerDay}장
                                     </Text>
                                     <Text fontSize="18" color="#37C4B9" ml={1}>
-                                      / {calculationResult.minutesPerDay}분
+                                      / {calculationResult.minutesPerDay.toFixed(1)}분
                                     </Text>
                                   </HStack>
                                 </HStack>
+
+                                {/* 🔥 디버그 정보 */}
+                                {__DEV__ && (
+                                    <VStack space={1} mt={2} p={2} bg="#F5F5F5" borderRadius="md">
+                                      <Text fontSize="12" color="#666">
+                                        실제 계산: {calculationResult.chaptersPerDayExact.toFixed(2)}장/일
+                                      </Text>
+                                      <Text fontSize="12" color="#666">
+                                        실제 시간: {calculationResult.minutesPerDayExact.toFixed(1)}분/일
+                                      </Text>
+                                      <Text fontSize="12" color="#666">
+                                        전체: {calculationResult.totalChapters}장 / {calculationResult.totalDays}일
+                                      </Text>
+                                    </VStack>
+                                )}
 
                                 {/* CSV 시간 데이터 기반 표시 */}
                                 <HStack justifyContent="space-between" alignItems="center">
@@ -1149,7 +1265,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                     </View>
                   </ScrollView>
 
-                  {/* 하단 버튼 - 기존과 동일 */}
+                  {/* 하단 버튼 */}
                   <Box w="100%" p={4}>
                     <Button
                         w="100%"
