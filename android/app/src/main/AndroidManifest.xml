@@ -50,19 +50,8 @@
                 android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
                 android:launchMode="singleTask"
                 android:windowSoftInputMode="adjustResize"
-                android:exported="true"
-                android:screenOrientation="sensor">
-            <!--
-            주요 변경사항:
-            - android:screenOrientation="portrait" → android:screenOrientation="sensor"로 변경
-
-            다른 옵션들:
-            - "sensor": 센서에 따라 자동 회전 (권장)
-            - "fullSensor": 모든 방향 허용 (상하좌우 모든 회전)
-            - "unspecified": 시스템이 결정 (기본값)
-            - "sensorLandscape": 가로 방향만 허용
-            - "sensorPortrait": 세로 방향만 허용
-            -->
+                android:exported="true">
+            <!-- screenOrientation 속성을 완전히 제거하여 Java 코드에서 동적으로 제어 -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -82,7 +71,7 @@
             </intent-filter>
         </activity>
 
-        <!-- 광고 관련 액티비티 -->
+        <!-- 광고 관련 액티비티 - 세로 고정 유지 -->
         <activity android:name="com.tnkfactory.ad.AdWallActivity"
                   android:exported="true"
                   android:screenOrientation="portrait"/>
@@ -109,7 +98,7 @@
                 android:name="com.buzzvil.buzzbenefit.core.receiver.BuzzBenefitAlarmReceiver"
                 android:exported="false" />
 
-        <!-- 버즈빌 액티비티 -->
+        <!-- 버즈빌 액티비티 - 세로 고정 유지 (광고 화면) -->
         <activity
                 android:name="com.buzzvil.buzzbenefit.presentation.benefit.BuzzBenefitActivity"
                 android:exported="false"
