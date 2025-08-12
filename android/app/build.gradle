@@ -100,8 +100,8 @@ android {
         applicationId "com.clsk.media"
         minSdk 24
         targetSdk 34
-        versionCode 167
-        versionName "5.4.6"
+        versionCode 168
+        versionName "5.4.7"
 //        signingConfig signingConfigs.release
     }
     dexOptions {

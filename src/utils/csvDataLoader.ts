@@ -4,6 +4,7 @@
 import Papa from 'papaparse';
 import { BibleStep } from './define';
 import { defaultStorage } from './mmkv';
+import {window} from "react-native";
 
 // 타입 정의
 export interface ChapterTimeData {
