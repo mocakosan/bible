@@ -163,16 +163,16 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
 
   const [isTimeDataLoaded, setIsTimeDataLoaded] = useState(false);
 
-  // 🔥 정확한 장수 (하드코딩 - CSV와 무관하게 고정)
+  // 🔥 CSV 데이터 기반 실제 장수 저장 (정확한 값으로 수정)
   const [actualChapterCounts, setActualChapterCounts] = useState<{ [key: string]: number }>({
-    full_bible: 1189,   // 창세기~요한계시록
-    old_testament: 929, // 창세기~말라기
-    new_testament: 260, // 마태복음~요한계시록
-    pentateuch: 187,    // 창세기~신명기
-    psalms: 150         // 시편
+    full_bible: 1189,  // 전체: 구약(929) + 신약(260) = 1189
+    old_testament: 929,  // 구약: 창세기~말라기
+    new_testament: 260,  // 신약: 마태복음~요한계시록
+    pentateuch: 187,     // 모세오경: 창세기~신명기
+    psalms: 150          // 시편: 150편
   });
 
-  // 컴포넌트 마운트 시 CSV 데이터 로드
+  // 컴포넌트 마운트 시 CSV 데이터 로드 및 실제 장수 계산
   useEffect(() => {
     const loadTimeData = async () => {
       try {
@@ -180,41 +180,75 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
         setIsTimeDataLoaded(success);
         console.log('⏱️ 시간 데이터 로드:', success ? '성공' : '실패');
 
-        // 🔥 정확한 장수 설정 (CSV 로드와 무관하게 고정값 사용)
-        const correctCounts = {
-          full_bible: 1189,   // 창세기(50) ~ 요한계시록(22) = 1189장
-          old_testament: 929, // 창세기 ~ 말라기 = 929장
-          new_testament: 260, // 마태복음 ~ 요한계시록 = 260장
-          pentateuch: 187,    // 창세기~신명기 = 50+40+27+36+34 = 187장
-          psalms: 150         // 시편 = 150장
-        };
-
-        setActualChapterCounts(correctCounts);
-
-        console.log(`
-          =====================================
-          📚 성경 정확한 장수 설정
-          =====================================
-          성경 전체: ${correctCounts.full_bible}장
-          구약: ${correctCounts.old_testament}장
-          신약: ${correctCounts.new_testament}장
-          모세오경: ${correctCounts.pentateuch}장
-          시편: ${correctCounts.psalms}장
-          =====================================
-        `);
-      } catch (error) {
-        console.error('시간 데이터 로드 오류:', error);
-        setIsTimeDataLoaded(false);
-
-        // 오류 발생 시에도 정확한 값 설정
-        const correctCounts = {
+        // 기본값 설정 (CSV 로드 실패 시에도 사용)
+        const defaultCounts = {
           full_bible: 1189,
           old_testament: 929,
           new_testament: 260,
           pentateuch: 187,
           psalms: 150
         };
-        setActualChapterCounts(correctCounts);
+
+        if (success) {
+          // 🔥 각 계획별 실제 장수 계산
+          const counts: { [key: string]: number } = {};
+
+          for (const planType of DETAILED_BIBLE_PLAN_TYPES) {
+            const timeData = getChapterTimeDataForPlan(
+                planType.bookRange![0],
+                planType.bookRange![1]
+            );
+
+            if (timeData && timeData.length > 0) {
+              counts[planType.id] = timeData.length;
+              console.log(`📊 ${planType.name} CSV 장수: ${timeData.length}장`);
+            } else {
+              // CSV 데이터가 없으면 기본값 사용
+              counts[planType.id] = defaultCounts[planType.id] || planType.totalChapters;
+              console.log(`📊 ${planType.name} 기본 장수 사용: ${counts[planType.id]}장`);
+            }
+          }
+
+          // 🔥 counts가 비어있거나 잘못된 경우 기본값 사용
+          const finalCounts = {
+            full_bible: counts.full_bible || defaultCounts.full_bible,
+            old_testament: counts.old_testament || defaultCounts.old_testament,
+            new_testament: counts.new_testament || defaultCounts.new_testament,
+            pentateuch: counts.pentateuch || defaultCounts.pentateuch,
+            psalms: counts.psalms || defaultCounts.psalms
+          };
+
+          setActualChapterCounts(finalCounts);
+
+          console.log(`
+            =====================================
+            📚 최종 설정된 장수
+            =====================================
+            성경 전체: ${finalCounts.full_bible}장
+            구약: ${finalCounts.old_testament}장
+            신약: ${finalCounts.new_testament}장
+            모세오경: ${finalCounts.pentateuch}장
+            시편: ${finalCounts.psalms}장
+            =====================================
+          `);
+        } else {
+          // CSV 로드 실패 시 기본값으로 설정
+          console.log('CSV 로드 실패 - 기본값 사용');
+          setActualChapterCounts(defaultCounts);
+        }
+      } catch (error) {
+        console.error('시간 데이터 로드 오류:', error);
+        setIsTimeDataLoaded(false);
+
+        // 오류 발생 시에도 기본값 설정
+        const defaultCounts = {
+          full_bible: 1189,
+          old_testament: 929,
+          new_testament: 260,
+          pentateuch: 187,
+          psalms: 150
+        };
+        setActualChapterCounts(defaultCounts);
       }
     };
 
@@ -390,7 +424,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     initializeComponent();
   }, []);
 
-  // 🔥🔥🔥 수정된 계산 로직 - 총 기간 기반으로 하루 목표 시간 고정 🔥🔥🔥
+  // 🔥 수정된 계산 로직 - 정확한 CSV 시간 데이터 사용
   useEffect(() => {
     if (selectedPlanType && calendarState.start && calendarState.end) {
       try {
@@ -404,99 +438,76 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
           // 전체 기간 계산 (시작일과 종료일 모두 포함)
           const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-          // 🔥 하드코딩된 정확한 장수 사용
-          const hardcodedCounts: { [key: string]: number } = {
-            full_bible: 1189,
-            old_testament: 929,
-            new_testament: 260,
-            pentateuch: 187,
-            psalms: 150
+          // 🔥 정확한 장수와 시간 데이터 (엑셀 파일 기준)
+          const exactData: { [key: string]: { chapters: number; totalSeconds: number; totalMinutes: number } } = {
+            full_bible: {
+              chapters: 1189,
+              totalSeconds: 282929,  // 78시간 35분 29초
+              totalMinutes: 4715.5   // 282929초 ÷ 60
+            },
+            old_testament: {
+              chapters: 929,
+              totalSeconds: 220653,   // 61시간 17분 33초
+              totalMinutes: 3677.6    // 220653초 ÷ 60
+            },
+            new_testament: {
+              chapters: 260,
+              totalSeconds: 62276,    // 17시간 17분 56초
+              totalMinutes: 1037.9    // 62276초 ÷ 60
+            },
+            pentateuch: {
+              chapters: 187,
+              totalSeconds: 54617,    // 15시간 10분 17초
+              totalMinutes: 910.3     // 54617초 ÷ 60
+            },
+            psalms: {
+              chapters: 150,
+              totalSeconds: 19589,    // 5시간 26분 29초
+              totalMinutes: 326.5     // 19589초 ÷ 60
+            }
           };
 
-          // 총 장수는 항상 하드코딩된 값 사용
-          const totalChapters = hardcodedCounts[selectedPlanType] || selectedPlan.totalChapters;
+          // 선택된 계획의 정확한 데이터 가져오기
+          const planData = exactData[selectedPlanType];
 
-          // 🔥 CSV 데이터 가져오기 (시간 계산용)
-          const timeData = getChapterTimeDataForPlan(
-              selectedPlan.bookRange![0],
-              selectedPlan.bookRange![1]
-          );
-
-          let totalSeconds = 0;
-          let totalMinutes = 0;
-
-          if (timeData && timeData.length > 0) {
-            // CSV 데이터가 있으면 정확한 시간 계산
-            totalSeconds = timeData.reduce((sum, ch) => sum + ch.totalSeconds, 0);
-            totalMinutes = totalSeconds / 60;
-          } else {
-            // CSV 데이터가 없으면 기본 추정치 사용
-            const exactData: { [key: string]: { totalSeconds: number; totalMinutes: number } } = {
-              full_bible: {
-                totalSeconds: 282929,  // 78시간 35분 29초
-                totalMinutes: 4715.5   // 282929초 ÷ 60
-              },
-              old_testament: {
-                totalSeconds: 220653,   // 61시간 17분 33초
-                totalMinutes: 3677.6    // 220653초 ÷ 60
-              },
-              new_testament: {
-                totalSeconds: 62276,    // 17시간 17분 56초
-                totalMinutes: 1037.9    // 62276초 ÷ 60
-              },
-              pentateuch: {
-                totalSeconds: 54617,    // 15시간 10분 17초
-                totalMinutes: 910.3     // 54617초 ÷ 60
-              },
-              psalms: {
-                totalSeconds: 19589,    // 5시간 26분 29초
-                totalMinutes: 326.5     // 19589초 ÷ 60
-              }
-            };
-
-            const planData = exactData[selectedPlanType];
-            if (planData) {
-              totalSeconds = planData.totalSeconds;
-              totalMinutes = planData.totalMinutes;
-            }
+          if (!planData) {
+            console.error('계획 데이터를 찾을 수 없습니다:', selectedPlanType);
+            setCalculationResult(null);
+            return;
           }
 
-          // 🔥🔥 핵심 계산: 총 기간으로 나누어 하루 목표 시간 고정
-          const targetMinutesPerDay = totalMinutes / totalDays;  // 고정값
-          const targetSecondsPerDay = totalSeconds / totalDays;
+          // 전체 장수와 시간
+          const totalChapters = planData.chapters;
+          const totalSeconds = planData.totalSeconds;
+          const totalMinutes = planData.totalMinutes;
 
-          // 시간 기반으로 일독 계획 생성 (새로운 함수 사용)
-          let dailyPlan = null;
-          if (timeData && timeData.length > 0) {
-            dailyPlan = createTimeBasedReadingPlan(
-                totalDays,  // 🔥 총 기간을 전달
-                timeData,
-                startDate,
-                selectedPlan.bookRange!
-            );
-          }
-
-          // 평균 장수 계산 (표시용)
+          // 정확한 하루 평균 계산
           const chaptersPerDayExact = totalChapters / totalDays;
-          const chaptersPerDay = Math.ceil(chaptersPerDayExact);
+          const chaptersPerDay = Math.ceil(chaptersPerDayExact);  // 올림 처리
 
-          // 🔥 디버그 로그
+          // 정확한 하루 평균 시간 계산
+          const minutesPerDayExact = totalMinutes / totalDays;
+          const minutesPerDay = minutesPerDayExact;  // 정확한 값 사용
+          const secondsPerDayTotal = totalSeconds / totalDays;
+          const secondsPerDay = Math.floor(secondsPerDayTotal % 60);
+
+          // 🔥 디버그 로그 추가
           console.log(`
             =====================================
-            📊 일독 계산 (총 기간 기반 - 시간 고정)
+            📊 일독 계산 (정확한 데이터)
             =====================================
             계획: ${selectedPlan.name}
-            총 기간: ${totalDays}일
             전체 장수: ${totalChapters}장
-            전체 시간: ${Math.round(totalMinutes)}분
+            총 일수: ${totalDays}일
             
-            🔥 하루 목표 시간 (고정):
-            - ${Math.round(targetMinutesPerDay)}분/일
-            - 정확히: ${targetMinutesPerDay.toFixed(1)}분
+            장수 계산:
+            - ${totalChapters}장 ÷ ${totalDays}일 = ${chaptersPerDayExact.toFixed(2)}장/일
+            - 올림 값: ${chaptersPerDay}장/일
             
-            📖 평균 장수 (유동적):
-            - 평균: ${chaptersPerDayExact.toFixed(1)}장/일
-            - 실제: 날마다 다름 (시간 기준)
+            시간 계산 (정확한 엑셀 데이터):
+            - 전체 시간: ${totalMinutes.toFixed(1)}분 (${(totalMinutes / 60).toFixed(1)}시간)
+            - ${totalMinutes.toFixed(1)}분 ÷ ${totalDays}일 = ${minutesPerDayExact.toFixed(1)}분/일
+            - 하루 시간: ${Math.floor(minutesPerDayExact)}분 ${secondsPerDay}초
             =====================================
           `);
 
@@ -506,15 +517,13 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
             totalChapters: totalChapters,
             chaptersPerDay: chaptersPerDay,
             chaptersPerDayExact: chaptersPerDayExact,
-            targetMinutesPerDay: Math.round(targetMinutesPerDay),  // 🔥 고정된 목표 시간
-            minutesPerDay: Math.round(targetMinutesPerDay),  // 🔥 고정값
-            minutesPerDayExact: targetMinutesPerDay,
-            secondsPerDay: Math.floor(targetSecondsPerDay % 60),
+            minutesPerDay: minutesPerDay,  // 정확한 값
+            minutesPerDayExact: minutesPerDayExact,
+            secondsPerDay: secondsPerDay,
             totalTimeMinutes: totalMinutes,
             totalTimeSeconds: totalSeconds,
             isTimeBasedCalculation: true,
-            hasActualTimeData: timeData && timeData.length > 0,
-            dailyPlan: dailyPlan
+            hasActualTimeData: true
           });
         }
       } catch (error) {
@@ -823,7 +832,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     }
   };
 
-  // 🔥🔥 수정된 계획 저장 함수 - 시간 기반 데이터 포함
   const handleCompletePlanSetup = () => {
     if (!selectedPlanType) {
       Toast.show({
@@ -858,17 +866,15 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     // 🔥 디버그 로그 추가
     console.log(`
       =====================================
-      💾 일독 계획 저장 (시간 고정 버전)
+      💾 일독 계획 저장
       =====================================
       계획 타입: ${selectedPlan.name}
       시작일: ${convertDate('start').format('YYYY-MM-DD')}
       종료일: ${convertDate('end').format('YYYY-MM-DD')}
       총 일수: ${calculationResult.totalDays}일
       총 장수: ${totalChapters}장
-      
-      🔥 하루 목표 (고정):
-      - 시간: ${calculationResult.targetMinutesPerDay}분/일
-      - 장수: 매일 다름 (시간 기준 조정)
+      하루 장수: ${calculationResult.chaptersPerDay}장 (정확: ${calculationResult.chaptersPerDayExact.toFixed(2)})
+      하루 시간: ${calculationResult.minutesPerDay}분 (정확: ${calculationResult.minutesPerDayExact.toFixed(1)})
       =====================================
     `);
 
@@ -881,27 +887,17 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
       totalDays: calculationResult.totalDays,
       chaptersPerDay: calculationResult.chaptersPerDay,
       chaptersPerDayExact: calculationResult.chaptersPerDayExact,
-
-      // 🔥 시간 기반 필드 (고정된 목표 시간)
-      targetMinutesPerDay: calculationResult.targetMinutesPerDay,  // 고정값
-      minutesPerDay: calculationResult.targetMinutesPerDay,  // 고정값
+      minutesPerDay: calculationResult.minutesPerDay,
       minutesPerDayExact: calculationResult.minutesPerDayExact,
-
-      totalChapters: totalChapters,
+      totalChapters: totalChapters, // 🔥 하드코딩된 정확한 장수 사용
       currentDay: 1,
       readChapters: [],
       createdAt: new Date().toISOString(),
       bookRange: selectedPlan.bookRange,
-
-      // 🔥 시간 기반 계산 플래그
-      isTimeBasedCalculation: true,
+      isTimeBasedCalculation: calculationResult.isTimeBasedCalculation,
       totalTimeMinutes: calculationResult.totalTimeMinutes,
       totalTimeSeconds: calculationResult.totalTimeSeconds,
-      hasActualTimeData: calculationResult.hasActualTimeData,
-
-      // 🔥 일별 계획 (시간 기반)
-      dailyPlan: calculationResult.dailyPlan,
-      selectedBooks: selectedPlan.bookRange
+      hasActualTimeData: calculationResult.hasActualTimeData
     };
 
     // 데이터 저장
@@ -914,10 +910,12 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     onClose();
 
     // 성공 메시지
+    const displayMinutes = Math.floor(calculationResult.minutesPerDay);
+    const displaySeconds = Math.floor((calculationResult.minutesPerDay * 60) % 60);
     Toast.show({
       type: 'success',
       text1: `${selectedPlan.name} 일독이 설정되었습니다`,
-      text2: `매일 ${calculationResult.targetMinutesPerDay}분씩 읽기 (장수는 날마다 다름)`
+      text2: `하루 ${calculationResult.chaptersPerDay}장씩 ${displayMinutes}분 ${displaySeconds}초 목표`
     });
 
     // 상위 컴포넌트에 즉시 변경사항 알림
@@ -1059,22 +1057,22 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                       </Text>
                     </HStack>
                     <HStack justifyContent="space-between">
-                      <Text fontSize="14" color="#666">하루 목표 시간:</Text>
-                      <Text fontSize="14" color="#37C4B9" fontWeight="600">
-                        {calculationResult.targetMinutesPerDay}분 (고정)
+                      <Text fontSize="14" color="#666">하루 평균:</Text>
+                      <Text fontSize="14" color="#333333" fontWeight="500">
+                        {calculationResult.chaptersPerDay}장
                       </Text>
                     </HStack>
                     <HStack justifyContent="space-between">
-                      <Text fontSize="14" color="#666">평균 장수:</Text>
+                      <Text fontSize="14" color="#666">예상 시간:</Text>
                       <Text fontSize="14" color="#333333" fontWeight="500">
-                        약 {calculationResult.chaptersPerDayExact.toFixed(1)}장/일
+                        {Math.floor(calculationResult.minutesPerDay)}분 {Math.floor((calculationResult.minutesPerDay * 60) % 60)}초/일
                       </Text>
                     </HStack>
                     {calculationResult.totalTimeMinutes && (
                         <HStack justifyContent="space-between">
                           <Text fontSize="14" color="#666">전체 시간:</Text>
                           <Text fontSize="14" color="#333333" fontWeight="500">
-                            {(calculationResult.totalTimeMinutes / 60).toFixed(1)}시간
+                            {(calculationResult.totalTimeMinutes / 60).toFixed(1)}시간 ({calculationResult.totalTimeMinutes.toFixed(0)}분)
                           </Text>
                         </HStack>
                     )}
@@ -1186,15 +1184,15 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                                     fontWeight="600"
                                 >
                                   {(() => {
-                                    // 🔥 정확한 장수 직접 반환 (CSV와 무관)
-                                    const correctCounts: { [key: string]: number } = {
+                                    // 하드코딩된 정확한 장수 직접 반환
+                                    const hardcodedCounts: { [key: string]: number } = {
                                       full_bible: 1189,
                                       old_testament: 929,
                                       new_testament: 260,
                                       pentateuch: 187,
                                       psalms: 150
                                     };
-                                    return correctCounts[planType.id];
+                                    return hardcodedCounts[planType.id] || actualChapterCounts[planType.id] || planType.totalChapters;
                                   })()}장
                                 </Text>
                               </HStack>
@@ -1263,15 +1261,15 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                                   >
                                     {/* 🔥 CSV 데이터 기반 실제 장수 */}
                                     {(() => {
-                                      // 🔥 정확한 장수 직접 반환 (CSV와 무관)
-                                      const correctCounts: { [key: string]: number } = {
+                                      // 하드코딩된 정확한 장수 직접 반환
+                                      const hardcodedCounts: { [key: string]: number } = {
                                         full_bible: 1189,
                                         old_testament: 929,
                                         new_testament: 260,
                                         pentateuch: 187,
                                         psalms: 150
                                       };
-                                      return correctCounts[planType.id];
+                                      return hardcodedCounts[planType.id] || actualChapterCounts[planType.id] || planType.totalChapters;
                                     })()}장
                                   </Text>
                                 </VStack>
@@ -1292,7 +1290,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                           )}
                         </Box>
 
-                        {/* 🔥🔥 수정된 예상 계산결과 표시 */}
+                        {/* 예상 계산결과 */}
                         {calculationResult && (
                             <Box bg="#F0F9FF" p={4} borderRadius="md">
                               <HStack alignItems="center" justifyContent="center" mb={3}>
@@ -1322,31 +1320,37 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                                   </Text>
                                 </HStack>
 
-                                {/* 🔥🔥 하루 목표 시간 (고정) 강조 표시 */}
                                 <HStack justifyContent="space-between" alignItems="center">
                                   <Text fontSize="18" color="#666">하루목표 :</Text>
-                                  <VStack alignItems="flex-end">
-                                    <Text fontSize="18" color="#37C4B9" fontWeight="700">
-                                      {calculationResult.targetMinutesPerDay}분 (고정)
+                                  <HStack alignItems="baseline">
+                                    <Text fontSize="18" color="#37C4B9" fontWeight="600">
+                                      {calculationResult.chaptersPerDay}장
                                     </Text>
-                                    <Text fontSize="14" color="#999">
-                                      장수는 매일 다름
+                                    <Text fontSize="18" color="#37C4B9" ml={1}>
+                                      / {Math.floor(calculationResult.minutesPerDay)}분 {Math.floor((calculationResult.minutesPerDay * 60) % 60)}초
                                     </Text>
-                                  </VStack>
+                                  </HStack>
                                 </HStack>
 
-                                {/* 평균 장수 (참고용) */}
-                                <HStack justifyContent="space-between" alignItems="center">
-                                  <Text fontSize="14" color="#999">평균 장수:</Text>
-                                  <Text fontSize="14" color="#999">
-                                    약 {calculationResult.chaptersPerDayExact.toFixed(1)}장/일
-                                  </Text>
-                                </HStack>
+                                {/* 🔥 디버그 정보 */}
+                                {__DEV__ && (
+                                    <VStack space={1} mt={2} p={2} bg="#F5F5F5" borderRadius="md">
+                                      <Text fontSize="12" color="#666">
+                                        실제 계산: {calculationResult.chaptersPerDayExact.toFixed(2)}장/일
+                                      </Text>
+                                      <Text fontSize="12" color="#666">
+                                        실제 시간: {calculationResult.minutesPerDayExact.toFixed(1)}분/일
+                                      </Text>
+                                      <Text fontSize="12" color="#666">
+                                        전체: {calculationResult.totalChapters}장 / {calculationResult.totalDays}일
+                                      </Text>
+                                    </VStack>
+                                )}
 
                                 {/* CSV 시간 데이터 기반 표시 */}
-                                <HStack justifyContent="center" alignItems="center" mt={2}>
-                                  <Text fontSize="13" color="#37C4B9">
-                                    ※ 매일 {calculationResult.targetMinutesPerDay}분씩 고정 시간
+                                <HStack justifyContent="space-between" alignItems="center">
+                                  <Text fontSize="14" color="#999">
+                                    ※ 실제 오디오 시간 기준으로 계산됨
                                   </Text>
                                 </HStack>
                               </VStack>

@@ -1,9 +1,13 @@
 // src/utils/biblePlanCalculator.ts
-// 성경 일독 계획 계산 로직 - 시간 고정 버전
+// 성경 일독 계획 계산 로직 - CSV 데이터 기반 시간 고정 버전
 
 import { BibleStep } from './define';
-import { getChapterTimeDataForPlan } from './csvDataLoader';
-import { createTimeBasedReadingPlan } from './timeBasedBibleReading';
+import {
+    getChapterTimeDataForPlan,
+    calculateTotalTimeForPlan,
+    initializeChapterTimeData,
+    ChapterTimeData
+} from './csvDataLoader';
 
 // 타입 정의
 export interface BibleReadingPlanCalculation {
@@ -12,19 +16,38 @@ export interface BibleReadingPlanCalculation {
     totalChapters: number;
     chaptersPerDay: number;
     chaptersPerDayExact: number;
-    estimatedEndDate?: Date;
+    estimatedEndDate: Date;
 
     // 시간 기반 필드
-    targetMinutesPerDay?: number;
-    minutesPerDay?: number;
-    minutesPerDayExact?: number;
-    isTimeBasedCalculation?: boolean;
-    averageTimePerDay?: string;
-    totalReadingTime?: string;
-    hasActualTimeData?: boolean;
-    totalTimeSeconds?: number;
-    totalTimeMinutes?: number;
-    dailyPlan?: any[];  // DailyReadingPlan[]
+    targetMinutesPerDay: number;
+    minutesPerDay: number;
+    minutesPerDayExact: number;
+    isTimeBasedCalculation: boolean;
+    averageTimePerDay: string;
+    totalReadingTime: string;
+    hasActualTimeData: boolean;
+    totalTimeSeconds: number;
+    totalTimeMinutes: number;
+    dailyPlan: DailyReadingPlan[];
+}
+
+export interface DailyReadingPlan {
+    day: number;
+    date: Date;
+    chapters: ChapterReading[];
+    totalMinutes: number;
+    totalSeconds: number;
+    formattedTime: string;
+}
+
+export interface ChapterReading {
+    bookIndex: number;
+    bookName: string;
+    chapter: number;
+    duration: string;
+    minutes: number;
+    seconds: number;
+    estimatedMinutes: number;
 }
 
 export interface BiblePlanTypeDetail {
@@ -87,13 +110,16 @@ export const DETAILED_BIBLE_PLAN_TYPES: BiblePlanTypeDetail[] = [
 ];
 
 /**
- * 🔥 수정된 메인 계산 함수 - 총 기간 기반
+ * 🔥 메인 계산 함수 - CSV 데이터 기반 총 기간 방식
  */
-export function calculateReadingPlan(
+export async function calculateReadingPlan(
     planType: string,
     startDate: Date,
     endDate: Date
-): BibleReadingPlanCalculation | null {
+): Promise<BibleReadingPlanCalculation | null> {
+    // CSV 데이터 초기화
+    await initializeChapterTimeData();
+
     const plan = DETAILED_BIBLE_PLAN_TYPES.find(p => p.id === planType);
     if (!plan) {
         console.error(`Invalid plan type: ${planType}`);
@@ -123,19 +149,18 @@ export function calculateReadingPlan(
         }
 
         // 전체 시간 계산
-        const totalSeconds = timeData.reduce((sum, chapter) => sum + chapter.totalSeconds, 0);
-        const totalMinutes = totalSeconds / 60;
+        const { totalSeconds, totalMinutes } = calculateTotalTimeForPlan(planType);
 
         // 하루 목표 시간 계산 (고정값)
-        const minutesPerDay = totalMinutes / totalDays;
-        const targetMinutesPerDay = Math.round(minutesPerDay);
+        const targetMinutesPerDay = Math.round(totalMinutes / totalDays);
+        const targetSecondsPerDay = targetMinutesPerDay * 60;
 
-        // 시간 기반 일독 계획 생성
-        const dailyPlan = createTimeBasedReadingPlan(
-            totalDays,
+        // 일별 계획 생성
+        const dailyPlan = createDailyPlan(
             timeData,
-            startDate,
-            plan.bookRange!
+            totalDays,
+            targetSecondsPerDay,
+            startDate
         );
 
         // 실제 장수
@@ -155,7 +180,7 @@ export function calculateReadingPlan(
             // 시간 기반 데이터
             targetMinutesPerDay,
             minutesPerDay: targetMinutesPerDay,
-            minutesPerDayExact: minutesPerDay,
+            minutesPerDayExact: totalMinutes / totalDays,
             isTimeBasedCalculation: true,
             hasActualTimeData: true,
             averageTimePerDay: formatMinutes(targetMinutesPerDay),
@@ -179,6 +204,103 @@ export function calculateReadingPlan(
 }
 
 /**
+ * 일별 계획 생성
+ */
+function createDailyPlan(
+    timeData: ChapterTimeData[],
+    totalDays: number,
+    targetSecondsPerDay: number,
+    startDate: Date
+): DailyReadingPlan[] {
+    const plan: DailyReadingPlan[] = [];
+    let currentDay = 1;
+    let currentDate = new Date(startDate);
+    let dailyChapters: ChapterReading[] = [];
+    let dailyTotalSeconds = 0;
+    let chapterIndex = 0;
+
+    while (chapterIndex < timeData.length && currentDay <= totalDays) {
+        const chapterData = timeData[chapterIndex];
+
+        // 현재 장을 추가
+        const chapterReading: ChapterReading = {
+            bookIndex: chapterData.bookIndex,
+            bookName: chapterData.bookName,
+            chapter: chapterData.chapter,
+            duration: chapterData.duration,
+            minutes: chapterData.minutes,
+            seconds: chapterData.seconds,
+            estimatedMinutes: chapterData.totalSeconds / 60
+        };
+
+        dailyChapters.push(chapterReading);
+        dailyTotalSeconds += chapterData.totalSeconds;
+        chapterIndex++;
+
+        // 목표 시간에 도달했거나 마지막 장인 경우
+        const isTargetReached = dailyTotalSeconds >= targetSecondsPerDay * 0.9; // 90% 도달
+        const isLastChapter = chapterIndex === timeData.length;
+        const isLastDay = currentDay === totalDays;
+
+        if ((isTargetReached && !isLastDay) || isLastChapter || isLastDay) {
+            // 마지막 날에 남은 모든 장 추가
+            if (isLastDay && !isLastChapter) {
+                while (chapterIndex < timeData.length) {
+                    const remainingChapter = timeData[chapterIndex];
+                    dailyChapters.push({
+                        bookIndex: remainingChapter.bookIndex,
+                        bookName: remainingChapter.bookName,
+                        chapter: remainingChapter.chapter,
+                        duration: remainingChapter.duration,
+                        minutes: remainingChapter.minutes,
+                        seconds: remainingChapter.seconds,
+                        estimatedMinutes: remainingChapter.totalSeconds / 60
+                    });
+                    dailyTotalSeconds += remainingChapter.totalSeconds;
+                    chapterIndex++;
+                }
+            }
+
+            // 일일 계획 저장
+            plan.push({
+                day: currentDay,
+                date: new Date(currentDate),
+                chapters: [...dailyChapters],
+                totalMinutes: Math.round(dailyTotalSeconds / 60),
+                totalSeconds: dailyTotalSeconds,
+                formattedTime: formatTime(dailyTotalSeconds)
+            });
+
+            // 다음 날 준비
+            if (currentDay < totalDays && chapterIndex < timeData.length) {
+                currentDay++;
+                currentDate.setDate(currentDate.getDate() + 1);
+                dailyChapters = [];
+                dailyTotalSeconds = 0;
+            } else {
+                break;
+            }
+        }
+    }
+
+    return plan;
+}
+
+/**
+ * 시간 포맷팅
+ */
+function formatTime(totalSeconds: number): string {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = Math.round(totalSeconds % 60);
+
+    if (hours > 0) {
+        return `${hours}시간 ${minutes}분`;
+    }
+    return `${minutes}분`;
+}
+
+/**
  * 분을 시간:분 형식으로 변환
  */
 function formatMinutes(minutes: number): string {
@@ -190,3 +312,7 @@ function formatMinutes(minutes: number): string {
     }
     return `${mins}분`;
 }
+
+// Export 추가 함수들
+export { formatTime, formatMinutes };
+export type { ChapterReading, DailyReadingPlan };
