@@ -25,7 +25,7 @@ import {
 import {useBibleReading} from "../../../../utils/useBibleReading";
 import {bibleSelectSlice, bibleTextSlice, illdocSelectSlice} from "../../../../provider/redux/slice";
 import {store} from "../../../../provider/redux/store";
-import Papa from 'papaparse';
+
 
 interface Props {
   readState: any;
