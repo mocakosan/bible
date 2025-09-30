@@ -1,0 +1,27 @@
+// 라이브러리별 패치
+ext.patchLibraries = {
+    // react-native-splash-screen 패치
+    project(':react-native-splash-screen').android {
+        namespace 'org.devio.rn.splashscreen'
+    }
+
+    // react-native-exit-app 패치
+    project(':react-native-exit-app').android {
+        namespace 'com.github.wumke.RNExitApp'
+    }
+
+    // react-native-firebase_app 패치
+    project(':react-native-firebase_app').android {
+        namespace 'io.invertase.firebase.app'
+    }
+
+    // react-native-google-mobile-ads 패치
+    project(':react-native-google-mobile-ads').android {
+        namespace 'io.invertase.googlemobileads'
+    }
+}
+
+// 패치 적용
+gradle.projectsEvaluated {
+    patchLibraries()
+}

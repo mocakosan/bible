@@ -5,6 +5,7 @@ import { Linking, Platform } from "react-native";
 import { shallowEqual, useSelector } from "react-redux";
 import { gFontTitle } from "../../../constant/global";
 import { useBaseStyle, useNativeNavigation } from "../../../hooks";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 
 export default function FooterLayout() {
   const { color } = useBaseStyle();
@@ -17,6 +18,8 @@ export default function FooterLayout() {
   );
 
   const { name: routeName } = route;
+
+  const insets = useSafeAreaInsets();
 
   const [link, setLink] = useState<string>("https://www.kdknews.com");
 
@@ -87,7 +90,7 @@ export default function FooterLayout() {
           borderTopWidth={1}
           bg="white"
           width="100%"
-          height={Platform.OS === "android" ? 45 : 70}
+          height={Platform.OS === "android" ? 45 + insets.bottom : 70}
           alignSelf="center"
       >
         <HStack justifyContent={"space-around"}>
