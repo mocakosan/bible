@@ -352,7 +352,7 @@ export default function Benefit({ point, user, hmacData }: DalantProps) {
               resizeMode="cover"
             />
           </TouchableOpacity>
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={[styles.coupangBanner, { width: "100%" }]}
             onPress={mottoClick}
           >
@@ -361,7 +361,7 @@ export default function Benefit({ point, user, hmacData }: DalantProps) {
               style={{ width: "100%", height: 100, borderRadius: 12 }}
               resizeMode="contain"
             />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
           <TouchableOpacity
             style={styles.coupangBanner}
             onPress={mangoLabClick}

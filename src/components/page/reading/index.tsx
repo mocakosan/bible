@@ -19,7 +19,7 @@ import {
   deleteBiblePlanData,
   getTodayChapters,
   formatTime,
-  formatDailyTarget
+  formatDailyTarget, getCurrentDay
 } from "../../../utils/biblePlanUtils";
 import { useBaseStyle, useNativeNavigation } from "../../../hooks";
 import { Alert } from "react-native";
@@ -262,19 +262,6 @@ export default function ReadingBibleScreen() {
     const missedCount = calculateMissedChapters(planData);
     const todayChapters = getTodayChapters(planData);
 
-    // 🔥 디버그 로그 추가
-    console.log(`
-      =====================================
-      📊 ProgressView 디버그
-      =====================================
-      진행률: ${progress.progressPercentage?.toFixed(1)}%
-      읽은 장: ${progress.readChapters}
-      전체 장: ${planData.totalChapters}
-      놓친 장: ${missedCount}
-      오늘 읽을 장 수: ${todayChapters?.length || 0}
-      =====================================
-    `);
-
     const getDaysRemaining = () => {
       const endDate = new Date(planData.endDate || planData.targetDate);
       const today = new Date();
@@ -289,31 +276,25 @@ export default function ReadingBibleScreen() {
       return '#F44336';
     };
 
-    // 🔥 수정: 시간 계산 로직 개선
+    // 🔥 수정: getDailyTargetDisplay 함수도 동일하게 수정
     const getDailyTargetDisplay = () => {
-      // dailyPlan이 있는 경우
-      if (planData.isTimeBasedCalculation && planData.dailyPlan && todayChapters.length > 0) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const todayPlan = planData.dailyPlan.find((day: any) => {
-          const planDate = new Date(day.date);
-          planDate.setHours(0, 0, 0, 0);
-          return planDate.getTime() === today.getTime();
-        });
+      // 시간 기반 계획이고 dailyPlan이 있는 경우
+      if (planData.isTimeBasedCalculation && planData.dailyPlan && planData.dailyPlan.length > 0) {
+        const currentDay = getCurrentDay(planData.startDate);
+        const todayPlan = planData.dailyPlan.find((day: any) => day.day === currentDay);
 
         if (todayPlan) {
           return {
-            chapters: todayPlan.chapters.length,
-            time: todayPlan.formattedTime || formatTime(todayPlan.totalSeconds),
+            chapters: todayPlan.actualChapterCount || todayPlan.chapters.length,
+            time: todayPlan.formattedTime || `${todayPlan.totalMinutes}분`,
             isTimeBase: true
           };
         }
       }
 
-      // 🔥 기본값 - 저장된 값 사용
-      const chapters = planData.chaptersPerDay || Math.ceil(planData.totalChapters / planData.totalDays);
-      const minutes = planData.minutesPerDay || Math.round(planData.minutesPerDayExact) || Math.round(chapters * 4.5);
+      // 기본값
+      const chapters = todayChapters.length || planData.chaptersPerDay || Math.ceil(planData.totalChapters / planData.totalDays);
+      const minutes = planData.minutesPerDay || planData.targetMinutesPerDay || Math.round(planData.minutesPerDayExact) || Math.round(chapters * 4.5);
 
       return {
         chapters: chapters,
@@ -366,7 +347,7 @@ export default function ReadingBibleScreen() {
                 />
               </Box>
 
-              {/* 🔥 시간 기반일 때 오늘 진도 표시 개선 */}
+              {/* 시간 기반일 때 오늘 진도 표시 개선 */}
               {planData.isTimeBasedCalculation && todayChapters.length > 0 && (
                   <Box>
                     <HStack justifyContent="space-between" mb={2}>
@@ -433,15 +414,15 @@ export default function ReadingBibleScreen() {
                   <Text fontSize="18" fontWeight="500">{getPlanTypeName(planData.planType)}</Text>
                 </HStack>
 
-                {/* 🔥 하루 목표 표시 개선 */}
+                {/* 하루 목표 표시 개선 */}
                 <HStack justifyContent="space-between">
                   <Text fontSize="18" color="#666">오늘 목표</Text>
                   <Text fontSize="18" fontWeight="500">
-                    {dailyTarget.chapters}장 /{dailyTarget.time.toString().split('.')[0]}분
+                    {dailyTarget.chapters}장 / {dailyTarget.time.toString().split('.')[0].replace('', '')}
                   </Text>
                 </HStack>
 
-                {/* 🔥 진행 상태 개선 */}
+                {/* 진행 상태 개선 */}
                 <HStack justifyContent="space-between">
                   <Text fontSize="18" color="#666">진행 상태</Text>
                   <Badge
@@ -464,102 +445,92 @@ export default function ReadingBibleScreen() {
             </VStack>
           </Box>
 
-          {/* 액션 버튼들 */}
-          <VStack space={3} mx={4} mt={4} mb={6}>
-            <Button
-                onPress={() => {
-                  const today = new Date();
-                  const startDate = new Date(planData.startDate);
-                  const daysPassed = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          <Box mx={4} mt={4} mb={4}>
+            <VStack space={3}>
+              <Button
+                  bg="#37C4B9"
+                  _pressed={{ bg: "#2BA89E" }}
+                  onPress={() => setMenuIndex(0)}
+                  borderRadius="md"
+                  h={12}
+              >
+                <Text color="white" fontSize={16} fontWeight="600">
+                  오늘 읽기 계속하기
+                </Text>
+              </Button>
 
-                  navigation.navigate('ProgressScreen', {
-                    parcent: daysPassed,
-                    total: planData.totalDays
-                  });
-                }}
-                bg="#37C4B9"
-                _pressed={{ bg: "#2BA89E" }}
-                borderRadius="md"
-                py={3}
-            >
-              <Text color="white" fontSize="20" fontWeight="600">
-                📈 상세 진도 보기
-              </Text>
-            </Button>
-
-            <Button
-                onPress={() => setMenuIndex(0)}
-                bg="#4CAF50"
-                _pressed={{ bg: "#45A049" }}
-                borderRadius="md"
-                py={3}
-            >
-              <Text color="white" fontSize="20" fontWeight="600">
-                📖 일독 계속하기
-              </Text>
-            </Button>
-
-            <Button
-                onPress={handleResetPlan}
-                variant="outline"
-                borderColor="#FF5722"
-                _pressed={{ bg: "#FFEBEE" }}
-                borderRadius="md"
-                py={3}
-            >
-              <Text color="#FF5722" fontSize="20" fontWeight="600">
-                🔄 일독 계획 초기화
-              </Text>
-            </Button>
-          </VStack>
+              <Button
+                  bg="transparent"
+                  borderWidth={2}
+                  borderColor="#FF6B6B"
+                  _pressed={{ bg: "#FFF5F5" }}
+                  onPress={handleResetPlan}
+                  borderRadius="md"
+                  h={12}
+              >
+                <Text color="#FF6B6B" fontSize={16} fontWeight="600">
+                  일독 초기화
+                </Text>
+              </Button>
+            </VStack>
+          </Box>
         </ScrollView>
     );
-  }, [planData, color.white, navigation, handleDirectReset, getPlanTypeName, calculateProgress, calculateMissedChapters, getTodayChapters, formatTime, formatDailyTarget, forceUpdateKey]);
+  }, [planData, color.white, navigation, handleDirectReset, getPlanTypeName, calculateProgress, calculateMissedChapters, getTodayChapters, getCurrentDay, forceUpdateKey]);
 
   // 🔥 수정된 일독 진행 현황 박스 - 시간 기반 계산 지원
   const renderProgressIndicator = useCallback((planData: any) => {
-    // 🔥 디버그 로그 추가
-    console.log(`
-      =====================================
-      📱 UI 표시 디버그 (renderProgressIndicator)
-      =====================================
-      planType: ${planData.planType}
-      totalDays: ${planData.totalDays}
-      totalChapters: ${planData.totalChapters}
-      chaptersPerDay: ${planData.chaptersPerDay}
-      chaptersPerDayExact: ${planData.chaptersPerDayExact}
-      minutesPerDay: ${planData.minutesPerDay}
-      minutesPerDayExact: ${planData.minutesPerDayExact}
-      isTimeBasedCalculation: ${planData.isTimeBasedCalculation}
-      hasActualTimeData: ${planData.hasActualTimeData}
-      =====================================
-    `);
-
-    // 🔥 오늘의 계획 정보 가져오기
+    // 오늘의 계획 정보 가져오기 (통합된 방식)
     const getTodayPlanInfo = () => {
-      // dailyPlan이 있는 경우 (시간 기반 상세 계획)
-      if (planData.isTimeBasedCalculation && planData.dailyPlan) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+      // 시간 기반 계획이고 dailyPlan이 있는 경우
+      if (planData.isTimeBasedCalculation && planData.dailyPlan && planData.dailyPlan.length > 0) {
+        const currentDay = getCurrentDay(planData.startDate);
 
-        const todayPlan = planData.dailyPlan.find((day: any) => {
-          const planDate = new Date(day.date);
-          planDate.setHours(0, 0, 0, 0);
-          return planDate.getTime() === today.getTime();
-        });
+        console.log(`
+        📱 오늘 목표 계산
+        - 시작일: ${planData.startDate}
+        - 현재 일차: ${currentDay}일차
+        - dailyPlan 길이: ${planData.dailyPlan.length}
+      `);
+
+        // 일차로 오늘의 계획 찾기
+        const todayPlan = planData.dailyPlan.find((day: any) => day.day === currentDay);
 
         if (todayPlan) {
+          console.log(`✅ ${currentDay}일차 계획 찾음:`, {
+            장수: todayPlan.actualChapterCount || todayPlan.chapters.length,
+            시간: todayPlan.formattedTime
+          });
+
           return {
-            chapters: todayPlan.chapters.length,
-            time: todayPlan.formattedTime,
+            chapters: todayPlan.actualChapterCount || todayPlan.chapters.length,
+            time: todayPlan.formattedTime || `${todayPlan.totalMinutes}분`,
             isActual: true
           };
+        } else {
+          console.log(`⚠️ ${currentDay}일차 계획을 찾을 수 없음`);
+
+          // 계획이 끝났거나 시작 전인 경우 처리
+          if (currentDay > planData.totalDays) {
+            return {
+              chapters: 0,
+              time: '완료',
+              isActual: true
+            };
+          } else if (currentDay < 1) {
+            return {
+              chapters: 0,
+              time: '시작 전',
+              isActual: true
+            };
+          }
         }
       }
 
-      // 🔥 기본값 사용 - 저장된 값 우선 사용
-      const chapters = planData.chaptersPerDay || Math.ceil(planData.totalChapters / planData.totalDays);
-      const minutes = planData.minutesPerDay || Math.round(planData.minutesPerDayExact) || Math.round(chapters * 4.5);
+      // 기본값 - getTodayChapters 사용
+      const todayChapters = getTodayChapters(planData);
+      const chapters = todayChapters.length || planData.chaptersPerDay || Math.ceil(planData.totalChapters / planData.totalDays);
+      const minutes = planData.minutesPerDay || planData.targetMinutesPerDay || Math.round(planData.minutesPerDayExact) || Math.round(chapters * 4.5);
 
       return {
         chapters: chapters,
@@ -570,13 +541,11 @@ export default function ReadingBibleScreen() {
 
     const todayInfo = getTodayPlanInfo();
 
-    // 🔥 추가 디버그 로그
     console.log(`
-      오늘 목표 정보:
-      - chapters: ${todayInfo.chapters}장
-      - time: ${todayInfo.time}
-      - isActual: ${todayInfo.isActual}
-    `);
+    📱 UI 표시 정보 (최종)
+    - 오늘 목표: ${todayInfo.chapters}장 / ${todayInfo.time}
+    - 실제 계획: ${todayInfo.isActual}
+  `);
 
     return (
         <Box bg="#E8F8F7" mx={4} mt={4} p={4} borderRadius="md">
@@ -608,7 +577,7 @@ export default function ReadingBibleScreen() {
                 </HStack>
               </HStack>
 
-              {/* 🔥 하루 목표 표시 개선 - 저장된 값 정확히 표시 */}
+              {/* 하루 목표 표시 - 통합된 정보 사용 */}
               <HStack justifyContent="space-between" alignItems="center">
                 <Text fontSize="18" color="#666">
                   {todayInfo.isActual ? "오늘 목표 :" : "하루 목표 :"}
@@ -618,7 +587,7 @@ export default function ReadingBibleScreen() {
                     {todayInfo.chapters}장
                   </Text>
                   <Text fontSize="18" color="#37C4B9" ml={1} fontWeight="700">
-                    / {todayInfo.time.toString().split('.')[0]}분
+                    / {todayInfo.time.toString().split('.')[0].replace('', '')}
                   </Text>
                 </HStack>
               </HStack>
@@ -626,7 +595,7 @@ export default function ReadingBibleScreen() {
           </VStack>
         </Box>
     );
-  }, [getPlanTypeName, getPlanTypeDescription, formatDailyTarget]);
+  }, [getPlanTypeName, getPlanTypeDescription, getTodayChapters, getCurrentDay, formatDailyTarget]);
 
   // 컴포넌트 렌더링
   const renderContent = useCallback(() => {

@@ -1,3 +1,6 @@
+// src/components/page/reading/_side/old.tsx
+// OldTestament 컴포넌트 전체 코드
+
 import { FlashList } from '@shopify/flash-list';
 import { isEmpty } from 'lodash';
 import { Center, Text } from 'native-base';
@@ -328,13 +331,13 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                                                 alignItems: 'center',
                                             }}
                                         >
-                                          <FastImage
-                                              source={require('../../../../assets/img/noRead.png')}
-                                              style={{
-                                                  width: 16,
-                                                  height: 16,
-                                              }}
-                                              resizeMode={FastImage.resizeMode.contain}/>
+                                            <FastImage
+                                                source={require('../../../../assets/img/noRead.png')}
+                                                style={{
+                                                    width: 16,
+                                                    height: 16,
+                                                }}
+                                                resizeMode={FastImage.resizeMode.contain}/>
                                         </View>
                                     )}
                                 </TouchableOpacity>

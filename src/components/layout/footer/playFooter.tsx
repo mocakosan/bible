@@ -288,81 +288,106 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
   // 트랙 로딩 함수 - 중복 방지 강화
   const loadTrack = useCallback(
-    async (book: number, jang: number): Promise<boolean> => {
-      try {
-        console.log(`[LOAD] 트랙 로딩 시작: ${book}권 ${jang}장`);
+      async (book: number, jang: number): Promise<boolean> => {
+        try {
+          console.log(`[LOAD] 트랙 로딩 시작: ${book}권 ${jang}장`);
 
-        // 현재 재생 중인 트랙과 동일한지 확인
-        if (
-          currentTrackRef.current &&
-          currentTrackRef.current.book === book &&
-          currentTrackRef.current.jang === jang
-        ) {
-          console.log(
-            `[LOAD] ❌ 이미 동일한 트랙이 로드됨. 건너뜀: ${book}권 ${jang}장`
-          );
-          return true;
-        }
+          // 백그라운드에서도 스킵 체크
+          const skipJang = defaultStorage.getString(`${book}:${jang}`);
+          if (skipJang) {
+            console.log(
+                `[LOAD] ⏭️ 스킵 설정된 장이므로 건너뜀: ${book}권 ${jang}장`
+            );
+            return true;
+          }
 
-        if (!isPlayerInitialized) {
-          const initialized = await setupPlayer();
-          if (initialized) {
-            setIsPlayerInitialized(true);
-          } else {
-            console.error("[LOAD] 플레이어 초기화 실패");
+          if (!isPlayerInitialized) {
+            const initialized = await setupPlayer();
+            if (initialized) {
+              setIsPlayerInitialized(true);
+            } else {
+              console.error("[LOAD] 플레이어 초기화 실패");
+              return false;
+            }
+          }
+
+          // URL 유효성 검사
+          const isValidUrl = await validateAudioUrl(book, jang);
+          if (!isValidUrl) {
+            console.error(`[LOAD] 유효하지 않은 URL: ${book}권 ${jang}장`);
             return false;
           }
-        }
 
-        // URL 유효성 검사
-        const isValidUrl = await validateAudioUrl(book, jang);
-        if (!isValidUrl) {
-          console.error(`[LOAD] 유효하지 않은 URL: ${book}권 ${jang}장`);
+          // 현재 큐 완전 초기화
+          try {
+            await TrackPlayer.pause();
+            await TrackPlayer.stop();
+            await TrackPlayer.reset();
+            console.log(`[LOAD] 기존 큐 완전 초기화 완료`);
+          } catch (error) {
+            console.warn(`[LOAD] 큐 초기화 중 경고:`, error);
+          }
+
+          // 새 트랙 추가 (백그라운드에서도 안정적으로)
+          const trackId = `bible-${book}-${jang}-${Date.now()}`; // 타임스탬프로 고유성 보장
+          const track = {
+            id: trackId,
+            url: soundUrl(book, jang),
+            title: `${bibleAudioList[book - 1]} ${jang}장`,
+            artist: "Bible Audio",
+            artwork: require("../../../assets/img/bibile25.png"),
+            // 백그라운드 재생을 위한 추가 옵션
+            pitchAlgorithm: 'MUSIC',
+            headers: {
+              'User-Agent': 'BibleApp/1.0'
+            }
+          };
+
+          await TrackPlayer.add(track);
+
+          // 현재 트랙 정보 업데이트
+          currentTrackRef.current = { book, jang };
+
+          // 재생 속도 및 설정 적용
+          if (soundSpeed !== 1) {
+            await TrackPlayer.setRate(soundSpeed);
+          }
+
+          // 백그라운드 재생을 위한 설정
+          await TrackPlayer.setRepeatMode(RepeatMode.Off);
+
+          // 백그라운드 재생 능력 설정
+          await TrackPlayer.updateOptions({
+            stopWithApp: false,
+            alwaysPauseOnInterruption: false,
+            capabilities: [
+              Capability.Play,
+              Capability.Pause,
+              Capability.SkipToNext,
+              Capability.SkipToPrevious,
+              Capability.Stop,
+              Capability.SeekTo
+            ],
+            compactCapabilities: [
+              Capability.Play,
+              Capability.Pause,
+              Capability.SkipToNext,
+              Capability.SkipToPrevious
+            ],
+          });
+
+          console.log(
+              `[LOAD] ✅ 트랙 로딩 완료: ${book}권 ${jang}장 (ID: ${trackId})`
+          );
+          return true;
+        } catch (error) {
+          console.error("[LOAD] 트랙 로딩 실패:", error);
+          // 실패 시 현재 트랙 정보 초기화
+          currentTrackRef.current = null;
           return false;
         }
-
-        // 현재 큐 완전 초기화
-        try {
-          await TrackPlayer.pause();
-          await TrackPlayer.stop();
-          await TrackPlayer.reset();
-          console.log(`[LOAD] 기존 큐 완전 초기화 완료`);
-        } catch (error) {
-          console.warn(`[LOAD] 큐 초기화 중 경고:`, error);
-        }
-
-        // 새 트랙 추가
-        const trackId = `bible-${book}-${jang}-${Date.now()}`; // 타임스탬프로 고유성 보장
-        await TrackPlayer.add({
-          id: trackId,
-          url: soundUrl(book, jang),
-          title: `${bibleAudioList[book - 1]} ${jang}장`,
-          artist: "Bible Audio",
-          artwork: require("../../../assets/img/bibile25.png"),
-        });
-
-        // 현재 트랙 정보 업데이트
-        currentTrackRef.current = { book, jang };
-
-        // 재생 속도 및 설정 적용
-        if (soundSpeed !== 1) {
-          await TrackPlayer.setRate(soundSpeed);
-        }
-
-        await TrackPlayer.setRepeatMode(RepeatMode.Off);
-
-        console.log(
-          `[LOAD] ✅ 트랙 로딩 완료: ${book}권 ${jang}장 (ID: ${trackId})`
-        );
-        return true;
-      } catch (error) {
-        console.error("[LOAD] 트랙 로딩 실패:", error);
-        // 실패 시 현재 트랙 정보 초기화
-        currentTrackRef.current = null;
-        return false;
-      }
-    },
-    [isPlayerInitialized, soundSpeed, soundUrl, validateAudioUrl]
+      },
+      [isPlayerInitialized, soundSpeed, soundUrl, validateAudioUrl]
   );
 
   // 자동 다음 장 처리 함수 - 완전히 재작성
@@ -392,6 +417,24 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
       return;
     }
 
+// 백그라운드 이벤트 핸들러도 추가로 설정
+    useEffect(() => {
+      // 백그라운드에서도 트랙 종료 이벤트 처리
+      const subscription = TrackPlayer.addEventListener(
+          Event.PlaybackQueueEnded,
+          async () => {
+            console.log('[BACKGROUND] 재생 큐 종료 이벤트 발생');
+            if (enableAutoNext && openSound) {
+              await handleAutoNextChapter();
+            }
+          }
+      );
+
+      return () => {
+        subscription.remove();
+      };
+    }, [enableAutoNext, openSound, handleAutoNextChapter]);
+
     // 현재 재생 중인 트랙 정보로 다음 장 계산
     const sourceBook = currentTrackRef.current?.book ?? currentBook;
     const sourceJang = currentTrackRef.current?.jang ?? currentJang;
@@ -400,12 +443,12 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
     // 이미 처리한 장인지 확인
     if (
-      lastProcessedChapterRef.current &&
-      lastProcessedChapterRef.current.book === sourceBook &&
-      lastProcessedChapterRef.current.jang === sourceJang
+        lastProcessedChapterRef.current &&
+        lastProcessedChapterRef.current.book === sourceBook &&
+        lastProcessedChapterRef.current.jang === sourceJang
     ) {
       console.log(
-        `[AUTO_NEXT] ❌ 이미 처리한 장입니다: ${sourceBook}권 ${sourceJang}장`
+          `[AUTO_NEXT] ❌ 이미 처리한 장입니다: ${sourceBook}권 ${sourceJang}장`
       );
       return;
     }
@@ -435,7 +478,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
       console.log(`[AUTO_NEXT] 🎯 목표: ${nextBook}권 ${nextJang}장`);
 
-      // 현재 처리한 장 기록
+      // 현재 처리한 장 기록 (재생 전에 기록)
       lastProcessedChapterRef.current = { book: sourceBook, jang: sourceJang };
 
       // 플레이어 완전 정지 및 초기화
@@ -453,10 +496,19 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
         console.warn(`[AUTO_NEXT] 플레이어 정지 중 경고:`, error);
       }
 
-      // 상태 동기화
+      // 백그라운드에서도 상태 동기화가 되도록 보장
       console.log(`[AUTO_NEXT] 🔄 상태 동기화 시작`);
+
+      // 백그라운드에서도 MMKV 스토리지 업데이트
+      defaultStorage.set("bible_book", nextBook);
+      defaultStorage.set("bible_jang", nextJang);
+      defaultStorage.set("bible_book_connec", nextBook);
+      defaultStorage.set("bible_jang_connec", nextJang);
+
+      // Redux 상태 업데이트 (백그라운드에서도 동작)
       syncBibleState(nextBook, nextJang);
       onTrigger();
+
       console.log(`[AUTO_NEXT] ✅ 상태 동기화 완료`);
 
       // 충분한 대기 시간
@@ -469,12 +521,15 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
       if (loadSuccess) {
         console.log(`[AUTO_NEXT] ✅ 트랙 로드 성공`);
 
+        // 새 트랙 정보 즉시 업데이트
+        currentTrackRef.current = { book: nextBook, jang: nextJang };
+
         // 추가 대기 후 재생
         setTimeout(async () => {
           try {
             await TrackPlayer.play();
             console.log(
-              `[AUTO_NEXT] ✅ 자동 재생 시작: ${nextBook}권 ${nextJang}장`
+                `[AUTO_NEXT] ✅ 자동 재생 시작: ${nextBook}권 ${nextJang}장`
             );
 
             // 재생 성공 후 최종 상태 확인

@@ -1,4 +1,4 @@
-// src/utils/useBibleReading.ts
+// src/utils/useBibleReading.ts (1/2)
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Toast } from 'react-native-toast-message/lib/src/Toast';
 import { AppState } from 'react-native';
@@ -8,10 +8,12 @@ import {
     loadBiblePlanData,
     saveBiblePlanData,
     deleteBiblePlanData,
-    calculateProgress  // biblePlanUtils에서 가져옴
+    calculateProgress,
+    getTodayChapters,
+    getTodayProgressInfo,
+    getCurrentDay
 } from "./biblePlanUtils";
 import {
-    // calculateProgress 제거 - biblePlanUtils에서 이미 가져옴
     ChapterReading,
     DailyReading,
     DETAILED_BIBLE_PLAN_TYPES,
@@ -146,8 +148,6 @@ export const useBibleReading = (readState?: any) => {
     const updateAppBadge = useCallback((count: number) => {
         try {
             // React Native에서 앱 뱃지 설정
-            // iOS: react-native-push-notification 또는 @react-native-community/push-notification-ios 사용
-            // Android: 알림 채널을 통한 뱃지 표시
             console.log(`앱 뱃지 업데이트: ${count}`);
         } catch (error) {
             console.error('앱 뱃지 업데이트 오류:', error);
@@ -181,7 +181,7 @@ export const useBibleReading = (readState?: any) => {
         }
     }, [planData]);
 
-    // 🔥 진행률 정보 업데이트 - 오류 수정
+    // 🔥 진행률 정보 업데이트
     const updateProgressInfo = useCallback(() => {
         if (!planData) {
             setProgressInfo(null);
@@ -304,22 +304,10 @@ export const useBibleReading = (readState?: any) => {
         try {
             const key = `${book}_${chapter}`;
 
-            if (book === 1 && chapter === 1) {
-                console.log('창세기 1장 상태 확인 시작');
-                console.log('readState:', readState?.length || 0, '개 항목');
-                console.log('readingTableData:', Object.keys(readingTableData).length, '개 항목');
-                console.log('planData:', planData ? '있음' : '없음');
-            }
-
             // 🆕 1. readState에서 먼저 확인 (최우선)
             const foundInReadState = readState && Array.isArray(readState)
                 ? readState.some(item => item.book === book && item.jang === chapter)
                 : false;
-
-            if (book === 1 && chapter === 1) {
-                console.log('readState에서 창세기 1장 확인:', foundInReadState);
-                console.log('readState 샘플:', readState?.slice(0, 3));
-            }
 
             if (foundInReadState) return true; // 읽었다면 바로 반환
 
@@ -327,50 +315,17 @@ export const useBibleReading = (readState?: any) => {
             if (readingTableData && Object.keys(readingTableData).length > 0) {
                 const foundInReadingTable = readingTableData[key];
 
-                if (book === 1 && chapter === 1) {
-                    console.log('readingTableData에서 창세기 1장 확인:', foundInReadingTable);
-                    console.log('readingTableData 키들:', Object.keys(readingTableData).filter(k => k.startsWith('1_')).slice(0, 5));
-                    console.log('readState에서도 다시 확인:', foundInReadState, readState?.length || 0, '개 중에서');
-                    console.log('검색 조건:', {book, chapter}, readState?.find(item => item.book === 1 && item.jang === 1) || '찾을 수 없음');
+                // readState가 비어있지 않다면 readState에서 찾지 못한 것은 읽지 않은 것
+                if (readState && readState.length > 0 && !foundInReadState) {
+                    return false; // readState에서 명시적으로 찾을 수 없으면 읽지 않은 것으로 처리
+                }
 
-                    // readState가 비어있지 않다면 readState에서 찾지 못한 것은 읽지 않은 것
-                    if (readState && readState.length > 0 && !foundInReadState) {
-                        console.log('readState에 데이터가 있지만 해당 장을 찾을 수 없음 -> 읽지 않음');
-                        return false; // readState에서 명시적으로 찾을 수 없으면 읽지 않은 것으로 처리
-                    }
-
-                    // readState가 비어있거나 없다면 readingTableData 결과 사용
-                    if (!readState || readState.length === 0) {
-                        console.log('readState가 비어있음 -> readingTableData 결과 사용:', foundInReadingTable);
-                        return foundInReadingTable || false;
-                    }
-
-                    // readState에서 찾았다면 이미 위에서 true를 반환했을 것이므로,
-                    // 여기까지 왔다면 readingTableData도 확인하지 않고 넘어감
-                    console.log('readState 확인 후 readingTableData 건너뜀 (readState에서 찾지 못함)');
-                    return false; // readState에 데이터가 있는데 찾지 못한 경우는 읽지 않은 것
-                } else {
-                    // 창세기 1장이 아닌 경우는 기존 로직 사용
-                    // readState 우선 확인
-                    if (readState && Array.isArray(readState) && readState.length > 0) {
-                        if (foundInReadState) return true;
-
-                        // readState에 데이터가 있지만 찾지 못한 경우, 읽지 않은 것으로 간주
-                        return false; // readState에서 명시적으로 찾을 수 없으면 읽지 않은 것
-                    }
-
-                    // readState가 없거나 비어있으면 readingTableData 사용
+                // readState가 비어있거나 없다면 readingTableData 결과 사용
+                if (!readState || readState.length === 0) {
                     return foundInReadingTable || false;
                 }
-            } else {
-                // readingTableData가 없거나 비어있는 경우
-                if (book === 1 && chapter === 1) {
-                    console.log('readingTableData가 비어있음');
-                    console.log('readState에서만 확인:', foundInReadState, readState?.length || 0, '개 중에서', readState?.filter(item => item.book === 1).length || 0, '개가 1권');
-                }
 
-                // readState에서도 찾지 못했고 readingTableData도 없다면 false
-                return foundInReadState;
+                return false;
             }
 
             // 🆕 3. 일독 계획이 있는 경우에만 일독 계획 데이터 확인
@@ -378,17 +333,10 @@ export const useBibleReading = (readState?: any) => {
                 const planRead = planData.readChapters.some(
                     r => r.book === book && r.chapter === chapter && r.isRead
                 );
-
-                if (book === 1 && chapter === 1) {
-                    console.log('일독 계획에서 창세기 1장 확인:', planRead);
-                }
-                if (planRead) return true; // 읽었다면 바로 반환
+                if (planRead) return true;
             }
 
             // 4. 모든 곳에서 읽지 않았다면 false
-            if (book === 1 && chapter === 1) {
-                console.log('창세기 1장 모든 소스에서 읽지 않음으로 확인됨');
-            }
             return false;
 
         } catch (error) {
@@ -480,7 +428,7 @@ export const useBibleReading = (readState?: any) => {
         }
     }, [planData, updateAppBadge, globalRefreshCallback]);
 
-    // 개선된 장 상태 확인 함수
+    // 🔥 수정: 시간 기반 계획과 통합된 장 상태 확인 함수
     const getChapterStatus = useCallback((book: number, chapter: number): 'today' | 'yesterday' | 'missed' | 'completed' | 'future' | 'normal' => {
         if (!planData) return 'normal';
 
@@ -489,31 +437,62 @@ export const useBibleReading = (readState?: any) => {
             const isRead = isChapterReadSync(book, chapter);
             if (isRead) return 'completed';
 
+            // 시간 기반 계획이고 dailyPlan이 있는 경우
+            if (planData.isTimeBasedCalculation && planData.dailyPlan && planData.dailyPlan.length > 0) {
+                const currentDay = getCurrentDay(planData.startDate);
+
+                // 오늘의 계획 찾기
+                const todayPlan = planData.dailyPlan.find((day: any) => day.day === currentDay);
+                if (todayPlan?.chapters?.some((ch: any) => ch.book === book && ch.chapter === chapter)) {
+                    return 'today';
+                }
+
+                // 어제의 계획 찾기
+                const yesterdayPlan = planData.dailyPlan.find((day: any) => day.day === currentDay - 1);
+                if (yesterdayPlan?.chapters?.some((ch: any) => ch.book === book && ch.chapter === chapter)) {
+                    return 'yesterday';
+                }
+
+                // 과거 놓친 장들
+                const missedPlan = planData.dailyPlan.find((day: any) =>
+                    day.day < currentDay &&
+                    day.chapters?.some((ch: any) => ch.book === book && ch.chapter === chapter)
+                );
+                if (missedPlan) return 'missed';
+
+                // 미래 장들
+                const futurePlan = planData.dailyPlan.find((day: any) =>
+                    day.day > currentDay &&
+                    day.chapters?.some((ch: any) => ch.book === book && ch.chapter === chapter)
+                );
+                if (futurePlan) return 'future';
+
+                return 'normal';
+            }
+
+            // 기존 장 기반 로직 (시간 기반이 아닌 경우)
             const startDate = new Date(planData.startDate);
             const currentDate = new Date();
             currentDate.setHours(0, 0, 0, 0);
             startDate.setHours(0, 0, 0, 0);
 
-            // 경과 일수 계산 (0부터 시작)
+            // 경과 일수 계산
             const daysPassed = Math.floor((currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
-            // 🔥 계획 타입별로 다른 인덱스 계산 방식 사용
+            // 계획 타입별로 다른 인덱스 계산 방식 사용
             let chapterIndex = 0;
             let isValidChapter = false;
 
             switch (planData.planType) {
                 case 'psalms':
-                    // 시편 일독: 시편(19번책)만 계산
                     if (book === 19) {
-                        chapterIndex = chapter - 1; // 시편 1장 = 인덱스 0
+                        chapterIndex = chapter - 1;
                         isValidChapter = true;
                     }
                     break;
 
                 case 'pentateuch':
-                    // 모세오경 일독: 창세기(1)~신명기(5)만 계산
                     if (book >= 1 && book <= 5) {
-                        // 모세오경 내에서의 순차적 인덱스 계산
                         let totalChapters = 0;
                         for (let b = 1; b < book; b++) {
                             const bookInfo = BibleStep.find(step => step.index === b);
@@ -527,9 +506,7 @@ export const useBibleReading = (readState?: any) => {
                     break;
 
                 case 'old_testament':
-                    // 구약 일독: 구약(1~39번책)만 계산
                     if (book >= 1 && book <= 39) {
-                        // 구약 내에서의 순차적 인덱스 계산
                         let totalChapters = 0;
                         for (let b = 1; b < book; b++) {
                             const bookInfo = BibleStep.find(step => step.index === b);
@@ -543,9 +520,7 @@ export const useBibleReading = (readState?: any) => {
                     break;
 
                 case 'new_testament':
-                    // 신약 일독: 신약(40~66번책)만 계산
                     if (book >= 40 && book <= 66) {
-                        // 신약 내에서의 순차적 인덱스 계산
                         let totalChapters = 0;
                         for (let b = 40; b < book; b++) {
                             const bookInfo = BibleStep.find(step => step.index === b);
@@ -560,31 +535,17 @@ export const useBibleReading = (readState?: any) => {
 
                 case 'full_bible':
                 default:
-                    // 전체 성경 일독: 전역 인덱스 사용
                     chapterIndex = getGlobalChapterIndex(book, chapter) - 1;
                     isValidChapter = true;
                     break;
             }
 
-            // 해당 계획에 포함되지 않은 장
             if (!isValidChapter) {
                 return 'normal';
             }
 
-            // 각 일차별 읽어야 할 장 계산
             const chaptersPerDay = planData.chaptersPerDay;
-            const chapterDay = Math.floor(chapterIndex / chaptersPerDay); // 0부터 시작
-
-            // 디버깅 로그 (시편 1장, 창세기 1장만)
-            if ((book === 19 && chapter === 1 && planData.planType === 'psalms') ||
-                (book === 1 && chapter === 1 && planData.planType === 'pentateuch')) {
-                // console.log(`🔍 getChapterStatus Debug - ${book}권 ${chapter}장:`);
-                // console.log(`  planType: ${planData.planType}`);
-                // console.log(`  chapterIndex: ${chapterIndex}`);
-                // console.log(`  chaptersPerDay: ${chaptersPerDay}`);
-                // console.log(`  chapterDay: ${chapterDay}`);
-                // console.log(`  daysPassed: ${daysPassed}`);
-            }
+            const chapterDay = Math.floor(chapterIndex / chaptersPerDay);
 
             if (chapterDay === daysPassed) {
                 return 'today';
@@ -637,12 +598,12 @@ export const useBibleReading = (readState?: any) => {
                 case 'yesterday':
                     return {
                         style: { ...baseStyle, color: '#2196F3' },
-                        showExclamation: true // 🔥 어제 안 읽은 장에 느낌표 표시
+                        showExclamation: true
                     };
                 case 'missed':
                     return {
                         style: { ...baseStyle, color: '#000000' },
-                        showExclamation: true // 🔥 놓친 장에 느낌표 표시
+                        showExclamation: true
                     };
                 default:
                     return {
@@ -668,6 +629,129 @@ export const useBibleReading = (readState?: any) => {
             };
         }
     }, [planData, isChapterReadSync, getChapterStatus]);
+
+    // 🔥 수정: 오늘 진도 계산 함수 (통합 버전 사용)
+    const getTodayProgress = useCallback(() => {
+        if (!planData) {
+            return {
+                totalChapters: 0,
+                completedChapters: 0,
+                remainingChapters: [],
+                allChapters: [],
+                percentage: 0
+            };
+        }
+
+        try {
+            // biblePlanUtils의 getTodayProgressInfo 사용
+            const todayInfo = getTodayProgressInfo(planData);
+
+            if (todayInfo) {
+                return {
+                    totalChapters: todayInfo.totalChapters,
+                    completedChapters: todayInfo.readChapters,
+                    remainingChapters: todayInfo.remainingChapters,
+                    allChapters: todayInfo.allChapters,
+                    percentage: todayInfo.progress
+                };
+            }
+
+            return {
+                totalChapters: 0,
+                completedChapters: 0,
+                remainingChapters: [],
+                allChapters: [],
+                percentage: 0
+            };
+        } catch (error) {
+            console.error('오늘 진도 계산 오류:', error);
+            return {
+                totalChapters: 0,
+                completedChapters: 0,
+                remainingChapters: [],
+                allChapters: [],
+                percentage: 0
+            };
+        }
+    }, [planData]);
+
+    // 🔥 수정: 어제 진도 계산 함수
+    const getYesterdayProgress = useCallback(() => {
+        if (!planData) {
+            return {
+                totalChapters: 0,
+                completedChapters: 0,
+                percentage: 0,
+                missedChapters: []
+            };
+        }
+
+        try {
+            // 시간 기반 계획인 경우
+            if (planData.isTimeBasedCalculation && planData.dailyPlan && planData.dailyPlan.length > 0) {
+                const currentDay = getCurrentDay(planData.startDate);
+                const yesterdayPlan = planData.dailyPlan.find((day: any) => day.day === currentDay - 1);
+
+                if (yesterdayPlan && yesterdayPlan.chapters) {
+                    const completedCount = yesterdayPlan.chapters.filter((ch: any) =>
+                        isChapterReadSync(ch.book, ch.chapter)
+                    ).length;
+
+                    const missedChapters = yesterdayPlan.chapters
+                        .filter((ch: any) => !isChapterReadSync(ch.book, ch.chapter))
+                        .map((ch: any) => ({
+                            bookIndex: ch.book,
+                            bookName: ch.bookName,
+                            chapter: ch.chapter
+                        }));
+
+                    return {
+                        totalChapters: yesterdayPlan.chapters.length,
+                        completedChapters: completedCount,
+                        percentage: yesterdayPlan.chapters.length > 0
+                            ? (completedCount / yesterdayPlan.chapters.length) * 100
+                            : 0,
+                        missedChapters
+                    };
+                }
+            }
+
+            // 기존 로직 (yesterdayReading 사용)
+            if (!yesterdayReading) {
+                return {
+                    totalChapters: 0,
+                    completedChapters: 0,
+                    percentage: 0,
+                    missedChapters: []
+                };
+            }
+
+            const completedChapters = yesterdayReading.chapters.filter(ch =>
+                isChapterReadSync(ch.bookIndex, ch.chapter)
+            ).length;
+
+            const missedChapters = yesterdayReading.chapters.filter(ch =>
+                !isChapterReadSync(ch.bookIndex, ch.chapter)
+            );
+
+            return {
+                totalChapters: yesterdayReading.chapters.length,
+                completedChapters,
+                percentage: yesterdayReading.chapters.length > 0
+                    ? (completedChapters / yesterdayReading.chapters.length) * 100
+                    : 0,
+                missedChapters
+            };
+        } catch (error) {
+            console.error('어제 진도 계산 오류:', error);
+            return {
+                totalChapters: 0,
+                completedChapters: 0,
+                percentage: 0,
+                missedChapters: []
+            };
+        }
+    }, [planData, yesterdayReading, isChapterReadSync]);
 
     // 🆕 전역 새로고침 콜백 등록/해제 함수들
     const registerGlobalRefreshCallback = useCallback((callback: () => void) => {
@@ -716,21 +800,16 @@ export const useBibleReading = (readState?: any) => {
             setTodayReading(null);
             setYesterdayReading(null);
             setProgressInfo(null);
-            setReadingTableData({});  // 중요: 빈 객체로 초기화
+            setReadingTableData({});
 
             // 2. 일독 계획 데이터 삭제
             deleteBiblePlanData();
 
-            // 3. SQLite reading_table 완전 삭제 (먼저 실행)
+            // 3. SQLite reading_table 완전 삭제
             try {
                 const deleteSql = `DELETE FROM reading_table`;
                 await fetchSql(bibleSetting, deleteSql, []);
                 console.log('SQLite reading_table 데이터 삭제 완료');
-
-                // 삭제 확인
-                const checkSql = `SELECT COUNT(*) as count FROM reading_table`;
-                const result = await fetchSql(bibleSetting, checkSql, []);
-                console.log('삭제 후 reading_table 행 수:', result?.count || 0);
             } catch (sqlError) {
                 console.error('SQLite 삭제 오류:', sqlError);
             }
@@ -738,8 +817,6 @@ export const useBibleReading = (readState?: any) => {
             // 4. MMKV에서 성경 관련 데이터 삭제
             try {
                 const allKeys = defaultStorage.getAllKeys();
-                console.log('삭제 전 MMKV 키들:', allKeys);
-
                 allKeys.forEach(key => {
                     if (key.startsWith('bible_') ||
                         key.startsWith('reading_') ||
@@ -749,10 +826,6 @@ export const useBibleReading = (readState?: any) => {
                         console.log('MMKV 키 삭제:', key);
                     }
                 });
-
-                // 삭제 확인
-                const remainingKeys = defaultStorage.getAllKeys();
-                console.log('삭제 후 MMKV 키들:', remainingKeys);
             } catch (mmkvError) {
                 console.error('MMKV 삭제 오류:', mmkvError);
             }
@@ -760,32 +833,25 @@ export const useBibleReading = (readState?: any) => {
             // 5. 앱 뱃지 초기화
             updateAppBadge(0);
 
-            // 6. refreshKey 업데이트 (리렌더링 강제)
-            setRefreshKey(prev => {
-                const newKey = prev + 1;
-                console.log('refreshKey 업데이트:', prev, '->', newKey);
-                return newKey;
-            });
+            // 6. refreshKey 업데이트
+            setRefreshKey(prev => prev + 1);
 
-            // 🆕 7. 전역 새로고침 트리거 (여러 번 호출)
+            // 7. 전역 새로고침 트리거
             if (globalRefreshCallback) {
                 console.log('🔄 전역 새로고침 콜백 호출 (resetAllData)');
                 globalRefreshCallback();
-
-                // 지연 후에도 다시 호출
                 setTimeout(() => globalRefreshCallback(), 200);
                 setTimeout(() => globalRefreshCallback(), 500);
-                setTimeout(() => globalRefreshCallback(), 1000);
             }
 
-            // 8. 약간의 지연 후 데이터 다시 로드 (빈 상태 확인)
+            // 8. 데이터 다시 로드
             setTimeout(async () => {
                 await loadPlan();
                 await loadAllReadingTableData();
                 console.log('초기화 후 데이터 재로드 완료');
             }, 100);
 
-            return false;
+            return true;
         } catch (error) {
             console.error('useBibleReading 초기화 오류:', error);
             return false;
@@ -797,14 +863,10 @@ export const useBibleReading = (readState?: any) => {
         try {
             console.log('useBibleReading 강제 새로고침 시작');
 
-            // 1. 데이터 다시 로드
             await loadPlan();
             await loadAllReadingTableData();
-
-            // 2. 새로고침 키 업데이트
             setRefreshKey(prev => prev + 1);
 
-            // 🆕 3. 전역 새로고침 트리거
             if (globalRefreshCallback) {
                 console.log('🔄 전역 새로고침 콜백 호출 (forceRefresh)');
                 globalRefreshCallback();
@@ -839,85 +901,7 @@ export const useBibleReading = (readState?: any) => {
         }
     }, []);
 
-    // 🆕 오늘 진도 계산 함수
-    const getTodayProgress = useCallback(() => {
-        if (!todayReading) {
-            return {
-                totalChapters: 0,
-                completedChapters: 0,
-                remainingChapters: [],
-                percentage: 0
-            };
-        }
-
-        try {
-            const completedChapters = todayReading.chapters.filter(ch =>
-                isChapterReadSync(ch.bookIndex, ch.chapter)
-            ).length;
-
-            const remainingChapters = todayReading.chapters.filter(ch =>
-                !isChapterReadSync(ch.bookIndex, ch.chapter)
-            );
-
-            return {
-                totalChapters: todayReading.chapters.length,
-                completedChapters,
-                remainingChapters,
-                percentage: todayReading.chapters.length > 0
-                    ? (completedChapters / todayReading.chapters.length) * 100
-                    : 0
-            };
-        } catch (error) {
-            console.error('오늘 진도 계산 오류:', error);
-            return {
-                totalChapters: 0,
-                completedChapters: 0,
-                remainingChapters: [],
-                percentage: 0
-            };
-        }
-    }, [todayReading, isChapterReadSync]);
-
-    // 🆕 어제 진도 계산 함수
-    const getYesterdayProgress = useCallback(() => {
-        if (!yesterdayReading) {
-            return {
-                totalChapters: 0,
-                completedChapters: 0,
-                percentage: 0,
-                missedChapters: []
-            };
-        }
-
-        try {
-            const completedChapters = yesterdayReading.chapters.filter(ch =>
-                isChapterReadSync(ch.bookIndex, ch.chapter)
-            ).length;
-
-            const missedChapters = yesterdayReading.chapters.filter(ch =>
-                !isChapterReadSync(ch.bookIndex, ch.chapter)
-            );
-
-            return {
-                totalChapters: yesterdayReading.chapters.length,
-                completedChapters,
-                percentage: yesterdayReading.chapters.length > 0
-                    ? (completedChapters / yesterdayReading.chapters.length) * 100
-                    : 0,
-                missedChapters
-            };
-        } catch (error) {
-            console.error('어제 진도 계산 오류:', error);
-            return {
-                totalChapters: 0,
-                completedChapters: 0,
-                percentage: 0,
-                missedChapters: []
-            };
-        }
-    }, [yesterdayReading, isChapterReadSync]);
-
-    // reading_table 상태 업데이트 함수 (🆕 전역 새로고침 트리거 추가)
+    // reading_table 상태 업데이트 함수
     const updateReadingTableCache = useCallback((book: number, chapter: number, isRead: boolean) => {
         const key = `${book}_${chapter}`;
         setReadingTableData(prev => ({
@@ -925,7 +909,6 @@ export const useBibleReading = (readState?: any) => {
             [key]: isRead
         }));
 
-        // 🆕 전역 새로고침 트리거
         if (globalRefreshCallback) {
             console.log('🔄 전역 새로고침 콜백 호출 (updateReadingTableCache)');
             setTimeout(() => {
@@ -951,14 +934,14 @@ export const useBibleReading = (readState?: any) => {
         markChapterAsRead,
         markChapterAsUnread,
         getChapterStatus,
-        getChapterStyleWithExclamation,  // 🔥 새로운 함수 추가
-        getTodayProgress,               // 🔥 추가
-        getYesterdayProgress,           // 🔥 추가
+        getChapterStyleWithExclamation,
+        getTodayProgress,
+        getYesterdayProgress,
         refreshData,
         updateProgressInfo,
         resetAllData,
 
-        // 🆕 전역 새로고침 관련
+        // 전역 새로고침 관련
         registerGlobalRefreshCallback,
         unregisterGlobalRefreshCallback,
 

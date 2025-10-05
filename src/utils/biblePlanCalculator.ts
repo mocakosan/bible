@@ -3,6 +3,7 @@
 
 import { BibleStep } from './define';
 import { getChapterTimeDataForPlan } from './csvDataLoader';
+import {createFixedTimeBasedReadingPlan} from "./timeBasedBibleReadingFixed";
 
 // 타입 정의
 export interface BibleReadingPlanCalculation {
@@ -41,7 +42,7 @@ export const DETAILED_BIBLE_PLAN_TYPES: BiblePlanTypeDetail[] = [
         id: 'full_bible',
         name: '성경 전체',
         description: '창세기부터 요한계시록까지',
-        totalChapters: 1189,  // 실제: 921(구약) + 268(신약) = 1,189
+        totalChapters: 1189,  // ✅ 정확한 값
         estimatedDays: 365,
         books: Array.from({ length: 66 }, (_, i) => i + 1),
         bookRange: [1, 66]
@@ -50,7 +51,7 @@ export const DETAILED_BIBLE_PLAN_TYPES: BiblePlanTypeDetail[] = [
         id: 'old_testament',
         name: '구약',
         description: '창세기부터 말라기까지',
-        totalChapters: 921,  // 🔥 수정: 929 → 921
+        totalChapters: 921,  // ✅ 921장으로 수정 (929 → 921)
         estimatedDays: 270,
         books: Array.from({ length: 39 }, (_, i) => i + 1),
         bookRange: [1, 39]
@@ -59,7 +60,7 @@ export const DETAILED_BIBLE_PLAN_TYPES: BiblePlanTypeDetail[] = [
         id: 'new_testament',
         name: '신약',
         description: '마태복음부터 요한계시록까지',
-        totalChapters: 268,  // 🔥 수정: 260 → 268
+        totalChapters: 268,  // ✅ 정확한 값
         estimatedDays: 90,
         books: Array.from({ length: 27 }, (_, i) => i + 40),
         bookRange: [40, 66]
@@ -68,7 +69,7 @@ export const DETAILED_BIBLE_PLAN_TYPES: BiblePlanTypeDetail[] = [
         id: 'pentateuch',
         name: '모세오경',
         description: '창세기부터 신명기까지',
-        totalChapters: 187,  // 정확함
+        totalChapters: 187,  // ✅ 정확한 값
         estimatedDays: 60,
         books: [1, 2, 3, 4, 5],
         bookRange: [1, 5]
@@ -77,7 +78,7 @@ export const DETAILED_BIBLE_PLAN_TYPES: BiblePlanTypeDetail[] = [
         id: 'psalms',
         name: '시편',
         description: '시편 전체',
-        totalChapters: 150,  // 정확함
+        totalChapters: 150,  // ✅ 정확한 값
         estimatedDays: 30,
         books: [19],
         bookRange: [19, 19]
@@ -380,6 +381,53 @@ export function getDailyReading(
         console.error('getDailyReading 오류:', error);
         return null;
     }
+}
+
+/**
+ * CSV 데이터와 시간 기반 계산을 통합한 계산 함수
+ */
+export function calculateBiblePlanWithFixedTime(
+    planType: string,
+    startDate: Date,
+    endDate: Date
+): BibleReadingPlanCalculation | null {
+    const plan = DETAILED_BIBLE_PLAN_TYPES.find(p => p.id === planType);
+    if (!plan) {
+        console.error(`Invalid plan type: ${planType}`);
+        return null;
+    }
+
+    // 총 일수 계산
+    const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // 시간 기반 계획 생성
+    const timeBasedPlan = createFixedTimeBasedReadingPlan(
+        totalDays,
+        plan.totalChapters,
+        startDate
+    );
+
+    // 일일 평균 계산
+    const avgChaptersPerDay = timeBasedPlan.averageChaptersPerDay;
+    const targetMinutesPerDay = timeBasedPlan.targetMinutesPerDay;
+
+    return {
+        planType,
+        totalDays,
+        totalChapters: plan.totalChapters,
+        chaptersPerDay: Math.ceil(avgChaptersPerDay),
+        chaptersPerDayExact: avgChaptersPerDay,
+        minutesPerDay: targetMinutesPerDay,
+        minutesPerDayExact: targetMinutesPerDay,
+        targetMinutesPerDay,
+        isTimeBasedCalculation: true,
+        hasActualTimeData: true,
+        totalTimeMinutes: timeBasedPlan.totalMinutes,
+        totalTimeSeconds: timeBasedPlan.totalSeconds,
+        averageTimePerDay: formatMinutes(targetMinutesPerDay),
+        totalReadingTime: formatMinutes(timeBasedPlan.totalMinutes),
+        estimatedEndDate: endDate
+    };
 }
 
 /**

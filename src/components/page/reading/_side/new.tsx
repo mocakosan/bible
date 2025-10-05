@@ -1,3 +1,6 @@
+// src/components/page/reading/_side/new.tsx
+// NewTestament 컴포넌트 전체 코드
+
 import { FlashList } from '@shopify/flash-list';
 import { isEmpty } from 'lodash';
 import { Center, Text, Box } from 'native-base';
@@ -282,8 +285,8 @@ function NewTestament({ readState, menuIndex }: Props) {
                                             <FastImage
                                                 source={require('../../../../assets/img/noRead.png')}
                                                 style={{
-                                                width: 16,
-                                                height: 16,
+                                                    width: 16,
+                                                    height: 16,
                                                 }}
                                                 resizeMode={FastImage.resizeMode.contain}/>
                                         </View>

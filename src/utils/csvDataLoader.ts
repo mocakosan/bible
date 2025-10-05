@@ -1,12 +1,13 @@
 // src/utils/csvDataLoader.ts
 // 🔥 CSV 파일에서 실제 음성 시간 데이터를 로드하고 관리하는 시스템
+// 전체 1189장 데이터 포함 버전
 
 import { BibleStep } from './define';
 
 interface ChapterTimeData {
     bookCode: string;
     bookIndex: number;
-    book: number; // bookIndex와 동일, 호환성을 위해 추가
+    book: number;
     bookName: string;
     chapter: number;
     minutes: number;
@@ -14,8 +15,9 @@ interface ChapterTimeData {
     totalSeconds: number;
 }
 
-// 전역 저장소 - CSV에서 로드한 실제 시간 데이터
+// 전역 저장소
 let chapterTimeData: Map<string, ChapterTimeData> = new Map();
+let chapterTimeDataCache: ChapterTimeData[] = [];
 let isDataLoaded = false;
 
 // CSV 파일명과 북 인덱스 매핑
@@ -38,37 +40,162 @@ const getBookCodeByIndex = (index: number): string => {
 };
 
 /**
- * 🔥 CSV 데이터 로드 (React Native 환경)
- * 실제 앱에서는 bundler를 통해 CSV를 import하거나 API로 로드해야 함
- * 여기서는 실제 CSV 데이터를 하드코딩으로 포함
+ * 전체 1189장의 하드코딩된 시간 데이터 생성
+ */
+const generateCompleteChapterData = (): ChapterTimeData[] => {
+    const completeData: ChapterTimeData[] = [];
+
+    // 각 책의 장수 (전체 1189장)
+    const BIBLE_CHAPTERS = [
+        { index: 1, name: '창세기', count: 50 },
+        { index: 2, name: '출애굽기', count: 40 },
+        { index: 3, name: '레위기', count: 27 },
+        { index: 4, name: '민수기', count: 36 },
+        { index: 5, name: '신명기', count: 34 },
+        { index: 6, name: '여호수아', count: 24 },
+        { index: 7, name: '사사기', count: 21 },
+        { index: 8, name: '룻기', count: 4 },
+        { index: 9, name: '사무엘상', count: 31 },
+        { index: 10, name: '사무엘하', count: 24 },
+        { index: 11, name: '열왕기상', count: 22 },
+        { index: 12, name: '열왕기하', count: 25 },
+        { index: 13, name: '역대상', count: 29 },
+        { index: 14, name: '역대하', count: 36 },
+        { index: 15, name: '에스라', count: 10 },
+        { index: 16, name: '느헤미야', count: 13 },
+        { index: 17, name: '에스더', count: 10 },
+        { index: 18, name: '욥기', count: 42 },
+        { index: 19, name: '시편', count: 150 },
+        { index: 20, name: '잠언', count: 31 },
+        { index: 21, name: '전도서', count: 12 },
+        { index: 22, name: '아가', count: 8 },
+        { index: 23, name: '이사야', count: 66 },
+        { index: 24, name: '예레미야', count: 52 },
+        { index: 25, name: '예레미야애가', count: 5 },
+        { index: 26, name: '에스겔', count: 48 },
+        { index: 27, name: '다니엘', count: 12 },
+        { index: 28, name: '호세아', count: 14 },
+        { index: 29, name: '요엘', count: 3 },
+        { index: 30, name: '아모스', count: 9 },
+        { index: 31, name: '오바댜', count: 1 },
+        { index: 32, name: '요나', count: 4 },
+        { index: 33, name: '미가', count: 7 },
+        { index: 34, name: '나훔', count: 3 },
+        { index: 35, name: '하박국', count: 3 },
+        { index: 36, name: '스바냐', count: 3 },
+        { index: 37, name: '학개', count: 2 },
+        { index: 38, name: '스가랴', count: 14 },
+        { index: 39, name: '말라기', count: 4 },
+        { index: 40, name: '마태복음', count: 28 },
+        { index: 41, name: '마가복음', count: 16 },
+        { index: 42, name: '누가복음', count: 24 },
+        { index: 43, name: '요한복음', count: 21 },
+        { index: 44, name: '사도행전', count: 28 },
+        { index: 45, name: '로마서', count: 16 },
+        { index: 46, name: '고린도전서', count: 16 },
+        { index: 47, name: '고린도후서', count: 13 },
+        { index: 48, name: '갈라디아서', count: 6 },
+        { index: 49, name: '에베소서', count: 6 },
+        { index: 50, name: '빌립보서', count: 4 },
+        { index: 51, name: '골로새서', count: 4 },
+        { index: 52, name: '데살로니가전서', count: 5 },
+        { index: 53, name: '데살로니가후서', count: 3 },
+        { index: 54, name: '디모데전서', count: 6 },
+        { index: 55, name: '디모데후서', count: 4 },
+        { index: 56, name: '디도서', count: 3 },
+        { index: 57, name: '빌레몬서', count: 1 },
+        { index: 58, name: '히브리서', count: 13 },
+        { index: 59, name: '야고보서', count: 5 },
+        { index: 60, name: '베드로전서', count: 5 },
+        { index: 61, name: '베드로후서', count: 3 },
+        { index: 62, name: '요한일서', count: 5 },
+        { index: 63, name: '요한이서', count: 1 },
+        { index: 64, name: '요한삼서', count: 1 },
+        { index: 65, name: '유다서', count: 1 },
+        { index: 66, name: '요한계시록', count: 22 }
+    ];
+
+    // 각 책별로 장 데이터 생성
+    for (const book of BIBLE_CHAPTERS) {
+        const bookCode = getBookCodeByIndex(book.index);
+
+        for (let chapter = 1; chapter <= book.count; chapter++) {
+            // 기본 추정 시간 (초 단위)
+            let totalSeconds = 240; // 기본 4분
+
+            // 책별 특성에 따른 시간 조정
+            if (book.index === 19) { // 시편
+                // 시편은 장별로 길이가 다양함
+                if (chapter === 119) totalSeconds = 1200; // 119편은 20분
+                else if (chapter === 78 || chapter === 89) totalSeconds = 600; // 긴 시편
+                else if ([1,2,3,4,5,6,7,8,9,10].includes(chapter)) totalSeconds = 120; // 짧은 시편
+                else totalSeconds = 150; // 평균 2.5분
+            } else if (book.index === 20) { // 잠언
+                totalSeconds = 210; // 3.5분
+            } else if (book.index <= 39) { // 구약
+                totalSeconds = 240; // 4분
+            } else { // 신약
+                totalSeconds = 252; // 4.2분
+            }
+
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+
+            completeData.push({
+                bookCode,
+                bookIndex: book.index,
+                book: book.index,
+                bookName: book.name,
+                chapter,
+                minutes,
+                seconds,
+                totalSeconds
+            });
+        }
+    }
+
+    return completeData;
+};
+
+/**
+ * CSV 데이터 로드 메인 함수
  */
 export const loadChapterTimeDataFromCSV = async (): Promise<boolean> => {
     try {
         console.log('🔄 CSV 시간 데이터 로드 시작...');
 
-        // 엑셀에서 추출한 데이터 (초 단위)
+        // 기존 샘플 데이터와 전체 데이터 병합
         const csvData = getFullCsvData();
+        const completeData = generateCompleteChapterData();
 
         chapterTimeData.clear();
-        let successCount = 0;
+        chapterTimeDataCache = [];
 
+        // 먼저 전체 기본 데이터 로드
+        const dataMap = new Map<string, ChapterTimeData>();
+
+        // 기본 데이터 먼저 설정
+        for (const data of completeData) {
+            const key = `${data.bookIndex}_${data.chapter}`;
+            dataMap.set(key, data);
+        }
+
+        // CSV 데이터로 덮어쓰기 (실제 데이터가 있는 경우)
         csvData.forEach(row => {
             const bookAbbr = row.filename.replace(/\d+$/, '');
             const chapter = parseInt(row.filename.match(/\d+$/)?.[0] || '0');
             const bookIndex = BOOK_ABBR_TO_INDEX[bookAbbr];
 
             if (bookIndex && chapter > 0) {
-                // Excel 데이터는 이미 초 단위로 저장되어 있음
                 const totalSeconds = row.duration;
                 const minutes = Math.floor(totalSeconds / 60);
                 const seconds = totalSeconds % 60;
-
                 const bookInfo = BibleStep.find(b => b.index === bookIndex);
 
                 const timeData: ChapterTimeData = {
                     bookCode: bookAbbr,
                     bookIndex,
-                    book: bookIndex, // 호환성을 위해 추가
+                    book: bookIndex,
                     bookName: bookInfo?.name || row.book_and_chapter.split(' ')[0],
                     chapter,
                     minutes,
@@ -77,29 +204,64 @@ export const loadChapterTimeDataFromCSV = async (): Promise<boolean> => {
                 };
 
                 const key = `${bookIndex}_${chapter}`;
-                chapterTimeData.set(key, timeData);
-                successCount++;
+                dataMap.set(key, timeData);
             }
         });
 
-        isDataLoaded = true;
-        console.log(`✅ CSV 데이터 로드 완료: ${successCount}개 장`);
+        // Map을 chapterTimeData와 cache에 저장
+        dataMap.forEach((value, key) => {
+            chapterTimeData.set(key, value);
+            chapterTimeDataCache.push(value);
+        });
 
-        // 통계 출력
+        // 책과 장 순서로 정렬
+        chapterTimeDataCache.sort((a, b) => {
+            if (a.bookIndex !== b.bookIndex) {
+                return a.bookIndex - b.bookIndex;
+            }
+            return a.chapter - b.chapter;
+        });
+
+        isDataLoaded = true;
+
+        // 통계 계산
         const stats = getLoadedDataStats();
-        console.log(`📊 총 ${stats.totalChapters}장, ${stats.totalHours}시간 ${stats.totalMinutes % 60}분`);
+
+        // 각 계획별 장수 확인
+        const fullBibleCount = chapterTimeDataCache.filter(
+            ch => ch.book >= 1 && ch.book <= 66
+        ).length;
+        const oldTestamentCount = chapterTimeDataCache.filter(
+            ch => ch.book >= 1 && ch.book <= 39
+        ).length;
+        const newTestamentCount = chapterTimeDataCache.filter(
+            ch => ch.book >= 40 && ch.book <= 66
+        ).length;
+        const pentateuchCount = chapterTimeDataCache.filter(
+            ch => ch.book >= 1 && ch.book <= 5
+        ).length;
+        const psalmsCount = chapterTimeDataCache.filter(
+            ch => ch.book === 19
+        ).length;
+
+        console.log(`✅ CSV 데이터 로드 완료: ${chapterTimeDataCache.length}개 장`);
+        console.log(`📊 성경 전체: ${fullBibleCount}장 (예상: 1189장)`);
+        console.log(`📊 구약: ${oldTestamentCount}장 (예상: 921장)`);
+        console.log(`📊 신약: ${newTestamentCount}장 (예상: 268장)`);
+        console.log(`📊 모세오경: ${pentateuchCount}장 (예상: 187장)`);
+        console.log(`📊 시편: ${psalmsCount}장 (예상: 150장)`);
+        console.log(`📊 총 ${stats.totalHours}시간 ${stats.totalMinutes % 60}분`);
 
         return true;
 
     } catch (error) {
         console.error('❌ CSV 데이터 로드 실패:', error);
-        // 실패 시 기본 추정치로 초기화
         return initializeWithDefaultTimes();
     }
 };
 
 /**
- * 🔥 특정 장의 실제 음성 시간 반환 (분 단위)
+ * 특정 장의 실제 음성 시간 반환 (분 단위)
  */
 export const getChapterTime = (bookIndex: number, chapter: number): number => {
     const key = `${bookIndex}_${chapter}`;
@@ -109,12 +271,11 @@ export const getChapterTime = (bookIndex: number, chapter: number): number => {
         return parseFloat((data.totalSeconds / 60).toFixed(1));
     }
 
-    // 데이터가 없으면 기본 추정치 반환
     return getDefaultChapterTime(bookIndex);
 };
 
 /**
- * 🔥 특정 장의 실제 음성 시간 반환 (초 단위)
+ * 특정 장의 실제 음성 시간 반환 (초 단위)
  */
 export const getChapterTimeInSeconds = (bookIndex: number, chapter: number): number => {
     const key = `${bookIndex}_${chapter}`;
@@ -124,7 +285,7 @@ export const getChapterTimeInSeconds = (bookIndex: number, chapter: number): num
 };
 
 /**
- * 🔥 특정 장의 상세 시간 정보 반환
+ * 특정 장의 상세 시간 정보 반환
  */
 export const getChapterTimeData = (bookIndex: number, chapter: number): ChapterTimeData | null => {
     const key = `${bookIndex}_${chapter}`;
@@ -132,7 +293,7 @@ export const getChapterTimeData = (bookIndex: number, chapter: number): ChapterT
 };
 
 /**
- * 🔥 성경 전체 또는 특정 범위의 시간 데이터 반환
+ * 성경 전체 또는 특정 범위의 시간 데이터 반환
  */
 export const getAllChapterTimeData = (startBook: number = 1, endBook: number = 66): ChapterTimeData[] => {
     const result: ChapterTimeData[] = [];
@@ -143,7 +304,6 @@ export const getAllChapterTimeData = (startBook: number = 1, endBook: number = 6
         }
     });
 
-    // 책과 장 순서대로 정렬
     return result.sort((a, b) => {
         if (a.bookIndex !== b.bookIndex) {
             return a.bookIndex - b.bookIndex;
@@ -153,7 +313,7 @@ export const getAllChapterTimeData = (startBook: number = 1, endBook: number = 6
 };
 
 /**
- * 🔥 특정 책의 전체 읽기 시간 계산
+ * 특정 책의 전체 읽기 시간 계산
  */
 export const getBookTotalTime = (bookIndex: number): { minutes: number; seconds: number; totalSeconds: number } => {
     let totalSeconds = 0;
@@ -171,55 +331,25 @@ export const getBookTotalTime = (bookIndex: number): { minutes: number; seconds:
 };
 
 /**
- * 🔥 기본 추정치로 초기화 (CSV 로드 실패 시)
+ * 기본 추정치로 초기화 (CSV 로드 실패 시)
  */
 const initializeWithDefaultTimes = (): boolean => {
     console.log('⚠️ 기본 추정치로 초기화 중...');
 
-    // 각 책의 장 수
-    const BIBLE_CHAPTERS: { [key: number]: number } = {
-        1: 50, 2: 40, 3: 27, 4: 36, 5: 34, 6: 24, 7: 21, 8: 4,
-        9: 31, 10: 24, 11: 22, 12: 25, 13: 29, 14: 36, 15: 10, 16: 13,
-        17: 10, 18: 42, 19: 150, 20: 31, 21: 12, 22: 8, 23: 66, 24: 52,
-        25: 5, 26: 48, 27: 12, 28: 14, 29: 3, 30: 9, 31: 1, 32: 4,
-        33: 7, 34: 3, 35: 3, 36: 3, 37: 2, 38: 14, 39: 4,
-        40: 28, 41: 16, 42: 24, 43: 21, 44: 28, 45: 16, 46: 16, 47: 13,
-        48: 6, 49: 6, 50: 4, 51: 4, 52: 5, 53: 3, 54: 6, 55: 4,
-        56: 3, 57: 1, 58: 13, 59: 5, 60: 5, 61: 3, 62: 5, 63: 1,
-        64: 1, 65: 1, 66: 22
-    };
-
     try {
+        const completeData = generateCompleteChapterData();
+
         chapterTimeData.clear();
+        chapterTimeDataCache = [];
 
-        Object.entries(BIBLE_CHAPTERS).forEach(([bookStr, chapterCount]) => {
-            const bookIndex = parseInt(bookStr);
-            const bookInfo = BibleStep.find(b => b.index === bookIndex);
-            const bookCode = getBookCodeByIndex(bookIndex);
-
-            for (let chapter = 1; chapter <= chapterCount; chapter++) {
-                const estimatedMinutes = getDefaultChapterTime(bookIndex);
-                const minutes = Math.floor(estimatedMinutes);
-                const seconds = Math.round((estimatedMinutes - minutes) * 60);
-
-                const timeData: ChapterTimeData = {
-                    bookCode,
-                    bookIndex,
-                    bookName: bookInfo?.name || '',
-                    chapter,
-                    minutes,
-                    seconds,
-                    totalSeconds: minutes * 60 + seconds,
-                    book: 0
-                };
-
-                const key = `${bookIndex}_${chapter}`;
-                chapterTimeData.set(key, timeData);
-            }
+        completeData.forEach(data => {
+            const key = `${data.bookIndex}_${data.chapter}`;
+            chapterTimeData.set(key, data);
+            chapterTimeDataCache.push(data);
         });
 
         isDataLoaded = true;
-        console.log('✅ 기본 추정치 초기화 완료');
+        console.log(`✅ 기본 추정치 초기화 완료: ${chapterTimeDataCache.length}장`);
         return true;
     } catch (error) {
         console.error('❌ 기본 추정치 초기화 실패:', error);
@@ -228,24 +358,17 @@ const initializeWithDefaultTimes = (): boolean => {
 };
 
 /**
- * 🔥 기본 장 읽기 시간 추정치
+ * 기본 장 읽기 시간 추정치
  */
 const getDefaultChapterTime = (bookIndex: number): number => {
-    // 시편은 장마다 차이가 크므로 평균치 사용
-    if (bookIndex === 19) return 2.5;
-
-    // 잠언은 비교적 짧은 장들
-    if (bookIndex === 20) return 3.5;
-
-    // 구약은 일반적으로 장이 김
-    if (bookIndex <= 39) return 4.0;
-
-    // 신약은 상대적으로 짧음
-    return 4.2;
+    if (bookIndex === 19) return 2.5; // 시편
+    if (bookIndex === 20) return 3.5; // 잠언
+    if (bookIndex <= 39) return 4.0; // 구약
+    return 4.2; // 신약
 };
 
 /**
- * 🔥 로드된 데이터 통계
+ * 로드된 데이터 통계
  */
 const getLoadedDataStats = (): {
     totalChapters: number;
@@ -273,93 +396,91 @@ const getLoadedDataStats = (): {
 };
 
 /**
- * 🔥 데이터 로드 상태 확인
+ * 데이터 로드 상태 확인
  */
 export const isChapterTimeDataLoaded = (): boolean => {
     return isDataLoaded && chapterTimeData.size > 0;
 };
 
 /**
- * 🔥 실제 CSV 데이터 (Bible_Chapter_Durations_in_Seconds.xlsx에서 변환)
- * 엑셀 파일의 duration은 초 단위로 저장되어 있음
+ * 실제 CSV 데이터 (샘플 - 실제 데이터 있는 부분)
  */
 const getFullCsvData = (): Array<{ filename: string; book_and_chapter: string; duration: number }> => {
     return BIBLE_AUDIO_DATA_IN_SECONDS;
 };
 
 /**
- * 🔥 성경 전체 음성 데이터 (1189장)
- * Excel 파일에서 추출한 실제 데이터 (초 단위)
+ * 성경 음성 데이터 샘플 (실제 측정된 데이터)
  */
 const BIBLE_AUDIO_DATA_IN_SECONDS = [
-    // 역대기상 29장
-    {filename: "1Ch001", book_and_chapter: "역대기상 1장", duration: 299},
-    {filename: "1Ch002", book_and_chapter: "역대기상 2장", duration: 352},
-    {filename: "1Ch003", book_and_chapter: "역대기상 3장", duration: 163},
-    {filename: "1Ch004", book_and_chapter: "역대기상 4장", duration: 337},
-    {filename: "1Ch005", book_and_chapter: "역대기상 5장", duration: 241},
-    {filename: "1Ch006", book_and_chapter: "역대기상 6장", duration: 516},
-    {filename: "1Ch007", book_and_chapter: "역대기상 7장", duration: 323},
-    {filename: "1Ch008", book_and_chapter: "역대기상 8장", duration: 210},
-    {filename: "1Ch009", book_and_chapter: "역대기상 9장", duration: 351},
-    {filename: "1Ch010", book_and_chapter: "역대기상 10장", duration: 134},
-    {filename: "1Ch011", book_and_chapter: "역대기상 11장", duration: 360},
-    {filename: "1Ch012", book_and_chapter: "역대기상 12장", duration: 368},
-    {filename: "1Ch013", book_and_chapter: "역대기상 13장", duration: 138},
-    {filename: "1Ch014", book_and_chapter: "역대기상 14장", duration: 144},
-    {filename: "1Ch015", book_and_chapter: "역대기상 15장", duration: 255},
-    {filename: "1Ch016", book_and_chapter: "역대기상 16장", duration: 333},
-    {filename: "1Ch017", book_and_chapter: "역대기상 17장", duration: 288},
-    {filename: "1Ch018", book_and_chapter: "역대기상 18장", duration: 157},
-    {filename: "1Ch019", book_and_chapter: "역대기상 19장", duration: 211},
-    {filename: "1Ch020", book_and_chapter: "역대기상 20장", duration: 92},
-    {filename: "1Ch021", book_and_chapter: "역대기상 21장", duration: 338},
-    {filename: "1Ch022", book_and_chapter: "역대기상 22장", duration: 225},
-    {filename: "1Ch023", book_and_chapter: "역대기상 23장", duration: 231},
-    {filename: "1Ch024", book_and_chapter: "역대기상 24장", duration: 210},
-    {filename: "1Ch025", book_and_chapter: "역대기상 25장", duration: 226},
-    {filename: "1Ch026", book_and_chapter: "역대기상 26장", duration: 270},
-    {filename: "1Ch027", book_and_chapter: "역대기상 27장", duration: 276},
-    {filename: "1Ch028", book_and_chapter: "역대기상 28장", duration: 279},
-    {filename: "1Ch029", book_and_chapter: "역대기상 29장", duration: 337},
+    // 역대상 29장
+    {filename: "1Ch001", book_and_chapter: "역대상 1장", duration: 299},
+    {filename: "1Ch002", book_and_chapter: "역대상 2장", duration: 352},
+    {filename: "1Ch003", book_and_chapter: "역대상 3장", duration: 163},
+    {filename: "1Ch004", book_and_chapter: "역대상 4장", duration: 337},
+    {filename: "1Ch005", book_and_chapter: "역대상 5장", duration: 241},
+    {filename: "1Ch006", book_and_chapter: "역대상 6장", duration: 516},
+    {filename: "1Ch007", book_and_chapter: "역대상 7장", duration: 323},
+    {filename: "1Ch008", book_and_chapter: "역대상 8장", duration: 210},
+    {filename: "1Ch009", book_and_chapter: "역대상 9장", duration: 351},
+    {filename: "1Ch010", book_and_chapter: "역대상 10장", duration: 134},
+    {filename: "1Ch011", book_and_chapter: "역대상 11장", duration: 360},
+    {filename: "1Ch012", book_and_chapter: "역대상 12장", duration: 368},
+    {filename: "1Ch013", book_and_chapter: "역대상 13장", duration: 138},
+    {filename: "1Ch014", book_and_chapter: "역대상 14장", duration: 144},
+    {filename: "1Ch015", book_and_chapter: "역대상 15장", duration: 255},
+    {filename: "1Ch016", book_and_chapter: "역대상 16장", duration: 333},
+    {filename: "1Ch017", book_and_chapter: "역대상 17장", duration: 288},
+    {filename: "1Ch018", book_and_chapter: "역대상 18장", duration: 157},
+    {filename: "1Ch019", book_and_chapter: "역대상 19장", duration: 211},
+    {filename: "1Ch020", book_and_chapter: "역대상 20장", duration: 92},
+    {filename: "1Ch021", book_and_chapter: "역대상 21장", duration: 338},
+    {filename: "1Ch022", book_and_chapter: "역대상 22장", duration: 225},
+    {filename: "1Ch023", book_and_chapter: "역대상 23장", duration: 231},
+    {filename: "1Ch024", book_and_chapter: "역대상 24장", duration: 210},
+    {filename: "1Ch025", book_and_chapter: "역대상 25장", duration: 226},
+    {filename: "1Ch026", book_and_chapter: "역대상 26장", duration: 270},
+    {filename: "1Ch027", book_and_chapter: "역대상 27장", duration: 276},
+    {filename: "1Ch028", book_and_chapter: "역대상 28장", duration: 279},
+    {filename: "1Ch029", book_and_chapter: "역대상 29장", duration: 337},
 
-    // 역대기하 36장
-    {filename: "2Ch001", book_and_chapter: "역대기하 1장", duration: 182},
-    {filename: "2Ch002", book_and_chapter: "역대기하 2장", duration: 232},
-    {filename: "2Ch003", book_and_chapter: "역대기하 3장", duration: 148},
-    {filename: "2Ch004", book_and_chapter: "역대기하 4장", duration: 191},
-    {filename: "2Ch005", book_and_chapter: "역대기하 5장", duration: 151},
-    {filename: "2Ch006", book_and_chapter: "역대기하 6장", duration: 482},
-    {filename: "2Ch007", book_and_chapter: "역대기하 7장", duration: 253},
-    {filename: "2Ch008", book_and_chapter: "역대기하 8장", duration: 181},
-    {filename: "2Ch009", book_and_chapter: "역대기하 9장", duration: 300},
-    {filename: "2Ch010", book_and_chapter: "역대기하 10장", duration: 215},
-    {filename: "2Ch011", book_and_chapter: "역대기하 11장", duration: 201},
-    {filename: "2Ch012", book_and_chapter: "역대기하 12장", duration: 174},
-    {filename: "2Ch013", book_and_chapter: "역대기하 13장", duration: 231},
-    {filename: "2Ch014", book_and_chapter: "역대기하 14장", duration: 170},
-    {filename: "2Ch015", book_and_chapter: "역대기하 15장", duration: 185},
-    {filename: "2Ch016", book_and_chapter: "역대기하 16장", duration: 157},
-    {filename: "2Ch017", book_and_chapter: "역대기하 17장", duration: 175},
-    {filename: "2Ch018", book_and_chapter: "역대기하 18장", duration: 398},
-    {filename: "2Ch019", book_and_chapter: "역대기하 19장", duration: 142},
-    {filename: "2Ch020", book_and_chapter: "역대기하 20장", duration: 423},
-    {filename: "2Ch021", book_and_chapter: "역대기하 21장", duration: 219},
-    {filename: "2Ch022", book_and_chapter: "역대기하 22장", duration: 164},
-    {filename: "2Ch023", book_and_chapter: "역대기하 23장", duration: 245},
-    {filename: "2Ch024", book_and_chapter: "역대기하 24장", duration: 313},
-    {filename: "2Ch025", book_and_chapter: "역대기하 25장", duration: 321},
-    {filename: "2Ch026", book_and_chapter: "역대기하 26장", duration: 240},
-    {filename: "2Ch027", book_and_chapter: "역대기하 27장", duration: 84},
-    {filename: "2Ch028", book_and_chapter: "역대기하 28장", duration: 290},
-    {filename: "2Ch029", book_and_chapter: "역대기하 29장", duration: 374},
-    {filename: "2Ch030", book_and_chapter: "역대기하 30장", duration: 322},
-    {filename: "2Ch031", book_and_chapter: "역대기하 31장", duration: 258},
-    {filename: "2Ch032", book_and_chapter: "역대기하 32장", duration: 379},
-    {filename: "2Ch033", book_and_chapter: "역대기하 33장", duration: 252},
-    {filename: "2Ch034", book_and_chapter: "역대기하 34장", duration: 401},
-    {filename: "2Ch035", book_and_chapter: "역대기하 35장", duration: 324},
-    {filename: "2Ch036", book_and_chapter: "역대기하 36장", duration: 257},
+    // 역대하 36장
+    {filename: "2Ch001", book_and_chapter: "역대하 1장", duration: 182},
+    {filename: "2Ch002", book_and_chapter: "역대하 2장", duration: 232},
+    {filename: "2Ch003", book_and_chapter: "역대하 3장", duration: 148},
+    {filename: "2Ch004", book_and_chapter: "역대하 4장", duration: 191},
+    {filename: "2Ch005", book_and_chapter: "역대하 5장", duration: 151},
+    {filename: "2Ch006", book_and_chapter: "역대하 6장", duration: 482},
+    {filename: "2Ch007", book_and_chapter: "역대하 7장", duration: 253},
+    {filename: "2Ch008", book_and_chapter: "역대하 8장", duration: 181},
+    {filename: "2Ch009", book_and_chapter: "역대하 9장", duration: 300},
+    {filename: "2Ch010", book_and_chapter: "역대하 10장", duration: 215},
+    {filename: "2Ch011", book_and_chapter: "역대하 11장", duration: 201},
+    {filename: "2Ch012", book_and_chapter: "역대하 12장", duration: 174},
+    {filename: "2Ch013", book_and_chapter: "역대하 13장", duration: 231},
+    {filename: "2Ch014", book_and_chapter: "역대하 14장", duration: 170},
+    {filename: "2Ch015", book_and_chapter: "역대하 15장", duration: 185},
+    {filename: "2Ch016", book_and_chapter: "역대하 16장", duration: 157},
+    {filename: "2Ch017", book_and_chapter: "역대하 17장", duration: 175},
+    {filename: "2Ch018", book_and_chapter: "역대하 18장", duration: 398},
+    {filename: "2Ch019", book_and_chapter: "역대하 19장", duration: 142},
+    {filename: "2Ch020", book_and_chapter: "역대하 20장", duration: 423},
+    {filename: "2Ch021", book_and_chapter: "역대하 21장", duration: 219},
+    {filename: "2Ch022", book_and_chapter: "역대하 22장", duration: 164},
+    {filename: "2Ch023", book_and_chapter: "역대하 23장", duration: 245},
+    {filename: "2Ch024", book_and_chapter: "역대하 24장", duration: 313},
+    {filename: "2Ch025", book_and_chapter: "역대하 25장", duration: 321},
+    {filename: "2Ch026", book_and_chapter: "역대하 26장", duration: 240},
+    {filename: "2Ch027", book_and_chapter: "역대하 27장", duration: 84},
+    {filename: "2Ch028", book_and_chapter: "역대하 28장", duration: 290},
+    {filename: "2Ch029", book_and_chapter: "역대하 29장", duration: 374},
+    {filename: "2Ch030", book_and_chapter: "역대하 30장", duration: 322},
+    {filename: "2Ch031", book_and_chapter: "역대하 31장", duration: 258},
+    {filename: "2Ch032", book_and_chapter: "역대하 32장", duration: 379},
+    {filename: "2Ch033", book_and_chapter: "역대하 33장", duration: 252},
+    {filename: "2Ch034", book_and_chapter: "역대하 34장", duration: 401},
+    {filename: "2Ch035", book_and_chapter: "역대하 35장", duration: 324},
+    {filename: "2Ch036", book_and_chapter: "역대하 36장", duration: 257},
 
     // 창세기 50장
     {filename: "Gen001", book_and_chapter: "창세기 1장", duration: 271},
@@ -453,15 +574,13 @@ const BIBLE_AUDIO_DATA_IN_SECONDS = [
     {filename: "Exo037", book_and_chapter: "출애굽기 37장", duration: 235},
     {filename: "Exo038", book_and_chapter: "출애굽기 38장", duration: 274},
     {filename: "Exo039", book_and_chapter: "출애굽기 39장", duration: 358},
-    {filename: "Exo040", book_and_chapter: "출애굽기 40장", duration: 269},
+    {filename: "Exo040", book_and_chapter: "출애굽기 40장", duration: 269}
 
-    // TODO: 나머지 성경 데이터는 별도 파일로 분리하거나
-    // 실제 운영 시 CSV/Excel 파일을 직접 읽어오는 방식으로 구현
-    // 여기서는 주요 성경만 포함
+    // 나머지 성경 데이터는 generateCompleteChapterData 함수에서 자동 생성
 ];
 
 /**
- * 🔥 UI 컴포넌트를 위한 헬퍼 함수
+ * UI 컴포넌트를 위한 헬퍼 함수
  */
 export const formatChapterTime = (bookIndex: number, chapter: number): string => {
     const data = getChapterTimeData(bookIndex, chapter);
@@ -474,7 +593,7 @@ export const formatChapterTime = (bookIndex: number, chapter: number): string =>
 };
 
 /**
- * 🔥 시간 기반 성경 읽기 계획을 위한 데이터 변환
+ * 시간 기반 성경 읽기 계획을 위한 데이터 변환
  */
 export const getChapterTimeDataForPlan = (
     startBook: number = 1,
@@ -488,13 +607,16 @@ export const getChapterTimeDataForPlan = (
     totalSeconds: number;
 }> => {
     if (!isDataLoaded) {
-        console.warn('⚠️ 시간 데이터가 아직 로드되지 않았습니다.');
-        return [];
+        console.warn('⚠️ 시간 데이터가 아직 로드되지 않았습니다. 초기화 중...');
+        initializeWithDefaultTimes();
     }
 
-    const result = getAllChapterTimeData(startBook, endBook);
+    const result = chapterTimeDataCache.filter(
+        item => item.bookIndex >= startBook && item.bookIndex <= endBook
+    );
 
-    // book 필드를 포함한 형태로 매핑
+    console.log(`📊 ${startBook}~${endBook}권 범위: ${result.length}장`);
+
     return result.map(item => ({
         book: item.bookIndex,
         chapter: item.chapter,
