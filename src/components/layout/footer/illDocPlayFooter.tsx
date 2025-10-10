@@ -6,6 +6,7 @@ import { BibleStep } from "../../../utils/define"
 import {Alert, AppState, BackHandler, Platform, TouchableOpacity} from "react-native"
 import { defaultStorage } from "../../../utils/mmkv"
 import { useIsFocused, useFocusEffect } from "@react-navigation/native"
+import { useSafeAreaInsets } from "react-native-safe-area-context" // SafeArea 추가
 import TrackPlayer, {
     Capability,
     Event,
@@ -105,6 +106,7 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
     ({ onTrigger, openSound }, ref) => {
         const { color } = useBaseStyle();
         const dispatch = useDispatch();
+        const insets = useSafeAreaInsets(); // SafeArea insets 추가
 
         const BOOK = defaultStorage.getNumber("bible_book_connec") ??
             defaultStorage.getNumber("bible_book") ?? 1;
@@ -641,7 +643,7 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
                     }
                 }, 1000);
             }
-        }, [BOOK, JANG, syncBibleState, onTrigger, safeSetTimeout]);
+        }, [BOOK, JANG, syncBibleState, onTrigger, safeSetTimeout, isProcessingAction]);
 
         // 다음 장으로 이동
         const onPressNext = useCallback((jang: number) => {
@@ -823,12 +825,20 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
             }
         }, [isPlayerReady, isPlaying, soundSpeed, syncBibleState, BOOK, JANG, soundUrl, isProcessingAction, safeSetTimeout]);
 
+        // Android targetSdk 35 대응: 하단 패딩 계산
+        const containerPaddingBottom = Platform.select({
+            ios: insets.bottom,
+            android: insets.bottom > 0 ? insets.bottom : 0,
+            default: 0,
+        });
+
         return (
             <>
                 <Box
                     bg={"white"}
                     width="100%"
-                    height={85}
+                    height={85 + containerPaddingBottom} // SafeArea bottom 추가
+                    paddingBottom={`${containerPaddingBottom}px`} // 하단 패딩 추가
                     alignSelf="center"
                     display={openSound ? "flex" : "none"}
                 >

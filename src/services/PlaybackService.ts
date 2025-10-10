@@ -3,6 +3,7 @@ import TrackPlayer, {
   State,
   RepeatMode,
   AppKilledPlaybackBehavior,
+  Capability,
 } from "react-native-track-player";
 import { Platform, AppState } from "react-native";
 import { defaultStorage } from "../utils/mmkv";
@@ -85,7 +86,7 @@ const safeSetTimeout = (callback: () => void, delay: number) => {
   }, delay);
 };
 
-// 다음 장으로 이동하는 함수
+// 다음 장으로 이동하는 함수 - 백그라운드에서도 작동하도록 수정
 const moveToNextChapter = async () => {
   const now = Date.now();
 
@@ -101,7 +102,7 @@ const moveToNextChapter = async () => {
 
   processingChapter = true;
   lastProcessTimestamp = now;
-  console.log("Starting to process next chapter");
+  console.log(`Starting to process next chapter (App State: ${AppState.currentState})`);
 
   try {
     const autoNextEnabled = defaultStorage.getBoolean("auto_next_chapter_enabled") ?? false;
@@ -118,6 +119,13 @@ const moveToNextChapter = async () => {
     const currentBook = defaultStorage.getNumber("bible_book") ?? 1;
     const currentJang = defaultStorage.getNumber("bible_jang") ?? 1;
 
+    // 중복 처리 방지
+    if (lastChapterInfo.book === currentBook && lastChapterInfo.jang === currentJang) {
+      console.log(`Already processed chapter ${currentBook}:${currentJang}, skipping`);
+      clearProcessingFlags();
+      return;
+    }
+
     let nextBook = currentBook;
     let nextJang = currentJang + 1;
 
@@ -129,10 +137,16 @@ const moveToNextChapter = async () => {
 
       if (nextBook > 66) {
         console.log("Reached end of Bible");
+        await TrackPlayer.pause();
         clearProcessingFlags();
         return;
       }
     }
+
+    console.log(`Moving from ${currentBook}:${currentJang} to ${nextBook}:${nextJang}`);
+
+    // 처리 완료 표시
+    lastChapterInfo = { book: currentBook, jang: currentJang };
 
     // 상태 업데이트
     defaultStorage.set("bible_book", nextBook);
@@ -152,7 +166,7 @@ const moveToNextChapter = async () => {
 
     if (success) {
       await TrackPlayer.play();
-      console.log("Started playback of next chapter");
+      console.log(`Started playback of next chapter: ${nextBook}:${nextJang}`);
     }
 
     setTimeout(() => {
@@ -163,6 +177,7 @@ const moveToNextChapter = async () => {
     console.error("Error handling next chapter:", error);
     clearProcessingFlags();
 
+    // 에러 발생 시 재시도
     setTimeout(() => {
       console.log("Retrying after error");
       moveToNextChapter();
@@ -170,7 +185,7 @@ const moveToNextChapter = async () => {
   }
 };
 
-// PlaybackService 함수 - ES6 export로 변경
+// PlaybackService 함수 - 백그라운드 재생 지원하도록 수정
 const PlaybackService = async () => {
   try {
     console.log("PlaybackService started");
@@ -178,41 +193,56 @@ const PlaybackService = async () => {
     clearProcessingFlags();
     lastChapterInfo = { book: 0, jang: 0 };
     backgroundEventCount = 0;
-    appState = "active";
+    appState = AppState.currentState;
 
     try {
+      // 백그라운드에서도 재생이 계속되도록 설정 변경
       await TrackPlayer.updateOptions({
-        repeatMode: RepeatMode.Off,
         android: {
-          appKilledPlaybackBehavior:
-          AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+          // 앱이 종료되어도 재생 계속
+          appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
         },
-        notification: {
-          stopWithApp: true,
-        },
+        // 백그라운드에서도 알림 컨트롤 가능
+        capabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.SkipToNext,
+          Capability.SkipToPrevious,
+          Capability.SeekTo,
+        ],
+        compactCapabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.SkipToNext,
+        ],
+        notificationCapabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.SkipToNext,
+          Capability.SkipToPrevious,
+        ],
       });
-      console.log("RepeatMode disabled");
+
+      // RepeatMode는 Off로 설정 (수동으로 다음 장 처리)
       await TrackPlayer.setRepeatMode(RepeatMode.Off);
+      console.log("Background playback enabled, RepeatMode disabled");
     } catch (error) {
       console.error("Error setting repeat mode:", error);
     }
 
-    // Queue end 이벤트 리스너
+    // Queue end 이벤트 리스너 - 백그라운드에서도 작동하도록 수정
     const queueEndListener = TrackPlayer.addEventListener(
         Event.PlaybackQueueEnded,
         async (event) => {
-          console.log("Queue ended event received");
+          console.log(`Queue ended event received (App State: ${AppState.currentState})`);
 
-          if (AppState.currentState === "active") {
-            console.log("App is active, attempting to move to next chapter");
-            moveToNextChapter();
-          } else {
-            console.log("App is in background, skipping auto next");
-          }
+          // 앱 상태와 관계없이 자동 다음 장 처리
+          console.log("Processing auto next chapter regardless of app state");
+          moveToNextChapter();
         }
     );
 
-    // Progress 이벤트 리스너
+    // Progress 이벤트 리스너 - 백그라운드에서도 트랙 끝 감지
     const progressListener = TrackPlayer.addEventListener(
         Event.PlaybackProgressUpdated,
         async (event) => {
@@ -224,15 +254,20 @@ const PlaybackService = async () => {
             return;
           }
 
-          if (AppState.currentState !== "active") {
-            if (
-                info.position > 0 &&
-                info.duration > 0 &&
-                info.position >= info.duration - 0.5 &&
-                !processingChapter
-            ) {
+          // 백그라운드/포그라운드 모두에서 트랙이 거의 끝날 때 다음 장으로 이동
+          if (
+              info.position > 0 &&
+              info.duration > 0 &&
+              info.position >= info.duration - 0.5 &&
+              !processingChapter
+          ) {
+            const currentBook = defaultStorage.getNumber("bible_book") ?? 1;
+            const currentJang = defaultStorage.getNumber("bible_jang") ?? 1;
+
+            // 이미 처리한 장인지 확인
+            if (lastChapterInfo.book !== currentBook || lastChapterInfo.jang !== currentJang) {
               console.log(
-                  `Background mode - Progress near end: ${info.position}/${info.duration}`
+                  `Track near end (${AppState.currentState} mode): ${info.position}/${info.duration}`
               );
               moveToNextChapter();
             }
@@ -240,7 +275,7 @@ const PlaybackService = async () => {
         }
     );
 
-    // Playback state 이벤트 리스너
+    // Playback state 이벤트 리스너 - 트랙 종료 상태도 감지
     const stateListener = TrackPlayer.addEventListener(
         Event.PlaybackState,
         (event) => {
@@ -252,9 +287,26 @@ const PlaybackService = async () => {
                 `Current player is ${isIlldocPlayer ? "IllDoc" : "Bible"}`
             );
 
+            // 백그라운드에서도 RepeatMode Off 유지
             TrackPlayer.setRepeatMode(RepeatMode.Off).catch((e) => {
               console.error("Error setting repeat mode on state change:", e);
             });
+          }
+
+          // 트랙이 끝났을 때도 처리 (백업)
+          if (event.state === State.Ended) {
+            console.log("Track ended state detected");
+            const autoNextEnabled = defaultStorage.getBoolean("auto_next_chapter_enabled") ?? false;
+            const isIlldocPlayer = defaultStorage.getBoolean("is_illdoc_player") ?? false;
+
+            if (autoNextEnabled && !isIlldocPlayer && !processingChapter) {
+              console.log("Processing next chapter from Ended state");
+              setTimeout(() => {
+                if (!processingChapter) {
+                  moveToNextChapter();
+                }
+              }, 500);
+            }
           }
         }
     );
@@ -274,8 +326,33 @@ const PlaybackService = async () => {
         async (nextAppState) => {
           console.log("App state changed from", appState, "to", nextAppState);
 
+          // 백그라운드로 이동할 때 설정 확인
           if (appState === "active" && nextAppState === "background") {
             backgroundEventCount = 0;
+
+            // 백그라운드에서도 재생 계속되도록 설정 재확인
+            const autoNextEnabled = defaultStorage.getBoolean("auto_next_chapter_enabled") ?? false;
+            console.log(`Moving to background. Auto next enabled: ${autoNextEnabled}`);
+
+            // 백그라운드 재생 설정 유지
+            try {
+              await TrackPlayer.updateOptions({
+                android: {
+                  appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
+                },
+              });
+              await TrackPlayer.setRepeatMode(RepeatMode.Off);
+            } catch (error) {
+              console.error("Error maintaining background settings:", error);
+            }
+          }
+
+          // 포그라운드로 돌아올 때
+          if (appState.match(/inactive|background/) && nextAppState === "active") {
+            console.log("App returned to foreground");
+            // 현재 재생 상태 확인
+            const state = await TrackPlayer.getState();
+            console.log(`Current playback state: ${state}`);
           }
 
           appState = nextAppState;

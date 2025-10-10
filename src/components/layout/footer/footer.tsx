@@ -1,3 +1,4 @@
+// src/components/layout/footer/footer.tsx
 import axios from "axios";
 import { Box, Center, HStack, Image, Pressable, Text } from "native-base";
 import React, { useEffect, useState } from "react";
@@ -5,22 +6,17 @@ import { Linking, Platform } from "react-native";
 import { shallowEqual, useSelector } from "react-redux";
 import { gFontTitle } from "../../../constant/global";
 import { useBaseStyle, useNativeNavigation } from "../../../hooks";
-import {useSafeAreaInsets} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function FooterLayout() {
   const { color } = useBaseStyle();
-
   const { route, navigation } = useNativeNavigation();
-
   const linkState = useSelector(
       (state: combineType) => state.link,
       shallowEqual
   );
-
   const { name: routeName } = route;
-
   const insets = useSafeAreaInsets();
-
   const [link, setLink] = useState<string>("https://www.kdknews.com");
 
   const object = [
@@ -66,9 +62,6 @@ export default function FooterLayout() {
   const onNavigate = (route: string | undefined, url: string | undefined, params?: object) => {
     route && navigation.navigate(route, params || {});
     url && Linking.openURL(url);
-    // navigation.navigate('WordScreen', {
-    //   data: { uri: url, back: true }
-    // });
   };
 
   useEffect(() => {
@@ -78,6 +71,13 @@ export default function FooterLayout() {
           setLink(res.data.data.link);
         });
   }, []);
+
+  // Android targetSdk 35 대응: 하단 네비게이션 바 높이 계산
+  const footerHeight = Platform.select({
+    ios: 50 + insets.bottom,
+    android: 50 + (insets.bottom > 0 ? insets.bottom : 0), // Android에서 safe area bottom 적용
+    default: 50
+  });
 
   return (
       <Box
@@ -90,40 +90,50 @@ export default function FooterLayout() {
           borderTopWidth={1}
           bg="white"
           width="100%"
-          height={Platform.OS === "android" ? 45 + insets.bottom : 70}
-          alignSelf="center"
+          height={`${footerHeight}px`}
+          paddingBottom={`${insets.bottom}px`} // 하단 패딩 추가
       >
-        <HStack justifyContent={"space-around"}>
-          {object.map(({ name, open_img, off_img, route, url, params }) => (
-              <Pressable
-                  key={name}
-                  style={{
-                    width: `${100 / object.length}%`,
-                    marginTop: 0,
-                  }}
-                  onPress={() => onNavigate(route, url, params)}
-              >
-                <Center>
-                  <Image
-                      width={"24px"}
-                      height={"24px"}
-                      source={route === routeName ? open_img : off_img}
-                      alt={name}
-                  />
-                  <Text
-                      style={{
-                        color: route === routeName ? color.bible : color.gray9,
-                      }}
-                      fontWeight={900}
-                      fontFamily={gFontTitle}
-                      fontSize={"13px"}
-                      textAlign={"center"}
-                  >
-                    {name}
-                  </Text>
-                </Center>
-              </Pressable>
-          ))}
+        <HStack
+            px="3"
+            py="1"
+            pt="1"
+            justifyContent="space-between"
+            alignItems="center"
+            w="100%"
+            height="50px" // 실제 컨텐츠 높이는 50px로 유지
+        >
+          {object.map((item, index) => {
+            const isActive =
+                item.route === routeName ||
+                (item.route === "DrawerScreens" && routeName === "HomeScreen") ||
+                (item.route === "MyPageScreen" && routeName === "MyPageScreen");
+
+            return (
+                <Pressable
+                    key={index}
+                    onPress={() => onNavigate(item.route, item.url, item.params)}
+                    style={{ alignItems: "center", flex: 1 }}
+                >
+                  <Center>
+                    <Image
+                        source={isActive ? item.open_img : item.off_img}
+                        alt={item.name}
+                        size="25px"
+                        resizeMode="contain"
+                    />
+                    <Text
+                        fontSize="10px"
+                        color={isActive ? color.bible : color.gray}
+                        mt="0.5"
+                        fontFamily={gFontTitle}
+                        fontWeight={isActive ? "bold" : "normal"}
+                    >
+                      {item.name}
+                    </Text>
+                  </Center>
+                </Pressable>
+            );
+          })}
         </HStack>
       </Box>
   );

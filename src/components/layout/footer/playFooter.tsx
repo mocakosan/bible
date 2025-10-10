@@ -2,6 +2,7 @@ import { Box, Button, Slider, Text, VStack } from "native-base";
 import { memo, useEffect, useCallback, useRef, useState } from "react";
 import FontAwesomeIcons from "react-native-vector-icons/FontAwesome";
 import { useBaseStyle, useNativeNavigation } from "../../../hooks";
+import { useSafeAreaInsets } from "react-native-safe-area-context"; // SafeArea 추가
 
 import { useIsFocused, useFocusEffect } from "@react-navigation/native";
 import {
@@ -128,7 +129,7 @@ const setupPlayer = async (): Promise<boolean> => {
       android: {
         // 중요: 앱 종료 시 재생 중지 및 알림 제거
         appKilledPlaybackBehavior:
-          AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+        AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
         alwaysPauseOnInterruption: true,
         stoppingAppPausesPlayback: true,
       },
@@ -142,7 +143,7 @@ const setupPlayer = async (): Promise<boolean> => {
     await TrackPlayer.setRepeatMode(RepeatMode.Off);
 
     console.log(
-      "TrackPlayer initialized successfully - PlayFooterLayout (Simplified)"
+        "TrackPlayer initialized successfully - PlayFooterLayout (Simplified)"
     );
     return true;
   } catch (error) {
@@ -174,27 +175,28 @@ interface PlayFooterLayoutProps {
 const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
   const { color } = useBaseStyle();
   const dispatch = useDispatch();
+  const insets = useSafeAreaInsets(); // SafeArea insets 추가
 
   // 상태 관리
   const [soundSpeed, setSoundSpeed] = useState<number>(1);
   const [isPlayerInitialized, setIsPlayerInitialized] =
-    useState<boolean>(false);
+      useState<boolean>(false);
   const [enableAutoNext, setEnableAutoNext] = useState<boolean>(true);
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
   const [autoPlayPending, setAutoPlayPending] = useState<boolean>(false);
 
   // 현재 책/장 상태를 실시간으로 추적
   const [currentBook, setCurrentBook] = useState(
-    () =>
-      defaultStorage.getNumber("bible_book") ??
-      defaultStorage.getNumber("bible_book_connec") ??
-      1
+      () =>
+          defaultStorage.getNumber("bible_book") ??
+          defaultStorage.getNumber("bible_book_connec") ??
+          1
   );
   const [currentJang, setCurrentJang] = useState(
-    () =>
-      defaultStorage.getNumber("bible_jang") ??
-      defaultStorage.getNumber("bible_jang_connec") ??
-      1
+      () =>
+          defaultStorage.getNumber("bible_jang") ??
+          defaultStorage.getNumber("bible_jang_connec") ??
+          1
   );
 
   // 네비게이션 및 화면 포커스 상태
@@ -205,7 +207,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
   // 현재 재생 중인 트랙 정보를 추적하는 ref 추가
   const currentTrackRef = useRef<{ book: number; jang: number } | null>(null);
   const lastProcessedChapterRef = useRef<{ book: number; jang: number } | null>(
-    null
+      null
   );
 
   // TrackPlayer 훅
@@ -217,73 +219,73 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
   // 상태 동기화 함수 - 중복 방지 강화
   const syncBibleState = useCallback(
-    (book: number, jang: number) => {
-      // 현재 상태와 동일하면 동기화하지 않음
-      const currentStoredBook = defaultStorage.getNumber("bible_book");
-      const currentStoredJang = defaultStorage.getNumber("bible_jang");
+      (book: number, jang: number) => {
+        // 현재 상태와 동일하면 동기화하지 않음
+        const currentStoredBook = defaultStorage.getNumber("bible_book");
+        const currentStoredJang = defaultStorage.getNumber("bible_jang");
 
-      if (currentStoredBook === book && currentStoredJang === jang) {
+        if (currentStoredBook === book && currentStoredJang === jang) {
+          console.log(
+              `[SYNC] ⚠️ 이미 동일한 상태입니다. 동기화 건너뜀: ${book}권 ${jang}장`
+          );
+          return;
+        }
+
         console.log(
-          `[SYNC] ⚠️ 이미 동일한 상태입니다. 동기화 건너뜀: ${book}권 ${jang}장`
+            `[SYNC] 상태 동기화: ${currentStoredBook}:${currentStoredJang} → ${book}권 ${jang}장`
         );
-        return;
-      }
 
-      console.log(
-        `[SYNC] 상태 동기화: ${currentStoredBook}:${currentStoredJang} → ${book}권 ${jang}장`
-      );
+        // MMKV 저장소 업데이트
+        defaultStorage.set("bible_book", book);
+        defaultStorage.set("bible_jang", jang);
+        defaultStorage.set("bible_book_connec", book);
+        defaultStorage.set("bible_jang_connec", jang);
+        defaultStorage.set("last_audio_book", book);
+        defaultStorage.set("last_audio_jang", jang);
+        defaultStorage.set("is_illdoc_player", false);
+        defaultStorage.set("auto_next_chapter_enabled", enableAutoNext);
 
-      // MMKV 저장소 업데이트
-      defaultStorage.set("bible_book", book);
-      defaultStorage.set("bible_jang", jang);
-      defaultStorage.set("bible_book_connec", book);
-      defaultStorage.set("bible_jang_connec", jang);
-      defaultStorage.set("last_audio_book", book);
-      defaultStorage.set("last_audio_jang", jang);
-      defaultStorage.set("is_illdoc_player", false);
-      defaultStorage.set("auto_next_chapter_enabled", enableAutoNext);
+        // 로컬 상태 업데이트
+        setCurrentBook(book);
+        setCurrentJang(jang);
 
-      // 로컬 상태 업데이트
-      setCurrentBook(book);
-      setCurrentJang(jang);
-
-      // Redux 상태 업데이트
-      try {
-        dispatch(bibleSelectSlice.actions.changePage({ book, jang }));
-        dispatch(illdocSelectSlice.actions.changePage({ book, jang }));
-        console.log(`[SYNC] ✅ 상태 동기화 완료: ${book}권 ${jang}장`);
-      } catch (error) {
-        console.error("Redux 상태 업데이트 실패:", error);
-      }
-    },
-    [dispatch, enableAutoNext]
+        // Redux 상태 업데이트
+        try {
+          dispatch(bibleSelectSlice.actions.changePage({ book, jang }));
+          dispatch(illdocSelectSlice.actions.changePage({ book, jang }));
+          console.log(`[SYNC] ✅ 상태 동기화 완료: ${book}권 ${jang}장`);
+        } catch (error) {
+          console.error("Redux 상태 업데이트 실패:", error);
+        }
+      },
+      [dispatch, enableAutoNext]
   );
 
   // 음원 URL 생성 함수
   const soundUrl = useCallback((book: number, jang: number): string => {
     const baseUrl = process.env.AUDIO_BASE_URL || "https://your-audio-url.com/";
     return `${baseUrl}${bibleAudioList[book - 1]}${String(jang).padStart(
-      3,
-      "0"
+        3,
+        "0"
     )}.mp3`;
   }, []);
 
   // 오디오 URL 검증 함수
   const validateAudioUrl = useCallback(
-    async (book: number, jang: number): Promise<boolean> => {
-      const url = soundUrl(book, jang);
-      console.log(`[VALIDATION] 오디오 URL 확인: ${url}`);
+      async (book: number, jang: number): Promise<boolean> => {
+        const url = soundUrl(book, jang);
+        console.log(`[VALIDATION] 오디오 URL 확인: ${url}`);
 
-      try {
-        const response = await fetch(url, { method: "HEAD" });
-        console.log(`[VALIDATION] URL 상태: ${response.status}`);
-        return response.ok;
-      } catch (error) {
-        console.error(`[VALIDATION] URL 검증 실패:`, error);
-        return false;
-      }
-    },
-    [soundUrl]
+        try {
+          const response = await fetch(url, { method: "HEAD" });
+          console.log(`[VALIDATION] URL 상태: ${response.status}`);
+          return response.ok;
+        } catch (error) {
+          console.error(`[VALIDATION] URL 검증 실패:`, error);
+          return false;
+        }
+      },
+      [soundUrl]
   );
 
   // 트랙 로딩 함수 - 중복 방지 강화
@@ -292,11 +294,14 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
         try {
           console.log(`[LOAD] 트랙 로딩 시작: ${book}권 ${jang}장`);
 
-          // 백그라운드에서도 스킵 체크
-          const skipJang = defaultStorage.getString(`${book}:${jang}`);
-          if (skipJang) {
+          // 현재 재생 중인 트랙과 동일한지 확인
+          if (
+              currentTrackRef.current &&
+              currentTrackRef.current.book === book &&
+              currentTrackRef.current.jang === jang
+          ) {
             console.log(
-                `[LOAD] ⏭️ 스킵 설정된 장이므로 건너뜀: ${book}권 ${jang}장`
+                `[LOAD] ❌ 이미 동일한 트랙이 로드됨. 건너뜀: ${book}권 ${jang}장`
             );
             return true;
           }
@@ -328,22 +333,15 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
             console.warn(`[LOAD] 큐 초기화 중 경고:`, error);
           }
 
-          // 새 트랙 추가 (백그라운드에서도 안정적으로)
+          // 새 트랙 추가
           const trackId = `bible-${book}-${jang}-${Date.now()}`; // 타임스탬프로 고유성 보장
-          const track = {
+          await TrackPlayer.add({
             id: trackId,
             url: soundUrl(book, jang),
             title: `${bibleAudioList[book - 1]} ${jang}장`,
             artist: "Bible Audio",
             artwork: require("../../../assets/img/bibile25.png"),
-            // 백그라운드 재생을 위한 추가 옵션
-            pitchAlgorithm: 'MUSIC',
-            headers: {
-              'User-Agent': 'BibleApp/1.0'
-            }
-          };
-
-          await TrackPlayer.add(track);
+          });
 
           // 현재 트랙 정보 업데이트
           currentTrackRef.current = { book, jang };
@@ -353,28 +351,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
             await TrackPlayer.setRate(soundSpeed);
           }
 
-          // 백그라운드 재생을 위한 설정
           await TrackPlayer.setRepeatMode(RepeatMode.Off);
-
-          // 백그라운드 재생 능력 설정
-          await TrackPlayer.updateOptions({
-            stopWithApp: false,
-            alwaysPauseOnInterruption: false,
-            capabilities: [
-              Capability.Play,
-              Capability.Pause,
-              Capability.SkipToNext,
-              Capability.SkipToPrevious,
-              Capability.Stop,
-              Capability.SeekTo
-            ],
-            compactCapabilities: [
-              Capability.Play,
-              Capability.Pause,
-              Capability.SkipToNext,
-              Capability.SkipToPrevious
-            ],
-          });
 
           console.log(
               `[LOAD] ✅ 트랙 로딩 완료: ${book}권 ${jang}장 (ID: ${trackId})`
@@ -416,24 +393,6 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
       console.log(`[AUTO_NEXT] ❌ 자동 다음 장이 비활성화되어 종료`);
       return;
     }
-
-// 백그라운드 이벤트 핸들러도 추가로 설정
-    useEffect(() => {
-      // 백그라운드에서도 트랙 종료 이벤트 처리
-      const subscription = TrackPlayer.addEventListener(
-          Event.PlaybackQueueEnded,
-          async () => {
-            console.log('[BACKGROUND] 재생 큐 종료 이벤트 발생');
-            if (enableAutoNext && openSound) {
-              await handleAutoNextChapter();
-            }
-          }
-      );
-
-      return () => {
-        subscription.remove();
-      };
-    }, [enableAutoNext, openSound, handleAutoNextChapter]);
 
     // 현재 재생 중인 트랙 정보로 다음 장 계산
     const sourceBook = currentTrackRef.current?.book ?? currentBook;
@@ -478,7 +437,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
       console.log(`[AUTO_NEXT] 🎯 목표: ${nextBook}권 ${nextJang}장`);
 
-      // 현재 처리한 장 기록 (재생 전에 기록)
+      // 현재 처리한 장 기록
       lastProcessedChapterRef.current = { book: sourceBook, jang: sourceJang };
 
       // 플레이어 완전 정지 및 초기화
@@ -496,19 +455,10 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
         console.warn(`[AUTO_NEXT] 플레이어 정지 중 경고:`, error);
       }
 
-      // 백그라운드에서도 상태 동기화가 되도록 보장
+      // 상태 동기화
       console.log(`[AUTO_NEXT] 🔄 상태 동기화 시작`);
-
-      // 백그라운드에서도 MMKV 스토리지 업데이트
-      defaultStorage.set("bible_book", nextBook);
-      defaultStorage.set("bible_jang", nextJang);
-      defaultStorage.set("bible_book_connec", nextBook);
-      defaultStorage.set("bible_jang_connec", nextJang);
-
-      // Redux 상태 업데이트 (백그라운드에서도 동작)
       syncBibleState(nextBook, nextJang);
       onTrigger();
-
       console.log(`[AUTO_NEXT] ✅ 상태 동기화 완료`);
 
       // 충분한 대기 시간
@@ -520,9 +470,6 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
       if (loadSuccess) {
         console.log(`[AUTO_NEXT] ✅ 트랙 로드 성공`);
-
-        // 새 트랙 정보 즉시 업데이트
-        currentTrackRef.current = { book: nextBook, jang: nextJang };
 
         // 추가 대기 후 재생
         setTimeout(async () => {
@@ -651,7 +598,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
       }
 
       console.log(
-        `[NEXT_BTN] 수동 다음 장: ${currentBook}:${currentJang} → ${nextBook}:${nextJang}`
+          `[NEXT_BTN] 수동 다음 장: ${currentBook}:${currentJang} → ${nextBook}:${nextJang}`
       );
 
       await TrackPlayer.pause();
@@ -691,7 +638,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
       }
 
       console.log(
-        `[PREV_BTN] 수동 이전 장: ${currentBook}:${currentJang} → ${nextBook}:${nextJang}`
+          `[PREV_BTN] 수동 이전 장: ${currentBook}:${currentJang} → ${nextBook}:${nextJang}`
       );
 
       await TrackPlayer.pause();
@@ -716,18 +663,18 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
   // 슬라이더 값 변경 핸들러
   const onSliderValueChanged = useCallback(
-    async (value: number) => {
-      try {
-        if (!isPlayerInitialized) {
-          await setupPlayer();
-          setIsPlayerInitialized(true);
+      async (value: number) => {
+        try {
+          if (!isPlayerInitialized) {
+            await setupPlayer();
+            setIsPlayerInitialized(true);
+          }
+          await TrackPlayer.seekTo(value);
+        } catch (error) {
+          console.error("슬라이더 값 변경 오류:", error);
         }
-        await TrackPlayer.seekTo(value);
-      } catch (error) {
-        console.error("슬라이더 값 변경 오류:", error);
-      }
-    },
-    [isPlayerInitialized]
+      },
+      [isPlayerInitialized]
   );
 
   // 재생 속도 변경 함수
@@ -793,7 +740,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
         console.log(`  - enableAutoNext: ${enableAutoNext}`);
         console.log(`  - isProcessingAction: ${isProcessingAction}`);
         console.log(
-          `  - currentBook: ${currentBook}, currentJang: ${currentJang}`
+            `  - currentBook: ${currentBook}, currentJang: ${currentJang}`
         );
       }),
 
@@ -830,76 +777,76 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
     let eventCounter = 0;
 
     const playbackQueueEndedListener = TrackPlayer.addEventListener(
-      Event.PlaybackQueueEnded,
-      async () => {
-        const currentTime = Date.now();
-        eventCounter++;
+        Event.PlaybackQueueEnded,
+        async () => {
+          const currentTime = Date.now();
+          eventCounter++;
 
-        console.log(
-          `[EVENT] 🎵 PlaybackQueueEnded 이벤트 #${eventCounter} 발생!`
-        );
-
-        // 현재 재생 중인 트랙 정보 확인
-        const currentTrackInfo = currentTrackRef.current;
-        console.log(`[EVENT] 현재 트랙 정보:`, currentTrackInfo);
-        console.log(`[EVENT] 이벤트 처리 상태:`);
-        console.log(`  - enableAutoNext: ${enableAutoNext}`);
-        console.log(`  - isProcessingAction: ${isProcessingAction}`);
-        console.log(`  - isEventProcessing: ${isEventProcessing}`);
-        console.log(
-          `  - 마지막 이벤트로부터: ${currentTime - lastEventTime}ms`
-        );
-
-        // TrackPlayer 상태 확인
-        try {
-          const playerState = await TrackPlayer.getState();
-          const queue = await TrackPlayer.getQueue();
           console.log(
-            `[EVENT] 플레이어 상태: ${playerState}, 큐 길이: ${queue.length}`
+              `[EVENT] 🎵 PlaybackQueueEnded 이벤트 #${eventCounter} 발생!`
           );
-        } catch (error) {
-          console.log(`[EVENT] 플레이어 상태 확인 실패:`, error);
-        }
 
-        // 엄격한 중복 이벤트 방지 (3초 이내의 중복 이벤트 무시)
-        if (currentTime - lastEventTime < 3000) {
+          // 현재 재생 중인 트랙 정보 확인
+          const currentTrackInfo = currentTrackRef.current;
+          console.log(`[EVENT] 현재 트랙 정보:`, currentTrackInfo);
+          console.log(`[EVENT] 이벤트 처리 상태:`);
+          console.log(`  - enableAutoNext: ${enableAutoNext}`);
+          console.log(`  - isProcessingAction: ${isProcessingAction}`);
+          console.log(`  - isEventProcessing: ${isEventProcessing}`);
           console.log(
-            `[EVENT] ❌ 중복 이벤트 무시 (${
-              currentTime - lastEventTime
-            }ms 간격)`
+              `  - 마지막 이벤트로부터: ${currentTime - lastEventTime}ms`
           );
-          return;
+
+          // TrackPlayer 상태 확인
+          try {
+            const playerState = await TrackPlayer.getState();
+            const queue = await TrackPlayer.getQueue();
+            console.log(
+                `[EVENT] 플레이어 상태: ${playerState}, 큐 길이: ${queue.length}`
+            );
+          } catch (error) {
+            console.log(`[EVENT] 플레이어 상태 확인 실패:`, error);
+          }
+
+          // 엄격한 중복 이벤트 방지 (3초 이내의 중복 이벤트 무시)
+          if (currentTime - lastEventTime < 3000) {
+            console.log(
+                `[EVENT] ❌ 중복 이벤트 무시 (${
+                    currentTime - lastEventTime
+                }ms 간격)`
+            );
+            return;
+          }
+
+          // 이미 처리 중이면 무시
+          if (isProcessingAction || isEventProcessing) {
+            console.log(`[EVENT] ❌ 이미 처리 중이므로 자동 다음 장 건너뜀`);
+            return;
+          }
+
+          // 현재 트랙이 없으면 무시
+          if (!currentTrackInfo) {
+            console.log(`[EVENT] ❌ 현재 트랙 정보가 없음. 이벤트 무시`);
+            return;
+          }
+
+          lastEventTime = currentTime;
+          isEventProcessing = true;
+
+          console.log(`[EVENT] ✅ 자동 다음 장 처리 시작`);
+
+          // 처리 완료 후 플래그 해제
+          try {
+            await handleAutoNextChapter();
+          } catch (error) {
+            console.error(`[EVENT] 자동 다음 장 처리 중 오류:`, error);
+          } finally {
+            setTimeout(() => {
+              isEventProcessing = false;
+              console.log(`[EVENT] 이벤트 처리 플래그 해제`);
+            }, 3000); // 3초로 증가
+          }
         }
-
-        // 이미 처리 중이면 무시
-        if (isProcessingAction || isEventProcessing) {
-          console.log(`[EVENT] ❌ 이미 처리 중이므로 자동 다음 장 건너뜀`);
-          return;
-        }
-
-        // 현재 트랙이 없으면 무시
-        if (!currentTrackInfo) {
-          console.log(`[EVENT] ❌ 현재 트랙 정보가 없음. 이벤트 무시`);
-          return;
-        }
-
-        lastEventTime = currentTime;
-        isEventProcessing = true;
-
-        console.log(`[EVENT] ✅ 자동 다음 장 처리 시작`);
-
-        // 처리 완료 후 플래그 해제
-        try {
-          await handleAutoNextChapter();
-        } catch (error) {
-          console.error(`[EVENT] 자동 다음 장 처리 중 오류:`, error);
-        } finally {
-          setTimeout(() => {
-            isEventProcessing = false;
-            console.log(`[EVENT] 이벤트 처리 플래그 해제`);
-          }, 3000); // 3초로 증가
-        }
-      }
     );
 
     return () => {
@@ -925,15 +872,15 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
         // 95% 이상일 때만 로그 출력 (자동 넘김은 하지 않음)
         if (percentage >= 95) {
           console.log(
-            `[PROGRESS_LOG] 진행률: ${percentage.toFixed(
-              1
-            )}%, 남은시간: ${remainingTime.toFixed(1)}s`
+              `[PROGRESS_LOG] 진행률: ${percentage.toFixed(
+                  1
+              )}%, 남은시간: ${remainingTime.toFixed(1)}s`
           );
 
           // 99.8% 이상이면 곧 끝날 것이라는 알림만
           if (percentage >= 99.8) {
             console.log(
-              `[PROGRESS_LOG] ⚠️ 트랙이 곧 종료됩니다. PlaybackQueueEnded 이벤트 대기 중...`
+                `[PROGRESS_LOG] ⚠️ 트랙이 곧 종료됩니다. PlaybackQueueEnded 이벤트 대기 중...`
             );
           }
         }
@@ -951,7 +898,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
     const autoPlay = async () => {
       try {
         console.log(
-          `[AUTO_PLAY] 자동 재생 시작: ${currentBook}권 ${currentJang}장`
+            `[AUTO_PLAY] 자동 재생 시작: ${currentBook}권 ${currentJang}장`
         );
 
         // 기존 트랙 정보 초기화
@@ -994,17 +941,17 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
   useEffect(() => {
     const checkStorageChanges = () => {
       const storedBook =
-        defaultStorage.getNumber("bible_book") ??
-        defaultStorage.getNumber("bible_book_connec") ??
-        1;
+          defaultStorage.getNumber("bible_book") ??
+          defaultStorage.getNumber("bible_book_connec") ??
+          1;
       const storedJang =
-        defaultStorage.getNumber("bible_jang") ??
-        defaultStorage.getNumber("bible_jang_connec") ??
-        1;
+          defaultStorage.getNumber("bible_jang") ??
+          defaultStorage.getNumber("bible_jang_connec") ??
+          1;
 
       if (storedBook !== currentBook || storedJang !== currentJang) {
         console.log(
-          `[STORAGE] 저장소 변경 감지: ${currentBook}:${currentJang} → ${storedBook}:${storedJang}`
+            `[STORAGE] 저장소 변경 감지: ${currentBook}:${currentJang} → ${storedBook}:${storedJang}`
         );
         setCurrentBook(storedBook);
         setCurrentJang(storedJang);
@@ -1029,7 +976,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
         bible_jang_connec: defaultStorage.getNumber("bible_jang_connec"),
         is_illdoc_player: defaultStorage.getBoolean("is_illdoc_player"),
         auto_next_chapter_enabled: defaultStorage.getBoolean(
-          "auto_next_chapter_enabled"
+            "auto_next_chapter_enabled"
         ),
         last_audio_book: defaultStorage.getNumber("last_audio_book"),
         last_audio_jang: defaultStorage.getNumber("last_audio_jang"),
@@ -1045,49 +992,49 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
   // 화면 포커스 변경 감지 및 상태 동기화
   useFocusEffect(
-    useCallback(() => {
-      console.log("Screen focused:", isFocused);
+      useCallback(() => {
+        console.log("Screen focused:", isFocused);
 
-      // 화면에 포커스가 있을 때 성경 플레이어임을 표시
-      defaultStorage.set("is_illdoc_player", false);
-      defaultStorage.set("auto_next_chapter_enabled", enableAutoNext);
+        // 화면에 포커스가 있을 때 성경 플레이어임을 표시
+        defaultStorage.set("is_illdoc_player", false);
+        defaultStorage.set("auto_next_chapter_enabled", enableAutoNext);
 
-      // 화면에 포커스가 있을 때 상태 동기화 확인
-      if (isPlayerInitialized) {
-        // 최신 저장된 값 확인
-        const storedBook =
-          defaultStorage.getNumber("bible_book") ??
-          defaultStorage.getNumber("bible_book_connec") ??
-          currentBook;
-        const storedJang =
-          defaultStorage.getNumber("bible_jang") ??
-          defaultStorage.getNumber("bible_jang_connec") ??
-          currentJang;
+        // 화면에 포커스가 있을 때 상태 동기화 확인
+        if (isPlayerInitialized) {
+          // 최신 저장된 값 확인
+          const storedBook =
+              defaultStorage.getNumber("bible_book") ??
+              defaultStorage.getNumber("bible_book_connec") ??
+              currentBook;
+          const storedJang =
+              defaultStorage.getNumber("bible_jang") ??
+              defaultStorage.getNumber("bible_jang_connec") ??
+              currentJang;
 
-        // 현재 상태와 저장된 값이 다른지 확인
-        if (storedBook !== currentBook || storedJang !== currentJang) {
-          console.log(
-            `화면 포커스 시 상태 불일치 감지: ${currentBook}:${currentJang} → ${storedBook}:${storedJang}`
-          );
-          syncBibleState(storedBook, storedJang);
+          // 현재 상태와 저장된 값이 다른지 확인
+          if (storedBook !== currentBook || storedJang !== currentJang) {
+            console.log(
+                `화면 포커스 시 상태 불일치 감지: ${currentBook}:${currentJang} → ${storedBook}:${storedJang}`
+            );
+            syncBibleState(storedBook, storedJang);
+          }
         }
-      }
 
-      // 화면에서 나갈 때 실행될 clean-up 함수
-      return () => {
-        console.log("Screen unfocused, stopping player");
-        // 화면을 떠날 때 오디오 정지 및 리셋
-        stopAndResetPlayer().then(() => {
-          console.log("Player stopped and reset on screen unfocus");
-        });
-      };
-    }, [
-      currentBook,
-      currentJang,
-      isPlayerInitialized,
-      syncBibleState,
-      enableAutoNext,
-    ])
+        // 화면에서 나갈 때 실행될 clean-up 함수
+        return () => {
+          console.log("Screen unfocused, stopping player");
+          // 화면을 떠날 때 오디오 정지 및 리셋
+          stopAndResetPlayer().then(() => {
+            console.log("Player stopped and reset on screen unfocus");
+          });
+        };
+      }, [
+        currentBook,
+        currentJang,
+        isPlayerInitialized,
+        syncBibleState,
+        enableAutoNext,
+      ])
   );
 
   // 뒤로가기 버튼 처리 - 안드로이드 전용
@@ -1100,12 +1047,12 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
         // 상태와 관계없이 항상 오디오 종료 및 리셋
         stopAndResetPlayer()
-          .then(() => {
-            console.log("Audio stopped and reset by back button");
-          })
-          .catch((error) => {
-            console.error("Error stopping audio on back button:", error);
-          });
+            .then(() => {
+              console.log("Audio stopped and reset by back button");
+            })
+            .catch((error) => {
+              console.error("Error stopping audio on back button:", error);
+            });
 
         // 기본 뒤로가기 동작 허용 (false 반환)
         return false;
@@ -1142,7 +1089,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
           // 자동 다음 장 설정 불러오기 - 기본값 true로 설정
           const savedAutoNext = defaultStorage.getBoolean(
-            "auto_next_chapter_enabled"
+              "auto_next_chapter_enabled"
           );
           if (savedAutoNext !== undefined) {
             setEnableAutoNext(savedAutoNext);
@@ -1164,53 +1111,53 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
     // 앱 상태 변경 감지
     const subscription = AppState.addEventListener(
-      "change",
-      async (nextAppState) => {
-        console.log(
-          "App state changed from",
-          appStateRef.current,
-          "to",
-          nextAppState
-        );
+        "change",
+        async (nextAppState) => {
+          console.log(
+              "App state changed from",
+              appStateRef.current,
+              "to",
+              nextAppState
+          );
 
-        // 앱이 백그라운드로 이동할 때
-        if (
-          appStateRef.current === "active" &&
-          (nextAppState === "background" || nextAppState === "inactive")
-        ) {
-          console.log("App moved to background");
+          // 앱이 백그라운드로 이동할 때
+          if (
+              appStateRef.current === "active" &&
+              (nextAppState === "background" || nextAppState === "inactive")
+          ) {
+            console.log("App moved to background");
 
-          try {
-            await TrackPlayer.setRepeatMode(RepeatMode.Off);
-            await TrackPlayer.updateOptions({
-              android: {
-                appKilledPlaybackBehavior:
+            try {
+              await TrackPlayer.setRepeatMode(RepeatMode.Off);
+              await TrackPlayer.updateOptions({
+                android: {
+                  appKilledPlaybackBehavior:
                   AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
-              },
-              notification: {
-                stopWithApp: true,
-              },
-            });
+                },
+                notification: {
+                  stopWithApp: true,
+                },
+              });
 
-            console.log("Kill behavior set on background transition");
-          } catch (error) {
-            console.error("Error setting options on background:", error);
+              console.log("Kill behavior set on background transition");
+            } catch (error) {
+              console.error("Error setting options on background:", error);
+            }
           }
+
+          // 앱이 다시 활성화될 때
+          if (
+              appStateRef.current.match(/inactive|background/) &&
+              nextAppState === "active"
+          ) {
+            console.log("App returned to foreground");
+
+            defaultStorage.set("is_illdoc_player", false);
+            defaultStorage.set("auto_next_chapter_enabled", enableAutoNext);
+          }
+
+          appStateRef.current = nextAppState;
         }
-
-        // 앱이 다시 활성화될 때
-        if (
-          appStateRef.current.match(/inactive|background/) &&
-          nextAppState === "active"
-        ) {
-          console.log("App returned to foreground");
-
-          defaultStorage.set("is_illdoc_player", false);
-          defaultStorage.set("auto_next_chapter_enabled", enableAutoNext);
-        }
-
-        appStateRef.current = nextAppState;
-      }
     );
 
     // 컴포넌트 언마운트 시 플레이어 정지 및 구독 해제
@@ -1230,99 +1177,107 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
   // 개발 모드 확인
   const isDevelopment = __DEV__;
 
+  // Android targetSdk 35 대응: 하단 패딩 계산
+  const containerPaddingBottom = Platform.select({
+    ios: insets.bottom,
+    android: insets.bottom > 0 ? insets.bottom : 0,
+    default: 0,
+  });
+
   // UI 렌더링
   return (
-    <>
-      <Box
-        bg="white"
-        width="100%"
-        height={85}
-        alignSelf="center"
-        display={openSound ? "flex" : "none"}
-      >
-        <VStack>
-          <Slider
-            w="100%"
-            value={progress?.position}
-            minValue={0}
-            maxValue={progress?.duration > 0 ? progress.duration : 100}
-            accessibilityLabel="sound"
-            onChange={onSliderValueChanged}
-            step={1}
-          >
-            <Slider.Track>
-              <Slider.FilledTrack bg={color.bible} />
-            </Slider.Track>
-          </Slider>
-
-          <Box flexDirection={"row"} justifyContent={"space-around"} w={"100%"}>
-            <Button
-              variant={"bibleoutlined"}
-              padding={1.4}
-              marginTop={2}
-              width={"50"}
-              textAlign={"center"}
-              height={7}
-              onPress={() => changeBasuk(soundSpeed)}
+      <>
+        <Box
+            bg="white"
+            width="100%"
+            height={85 + containerPaddingBottom} // SafeArea bottom 추가
+            paddingBottom={`${containerPaddingBottom}px`} // 하단 패딩 추가
+            alignSelf="center"
+            display={openSound ? "flex" : "none"}
+        >
+          <VStack>
+            <Slider
+                w="100%"
+                value={progress?.position}
+                minValue={0}
+                maxValue={progress?.duration > 0 ? progress.duration : 100}
+                accessibilityLabel="sound"
+                onChange={onSliderValueChanged}
+                step={1}
             >
-              <Text color={color.bible} fontSize={12} fontWeight={700}>
-                {getBaeSokName()} 배속
-              </Text>
-            </Button>
+              <Slider.Track>
+                <Slider.FilledTrack bg={color.bible} />
+              </Slider.Track>
+            </Slider>
 
-            <TouchableOpacity
-              style={{ marginTop: 10 }}
-              onPress={onPressforward}
-              disabled={isProcessingAction}
-            >
-              <FontAwesomeIcons
-                name="step-backward"
-                size={30}
-                color={isProcessingAction ? "#ccc" : color.bible}
-              />
-            </TouchableOpacity>
+            <Box flexDirection={"row"} justifyContent={"space-around"} w={"100%"}>
+              <Button
+                  variant={"bibleoutlined"}
+                  padding={1.4}
+                  marginTop={2}
+                  width={"50"}
+                  textAlign={"center"}
+                  height={7}
+                  onPress={() => changeBasuk(soundSpeed)}
+              >
+                <Text color={color.bible} fontSize={12} fontWeight={700}>
+                  {getBaeSokName()} 배속
+                </Text>
+              </Button>
 
-            <TouchableOpacity
-              onPress={onPlaySwitch}
-              disabled={isProcessingAction}
-            >
-              <FontAwesomeIcons
-                name={isPlaying ? "pause-circle" : "play-circle"}
-                style={{ marginTop: 5 }}
-                size={40}
-                color={isProcessingAction ? "#ccc" : color.bible}
-              />
-            </TouchableOpacity>
+              <TouchableOpacity
+                  style={{ marginTop: 10 }}
+                  onPress={onPressforward}
+                  disabled={isProcessingAction}
+              >
+                <FontAwesomeIcons
+                    name="step-backward"
+                    size={30}
+                    color={isProcessingAction ? "#ccc" : color.bible}
+                />
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={{ marginTop: 10 }}
-              onPress={onPressNext}
-              disabled={isProcessingAction}
-            >
-              <FontAwesomeIcons
-                name="step-forward"
-                size={30}
-                color={isProcessingAction ? "#ccc" : color.bible}
-              />
-            </TouchableOpacity>
+              <TouchableOpacity
+                  onPress={onPlaySwitch}
+                  disabled={isProcessingAction}
+              >
+                <FontAwesomeIcons
+                    name={isPlaying ? "pause-circle" : "play-circle"}
+                    style={{ marginTop: 5 }}
+                    size={40}
+                    color={isProcessingAction ? "#ccc" : color.bible}
+                />
+              </TouchableOpacity>
 
-            <Button
-              variant={"bibleoutlined"}
-              marginTop={2}
-              padding={1.4}
-              width={"50"}
-              textAlign={"center"}
-              height={8}
-              onPress={() => navigation.navigate("HymnScreen", {})}
-            >
-              <Text color={color.bible} fontSize={13} fontWeight={700}>
-                찬송가
-              </Text>
-            </Button>
-          </Box>
-        </VStack>
-      </Box>
-    </>
+              <TouchableOpacity
+                  style={{ marginTop: 10 }}
+                  onPress={onPressNext}
+                  disabled={isProcessingAction}
+              >
+                <FontAwesomeIcons
+                    name="step-forward"
+                    size={30}
+                    color={isProcessingAction ? "#ccc" : color.bible}
+                />
+              </TouchableOpacity>
+
+              <Button
+                  variant={"bibleoutlined"}
+                  marginTop={2}
+                  padding={1.4}
+                  width={"50"}
+                  textAlign={"center"}
+                  height={8}
+                  onPress={() => navigation.navigate("HymnScreen", {})}
+              >
+                <Text color={color.bible} fontSize={13} fontWeight={700}>
+                  찬송가
+                </Text>
+              </Button>
+            </Box>
+          </VStack>
+        </Box>
+      </>
   );
 };
 

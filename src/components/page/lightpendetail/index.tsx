@@ -18,6 +18,7 @@ import { useDispatch } from 'react-redux';
 import BackHeaderLayout from '../../layout/header/backHeader';
 import { gBibleBook } from '../../../constant/global';
 import { defaultStorage } from '../../../utils/mmkv';
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 
 //사용안함
 export default function LightPenDetailScreen() {
@@ -31,6 +32,7 @@ export default function LightPenDetailScreen() {
   const [trigger] = useState<boolean>(false);
 
   const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
 
   const onMainNavigate = () => {
     defaultStorage.set('bible_book', data?.book);
@@ -80,7 +82,9 @@ export default function LightPenDetailScreen() {
               </Text>
             </HStack>
           </VStack>
-          <ScrollView bg={color.white}>
+          <ScrollView bg={color.white} contentContainerStyle={{
+            paddingBottom: insets.bottom
+          }}>
             <Text fontSize={'16px'} margin={4} fontWeight={700}>
               {data?.bible} {data?.jang}장( {data?.title} )
             </Text>
@@ -109,6 +113,7 @@ export default function LightPenDetailScreen() {
             borderRadius={0}
             bg={color.bible}
             onPress={onMainNavigate}
+            marginBottom={insets.bottom}
           >
             본문보기
           </Button>

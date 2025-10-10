@@ -15,6 +15,7 @@ import ConectionPageBar from "../pagebar/connec";
 import BannerAdMain from "../../../adforus/BannerAdMain";
 import { bibleSetting, defineSQL, fetchSql } from '../../../utils';
 import { useBibleReading } from '../../../utils/useBibleReading';
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 
 interface Props extends FlatListProps<any> {
     style?: StyleProp<ViewStyle>;
@@ -53,6 +54,7 @@ const ConectionContainerFlatList = ({
     const [adKey, setAdKey] = useState(0);
     const BOOK = defaultStorage.getNumber("bible_book_connec") ?? 1;
     const JANG = defaultStorage.getNumber("bible_jang_connec") ?? 1;
+    const insets = useSafeAreaInsets();
 
     // 읽기 상태 관리를 위한 hook
     const {
@@ -304,7 +306,7 @@ const ConectionContainerFlatList = ({
                 contentContainerStyle={[
                     styles.flexGrow,
                     contentContainerStyle,
-                    { paddingTop: 30, paddingBottom: 30 },
+                    { paddingTop: 30, paddingBottom: 30 + insets.bottom },
                 ]}
                 scrollEventThrottle={200}
                 showsVerticalScrollIndicator={false}
