@@ -1,11 +1,10 @@
-// BibleConectionScreen 안전성 개선 버전
-
 import Clipboard from "@react-native-clipboard/clipboard";
 import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useLayoutEffect, useRef, useState, useEffect } from "react";
 import { Platform, Share, View } from "react-native";
 import { FloatingAction } from "react-native-floating-action";
 import { Toast } from "react-native-toast-message/lib/src/Toast";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
 import useSWR from "swr";
 import TrackPlayer, { Event, State, useTrackPlayerEvents } from 'react-native-track-player';
@@ -36,6 +35,7 @@ import BibleReadingList from "../../section/bibleReadingList";
 export default function BibleConectionScreen() {
     const dispatch = useDispatch();
     const isFocused = useIsFocused();
+    const insets = useSafeAreaInsets(); // ✅ Safe Area Insets 사용
     const [sound, setSound] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [autoPlay, setAutoPlay] = useState<boolean>(false);
@@ -244,6 +244,7 @@ export default function BibleConectionScreen() {
                 text2: "수동으로 읽었음 체크 후 다음 장으로 이동해주세요.",
                 visibilityTime: 3000,
                 position: "top",
+                topOffset: insets.top + 10, // ✅ Safe Area 적용
             });
         } finally {
             // 처리 상태 초기화
@@ -255,7 +256,7 @@ export default function BibleConectionScreen() {
                 autoProgressTimeoutRef.current = null;
             }
         }
-    }, [BOOK, JANG, isAutoProcessing, markCurrentChapterAsRead, onPressNext, updateReadingTableCache, safeSetTimeout]);
+    }, [BOOK, JANG, isAutoProcessing, markCurrentChapterAsRead, onPressNext, updateReadingTableCache, safeSetTimeout, insets]);
 
     // 현재 장을 읽었음으로 표시하는 함수
     const markCurrentChapterAsRead = useCallback(async () => {
@@ -399,6 +400,7 @@ export default function BibleConectionScreen() {
                         text1: "🎉 성경 전체 완독을 축하합니다!",
                         text2: "설정 화면으로 이동합니다.",
                         visibilityTime: 3000,
+                        topOffset: insets.top + 10, // ✅ Safe Area 적용
                     });
                     navigation.navigate("IllDocSettingScreen", {});
                     return;
@@ -434,7 +436,7 @@ export default function BibleConectionScreen() {
                 }, 500);
             }
         },
-        [sound, BOOK, JANG, handleUpdateData, navigation, safeSetTimeout, safePlayCurrentPageAudio]
+        [sound, BOOK, JANG, handleUpdateData, navigation, safeSetTimeout, safePlayCurrentPageAudio, insets]
     );
 
     dispatch(illdocSelectSlice.actions.changePage({ book, jang }));
@@ -511,14 +513,17 @@ export default function BibleConectionScreen() {
 
     return (
         <>
-            <IllDocBibleHeaderLayout
-                {...{
-                    open: sound,
-                    setOpen: setSound,
-                    name: bibleName,
-                    darkmode: false,
-                }}
-            />
+            {/* Safe Area 상단 적용 */}
+            <View style={{ paddingTop: insets.top }}>
+                <IllDocBibleHeaderLayout
+                    {...{
+                        open: sound,
+                        setOpen: setSound,
+                        name: bibleName,
+                        darkmode: false,
+                    }}
+                />
+            </View>
 
             {menuIndex === 0 ? (
                 <>
@@ -539,22 +544,29 @@ export default function BibleConectionScreen() {
                         }}
                     />
                     {!sound && <BibleReadingList vector={false} menuIndex={menuIndex} onPress={onMenuPress} />}
-                    <IllDocPlayFooterLayout
-                        ref={audioPlayerRef}
-                        onTrigger={handleUpdateData}
-                        openSound={sound}
-                    />
+                    {/* Safe Area 하단 적용 */}
+                    <View style={{ paddingBottom: insets.bottom }}>
+                        <IllDocPlayFooterLayout
+                            ref={audioPlayerRef}
+                            onTrigger={handleUpdateData}
+                            openSound={sound}
+                        />
+                    </View>
                 </>
             ) : (
                 <>
                     <OtherPage uri={MenusRenderIndex()} />
-                    <FooterLayout />
+                    {/* Safe Area 하단 적용 */}
+                    <View style={{ paddingBottom: insets.bottom }}>
+                        <FooterLayout />
+                    </View>
                 </>
             )}
             <FloatingActionContainer
                 BOOK={BOOK}
                 JANG={JANG}
                 handleUpdateData={handleUpdateData}
+                insets={insets}
             />
             <View style={{ width: 0, display: "none" }}>{WebView}</View>
         </>
@@ -571,7 +583,7 @@ const getAutoProgressSetting = (): boolean => {
 };
 
 // FloatingActionContainer와 나머지 함수들은 기존과 동일하지만 안전성 검사 추가
-const FloatingActionContainer = ({ BOOK, JANG, handleUpdateData }: any) => {
+const FloatingActionContainer = ({ BOOK, JANG, handleUpdateData, insets }: any) => {
     const fontStyle = JSON.parse(defaultStorage.getString("fontStyle") ?? "");
     const dispatch = useDispatch();
     const [open, setOpen] = useState(0);
@@ -611,7 +623,10 @@ const FloatingActionContainer = ({ BOOK, JANG, handleUpdateData }: any) => {
             {isFloating && (
                 <FloatingAction
                     position="right"
-                    distanceToEdge={{ vertical: 140, horizontal: 10 }}
+                    distanceToEdge={{
+                        vertical: 140 + insets.bottom, // ✅ 하단 Safe Area 고려
+                        horizontal: 10
+                    }}
                     showBackground={false}
                     color={
                         fontStyle.julColor === color.bible
