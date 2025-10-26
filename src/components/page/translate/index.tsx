@@ -7,6 +7,7 @@ import { defaultStorage } from '../../../utils/mmkv';
 import BackHeaderLayout from '../../layout/header/backHeader';
 import { gFontTitle } from '../../../constant/global';
 import { TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TranslateScreen() {
   const { color } = useBaseStyle();
@@ -16,6 +17,8 @@ export default function TranslateScreen() {
   const [bibleNames, setBibleNames] = useState<String[]>([]);
 
   const isFocused = useIsFocused();
+
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const mmkv = defaultStorage.getString('bibleNames');
@@ -72,7 +75,7 @@ export default function TranslateScreen() {
   };
 
   return (
-    <>
+    <View style={{ flex: 1, paddingBottom: insets.bottom }}>
       <BackHeaderLayout title="번역본 선택" />
       <ScrollView style={{ backgroundColor: color.white }}>
         <RenderItems text={`NKRV     개역개정`} keys={'nkrv'} />
@@ -90,7 +93,7 @@ export default function TranslateScreen() {
         <RenderItems text={`SWE     스웨덴어`} keys={'swe'} />
       </ScrollView>
       <TouchableOpacity onPress={onPress}>
-        <View style={{ height: 60, backgroundColor: color.bible }}>
+        <View style={{ height: 60, backgroundColor: color.bible}}>
           <Center>
             <Text
               style={{
@@ -105,6 +108,6 @@ export default function TranslateScreen() {
           </Center>
         </View>
       </TouchableOpacity>
-    </>
+      </View>
   );
 }

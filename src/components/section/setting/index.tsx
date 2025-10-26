@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import VersionCheck from "react-native-version-check";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNativeNavigation } from "../../../hooks";
+import { ScrollView } from 'react-native';
 
 export default function SettingsTab() {
   const nativeNav = useNativeNavigation();
@@ -188,7 +189,13 @@ export default function SettingsTab() {
   };
 
   return (
-      <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+  <ScrollView 
+      style={styles.container}
+      contentContainerStyle={{
+        paddingTop: insets.top,
+        paddingBottom: insets.bottom > 0 ? insets.bottom : 20, 
+      }}
+    >
         <View style={[styles.appInfoContainer, { marginTop: insets.top > 0 ? 1 : 1 }]}>
           <View style={styles.appInfoContent}>
             <Image
@@ -233,7 +240,7 @@ export default function SettingsTab() {
           <Text style={styles.sectionTitle}>기타</Text>
           <MenuItems items={[{ title: "로그아웃", onPress: handleLogout }]} />
         </View>
-      </View>
+      </ScrollView>
   );
 }
 

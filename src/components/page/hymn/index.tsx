@@ -4,9 +4,11 @@ import { useBaseStyle, useNativeNavigation } from "../../../hooks";
 import { Box, StatusBar } from "native-base";
 import { useIsFocused } from "@react-navigation/native";
 import BannerAdComponent from "../../../adforus";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, Platform } from "react-native";
 import { useWindowDimensions } from "react-native";
 import React from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 
 export default function HymnScreen() {
   const uri = process.env.WEB_WIEW_BASE_URL!;
@@ -16,6 +18,8 @@ export default function HymnScreen() {
   const isLandscape = width > height;
 
   const { navigation } = useNativeNavigation();
+
+  const insets = useSafeAreaInsets();
 
   const isFocused = useIsFocused();
 
@@ -36,9 +40,24 @@ export default function HymnScreen() {
     onMessage,
   });
 
+    // 리스트인지 상세인지 구분
+    const isListScreen = isNaN(Number(currentUrl.split("/")?.[4]));
+  
+    // 상세 화면일 때만 paddingBottom 적용
+    const bottomPadding = isListScreen ? 0 : Platform.select({
+      ios: insets.bottom,
+      android: insets.bottom > 0 ? insets.bottom : 10,
+      default: 10,
+    });
+
   return (
     <>
-      <View style={styles.container}>
+      <View style={[
+        styles.container,
+        {
+          paddingBottom: bottomPadding,
+        }
+      ]}>
         <StatusBar barStyle="light-content" />
         <Box safeAreaTop bg={color.status} />
         <View style={styles.webviewContainer}>{WebView}</View>
