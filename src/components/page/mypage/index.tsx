@@ -9,9 +9,11 @@ import axios from "axios";
 import Benefit from "../../section/benefit";
 import { useRoute } from "@react-navigation/native";
 import BannerAdMyPage from "../../../adforus/BannerAdMypage";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function MyPageScreen() {
   const route = useRoute();
+  const insets = useSafeAreaInsets();
   const initialTabIndex = route.params?.selectedTabIndex || 0;
 
   const [tab, setTab] = useState(initialTabIndex);
@@ -37,27 +39,27 @@ export default function MyPageScreen() {
         }
 
         const response = await axios.get(
-          `https://bible25backend.givemeprice.co.kr/login/finduser`,
-          { params: { adid: adid.id } }
+            `https://bible25backend.givemeprice.co.kr/login/finduser`,
+            { params: { adid: adid.id } }
         );
 
         // HMAC 엔드포인트 호출 추가
         const hmacResponse = await axios.get(
-          `https://bible25backend.givemeprice.co.kr/login/hmac`,
-          { params: { adid: adid.id } }
+            `https://bible25backend.givemeprice.co.kr/login/hmac`,
+            { params: { adid: adid.id } }
         );
         setHmacData(hmacResponse.data);
 
         if (response.data && response.data.userId) {
           const response1 = await axios.get(
-            `https://bible25backend.givemeprice.co.kr/point`,
-            {
-              params: {
-                userId: response.data.userId,
-                type: "all",
-                period: "all",
-              },
-            }
+              `https://bible25backend.givemeprice.co.kr/point`,
+              {
+                params: {
+                  userId: response.data.userId,
+                  type: "all",
+                  period: "all",
+                },
+              }
           );
 
           setPoint(response.data);
@@ -89,24 +91,31 @@ export default function MyPageScreen() {
   }, [tab, point, user, hmacData]);
 
   return (
-    <View style={styles.container}>
-      <BackMypageHeaderLayout title="바이블25" point={point} user={user} />
-      <Tabs
-        menus={["홈", "혜택", "설정"]}
-        onSelectHandler={(index) => {
-          setTab(index);
-        }}
-        selectedIndex={tab}
-      />
-      {/* 탭 컨텐츠 */}
-
-      {content}
-
-      {/* 기존 광고 */}
-      <View style={styles.adContainer}>
-        <BannerAdMyPage />
+      <View style={[styles.container, {
+        paddingTop: insets.top,
+        paddingBottom: insets.bottom
+      }]}>
+        <BackMypageHeaderLayout title="바이블25" point={point} user={user} />
+        <Tabs
+            menus={["홈", "혜택", "설정"]}
+            onSelectHandler={(index) => {
+              setTab(index);
+            }}
+            selectedIndex={tab}
+        />
+        <View style={styles.contentContainer}>
+          {content}
+        </View>
+        <View style={[styles.adContainer, {
+          paddingBottom: Platform.select({
+            ios: 0,
+            android: insets.bottom > 0 ? 0 : 10,
+            default: 10,
+          })
+        }]}>
+          <BannerAdMyPage />
+        </View>
       </View>
-    </View>
   );
 }
 
@@ -114,6 +123,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
+  },
+  contentContainer: {
+    flex: 1,
   },
   advertisingStyle: {
     width: "100%",

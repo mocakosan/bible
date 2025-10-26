@@ -15,11 +15,13 @@ import axios from "axios";
 import { unlink } from "@react-native-seoul/kakao-login";
 import { useEffect, useState } from "react";
 import VersionCheck from "react-native-version-check";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNativeNavigation } from "../../../hooks";
 
 export default function SettingsTab() {
   const nativeNav = useNativeNavigation();
   const reactNav = useNavigation();
+  const insets = useSafeAreaInsets();
 
   const [currentVersion, setCurrentVersion] = useState("");
   const [latestVersion, setLatestVersion] = useState("");
@@ -116,9 +118,9 @@ export default function SettingsTab() {
             adid = await ReactNativeIdfaAaid.getAdvertisingInfo();
             if (!adid) {
               adid =
-                await ReactNativeIdfaAaid.getAdvertisingInfoAndCheckAuthorization(
-                  true
-                );
+                  await ReactNativeIdfaAaid.getAdvertisingInfoAndCheckAuthorization(
+                      true
+                  );
             }
           }
         }
@@ -128,10 +130,10 @@ export default function SettingsTab() {
 
       try {
         await axios.delete(
-          `https://bible25backend.givemeprice.co.kr/login/deleteid`,
-          {
-            params: { adid: adid.id },
-          }
+            `https://bible25backend.givemeprice.co.kr/login/deleteid`,
+            {
+              params: { adid: adid.id },
+            }
         );
       } catch (error) {
         console.log("서버 ID 삭제 오류:", error);
@@ -159,17 +161,17 @@ export default function SettingsTab() {
         reactNav.navigate("KakaoScreen");
       } else {
         Alert.alert(
-          "로그아웃 안내",
-          "로그아웃되었습니다. 앱을 다시 시작해주세요.",
-          [{ text: "확인" }]
+            "로그아웃 안내",
+            "로그아웃되었습니다. 앱을 다시 시작해주세요.",
+            [{ text: "확인" }]
         );
       }
     } catch (error) {
       console.log("로그아웃 처리 중 오류 발생:", error);
       Alert.alert(
-        "오류",
-        "로그아웃 처리 중 오류가 발생했습니다. 앱을 다시 시작해주세요.",
-        [{ text: "확인" }]
+          "오류",
+          "로그아웃 처리 중 오류가 발생했습니다. 앱을 다시 시작해주세요.",
+          [{ text: "확인" }]
       );
     }
   };
@@ -186,73 +188,70 @@ export default function SettingsTab() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* 앱 정보 섹션 */}
-      <View style={styles.appInfoContainer}>
-        <View style={styles.appInfoContent}>
-          <Image
-            source={require("../../../assets/img/bibile25.png")}
-            style={styles.appIcon}
-          />
-          <View style={styles.appTextContainer}>
-            <Text style={styles.appName}>바이블25</Text>
-            <Text style={styles.appVersion}>
-              현재버전 {currentVersion} · 최신버전 {latestVersion}
-            </Text>
+      <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+        <View style={[styles.appInfoContainer, { marginTop: insets.top > 0 ? 1 : 1 }]}>
+          <View style={styles.appInfoContent}>
+            <Image
+                source={require("../../../assets/img/bibile25.png")}
+                style={styles.appIcon}
+            />
+            <View style={styles.appTextContainer}>
+              <Text style={styles.appName}>바이블25</Text>
+              <Text style={styles.appVersion}>
+                현재버전 {currentVersion} · 최신버전 {latestVersion}
+              </Text>
+            </View>
           </View>
+          <TouchableOpacity style={styles.updateButton} onPress={handleUpdate}>
+            <Text
+                style={[
+                  styles.updateButtonText,
+                  needsUpdate && styles.updateButtonTextActive,
+                ]}
+            >
+              업데이트
+            </Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.updateButton} onPress={handleUpdate}>
-          <Text
-            style={[
-              styles.updateButtonText,
-              needsUpdate && styles.updateButtonTextActive,
-            ]}
-          >
-            업데이트
-          </Text>
-        </TouchableOpacity>
-      </View>
 
-      {/* 앱정보 섹션 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>앱정보</Text>
-        <MenuItems
-          items={[
-            { title: "공지사항 (업데이트 현황)", onPress: handleNoticePress },
-            { title: "자주묻는질문(FAQ)", onPress: handleOperwall },
-            { title: "수정요청(오류,개선)", onPress: handleFAQ },
-            { title: "개인정보 취급 방침", onPress: handlePrivacyPress },
-            { title: "서비스 이용약관", onPress: handlePrivacyPress },
-            { title: "마케팅 정보 수집 방침", onPress: handlePrivacyPress },
-            { title: "제휴", onPress: handleMarketPress },
-          ]}
-        />
-      </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>앱정보</Text>
+          <MenuItems
+              items={[
+                { title: "공지사항 (업데이트 현황)", onPress: handleNoticePress },
+                { title: "자주묻는질문(FAQ)", onPress: handleOperwall },
+                { title: "수정요청(오류,개선)", onPress: handleFAQ },
+                { title: "개인정보 취급 방침", onPress: handlePrivacyPress },
+                { title: "서비스 이용약관", onPress: handlePrivacyPress },
+                { title: "마케팅 정보 수집 방침", onPress: handlePrivacyPress },
+                { title: "제휴", onPress: handleMarketPress },
+              ]}
+          />
+        </View>
 
-      {/* 기타 섹션 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>기타</Text>
-        <MenuItems items={[{ title: "로그아웃", onPress: handleLogout }]} />
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>기타</Text>
+          <MenuItems items={[{ title: "로그아웃", onPress: handleLogout }]} />
+        </View>
       </View>
-    </View>
   );
 }
 
 // 메뉴 아이템 컴포넌트
 const MenuItems = ({ items }: any) => {
   return (
-    <View style={styles.menuContainer}>
-      {items.map((item: any, index: any) => (
-        <TouchableOpacity
-          key={index}
-          style={styles.menuItem}
-          onPress={item.onPress}
-        >
-          <Text style={styles.menuText}>{item.title}</Text>
-          <Text style={styles.menuArrow}>›</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
+      <View style={styles.menuContainer}>
+        {items.map((item: any, index: any) => (
+            <TouchableOpacity
+                key={index}
+                style={styles.menuItem}
+                onPress={item.onPress}
+            >
+              <Text style={styles.menuText}>{item.title}</Text>
+              <Text style={styles.menuArrow}>›</Text>
+            </TouchableOpacity>
+        ))}
+      </View>
   );
 };
 
