@@ -783,13 +783,19 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
           eventCounter++;
 
           console.log(
-              `[EVENT] 🎵 PlaybackQueueEnded 이벤트 #${eventCounter} 발생!`
+              `[FOREGROUND_PLAYER] 🎵 PlaybackQueueEnded 이벤트 #${eventCounter} 발생!`
           );
+
+          // ⭐ 백그라운드에서는 PlaybackService가 처리하므로 여기서는 무시
+          if (AppState.currentState !== "active") {
+            console.log(`[FOREGROUND_PLAYER] ℹ️ 백그라운드 상태 - PlaybackService에서 처리`);
+            return;
+          }
 
           // 현재 재생 중인 트랙 정보 확인
           const currentTrackInfo = currentTrackRef.current;
-          console.log(`[EVENT] 현재 트랙 정보:`, currentTrackInfo);
-          console.log(`[EVENT] 이벤트 처리 상태:`);
+          console.log(`[FOREGROUND_PLAYER] 현재 트랙 정보:`, currentTrackInfo);
+          console.log(`[FOREGROUND_PLAYER] 이벤트 처리 상태:`);
           console.log(`  - enableAutoNext: ${enableAutoNext}`);
           console.log(`  - isProcessingAction: ${isProcessingAction}`);
           console.log(`  - isEventProcessing: ${isEventProcessing}`);
@@ -797,21 +803,10 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
               `  - 마지막 이벤트로부터: ${currentTime - lastEventTime}ms`
           );
 
-          // TrackPlayer 상태 확인
-          try {
-            const playerState = await TrackPlayer.getState();
-            const queue = await TrackPlayer.getQueue();
-            console.log(
-                `[EVENT] 플레이어 상태: ${playerState}, 큐 길이: ${queue.length}`
-            );
-          } catch (error) {
-            console.log(`[EVENT] 플레이어 상태 확인 실패:`, error);
-          }
-
           // 엄격한 중복 이벤트 방지 (3초 이내의 중복 이벤트 무시)
           if (currentTime - lastEventTime < 3000) {
             console.log(
-                `[EVENT] ❌ 중복 이벤트 무시 (${
+                `[FOREGROUND_PLAYER] ❌ 중복 이벤트 무시 (${
                     currentTime - lastEventTime
                 }ms 간격)`
             );
@@ -820,31 +815,30 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
           // 이미 처리 중이면 무시
           if (isProcessingAction || isEventProcessing) {
-            console.log(`[EVENT] ❌ 이미 처리 중이므로 자동 다음 장 건너뜀`);
+            console.log(`[FOREGROUND_PLAYER] ❌ 이미 처리 중이므로 자동 다음 장 건너뜀`);
             return;
           }
 
           // 현재 트랙이 없으면 무시
           if (!currentTrackInfo) {
-            console.log(`[EVENT] ❌ 현재 트랙 정보가 없음. 이벤트 무시`);
+            console.log(`[FOREGROUND_PLAYER] ❌ 현재 트랙 정보가 없음. 이벤트 무시`);
             return;
           }
 
           lastEventTime = currentTime;
           isEventProcessing = true;
 
-          console.log(`[EVENT] ✅ 자동 다음 장 처리 시작`);
+          console.log(`[FOREGROUND_PLAYER] ✅ 자동 다음 장 처리 시작 (포어그라운드)`);
 
-          // 처리 완료 후 플래그 해제
           try {
             await handleAutoNextChapter();
           } catch (error) {
-            console.error(`[EVENT] 자동 다음 장 처리 중 오류:`, error);
+            console.error(`[FOREGROUND_PLAYER] ❌ 자동 다음 장 처리 중 오류:`, error);
           } finally {
             setTimeout(() => {
               isEventProcessing = false;
-              console.log(`[EVENT] 이벤트 처리 플래그 해제`);
-            }, 3000); // 3초로 증가
+              console.log(`[FOREGROUND_PLAYER] ✅ 이벤트 처리 플래그 해제`);
+            }, 3000);
           }
         }
     );
@@ -1023,10 +1017,6 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
         // 화면에서 나갈 때 실행될 clean-up 함수
         return () => {
           console.log("Screen unfocused, stopping player");
-          // 화면을 떠날 때 오디오 정지 및 리셋
-          stopAndResetPlayer().then(() => {
-            console.log("Player stopped and reset on screen unfocus");
-          });
         };
       }, [
         currentBook,

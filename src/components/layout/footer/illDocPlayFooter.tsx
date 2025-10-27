@@ -291,6 +291,10 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
             console.log("IllDoc TrackPlayer Event:", event.type);
 
             if (event.type === Event.PlaybackQueueEnded) {
+                if (AppState.currentState !== "active") {
+                    console.log("[ILLDOC_PLAYER] ℹ️ 백그라운드 상태 - PlaybackService에서 처리");
+                    return;
+                }
                 console.log("IllDoc: Playback queue ended - auto progress always enabled");
                 if (isMountedRef.current) {
                     setIsPlaying(false);
@@ -354,11 +358,6 @@ const IllDocPlayFooterLayout = forwardRef<IllDocPlayFooterHandlers, Props>(
                 }
 
                 return () => {
-                    console.log("Screen unfocused, pausing player");
-
-                    TrackPlayer.pause().catch(error => {
-                        console.error("Error pausing on unfocus:", error);
-                    });
 
                     const currentBook = defaultStorage.getNumber("bible_book_connec") ??
                         defaultStorage.getNumber("bible_book") ?? BOOK;

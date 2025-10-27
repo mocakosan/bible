@@ -3,6 +3,7 @@ import TrackPlayer, {
   State,
   RepeatMode,
   AppKilledPlaybackBehavior,
+  Capability,
 } from "react-native-track-player";
 import { Platform, AppState } from "react-native";
 import { defaultStorage } from "../utils/mmkv";
@@ -47,133 +48,220 @@ const createSoundUrl = (book: number, jang: number): string => {
 // 트랙 로드 함수
 const loadTrack = async (book: number, jang: number): Promise<boolean> => {
   try {
-    console.log(`Loading track for Book ${book}, Chapter ${jang}`);
+    console.log(`[BACKGROUND_SERVICE] Loading track for Book ${book}, Chapter ${jang}`);
 
     await TrackPlayer.reset();
+    console.log(`[BACKGROUND_SERVICE] Player reset completed`);
+
     await TrackPlayer.setRepeatMode(RepeatMode.Off);
 
     const url = createSoundUrl(book, jang);
+    console.log(`[BACKGROUND_SERVICE] Track URL: ${url}`);
 
     await TrackPlayer.add({
-      id: "bible",
+      id: `bible-bg-${book}-${jang}-${Date.now()}`,
       url: url,
       title: `${bibleAudioList[book - 1]} ${jang}`,
       artist: "성경",
       artwork: require("../assets/img/bibile25.png"),
     });
+    console.log(`[BACKGROUND_SERVICE] Track added to queue`);
 
     const soundSpeed = defaultStorage.getNumber("last_audio_speed") ?? 1;
     if (soundSpeed !== 1) {
       await TrackPlayer.setRate(soundSpeed);
+      console.log(`[BACKGROUND_SERVICE] Playback rate set to ${soundSpeed}`);
     }
 
+    // 큐 상태 확인
+    const queue = await TrackPlayer.getQueue();
+    console.log(`[BACKGROUND_SERVICE] Queue length: ${queue.length}`);
+
+    const state = await TrackPlayer.getState();
+    console.log(`[BACKGROUND_SERVICE] Player state after load: ${state}`);
+
+    console.log(`[BACKGROUND_SERVICE] ✅ Track loaded successfully`);
     return true;
   } catch (error) {
-    console.error("Error loading track:", error);
+    console.error("[BACKGROUND_SERVICE] ❌ Error loading track:", error);
     return false;
   }
 };
 
-// 안전한 타임아웃 설정
-const safeSetTimeout = (callback: () => void, delay: number) => {
-  if (processingTimer) {
-    clearTimeout(processingTimer);
-  }
-  processingTimer = setTimeout(() => {
-    callback();
-    processingTimer = null;
-  }, delay);
-};
-
-// 다음 장으로 이동하는 함수
+// 다음 장으로 이동하는 함수 - 개선된 버전
 const moveToNextChapter = async () => {
   const now = Date.now();
 
+  // 강제 플래그 해제 (5초 이상 걸리면 문제가 있는 것)
   if (processingChapter && now - lastProcessTimestamp > 5000) {
-    console.log("Force clearing stuck processing flag");
+    console.log("[BACKGROUND_SERVICE] ⚠️ Force clearing stuck processing flag");
     clearProcessingFlags();
   }
 
   if (processingChapter) {
-    console.log("Already processing chapter change, skipping");
+    console.log("[BACKGROUND_SERVICE] ⚠️ Already processing chapter change, skipping");
     return;
   }
 
   processingChapter = true;
   lastProcessTimestamp = now;
-  console.log("Starting to process next chapter");
+  console.log("[BACKGROUND_SERVICE] 🚀 Starting to process next chapter");
+  console.log(`[BACKGROUND_SERVICE] 📋 Last chapter info before processing: ${lastChapterInfo.book}권 ${lastChapterInfo.jang}장`);
 
   try {
-    const autoNextEnabled = defaultStorage.getBoolean("auto_next_chapter_enabled") ?? false;
     const isIlldocPlayer = defaultStorage.getBoolean("is_illdoc_player") ?? false;
+    console.log(`[BACKGROUND_SERVICE] 📖 Processing for: ${isIlldocPlayer ? "성경일독" : "일반성경"} player`);
 
-    if (isIlldocPlayer || !autoNextEnabled) {
+    // 일반 성경 플레이어의 경우만 자동 다음 장 설정 확인
+    if (!isIlldocPlayer) {
+      const autoNextEnabled = defaultStorage.getBoolean("auto_next_chapter_enabled") ?? false;
+
+      if (!autoNextEnabled) {
+        console.log(
+            `[BACKGROUND_SERVICE] ❌ Auto next chapter skipped: autoNextEnabled=${autoNextEnabled}`
+        );
+        clearProcessingFlags();
+        return;
+      }
+    }
+    // 성경일독 플레이어는 항상 자동 진행
+
+    const currentBook = defaultStorage.getNumber("bible_book") ?? 1;
+    const currentJang = defaultStorage.getNumber("bible_jang") ?? 1;
+
+    console.log(`[BACKGROUND_SERVICE] 📖 Current: ${currentBook}권 ${currentJang}장`);
+
+    let nextBook = currentBook;
+    let nextJang = currentJang + 1;
+
+    // 다음 장 계산 로직 - BibleStep 구조 수정
+    const maxChapters = BibleStep[currentBook - 1]?.count || 1; // jang → count로 수정
+    console.log(`[BACKGROUND_SERVICE] 📊 Max chapters in book ${currentBook}: ${maxChapters}`);
+
+    if (nextJang > maxChapters) {
+      if (currentBook === 66) {
+        console.log("[BACKGROUND_SERVICE] 🏁 Reached end of Bible");
+        clearProcessingFlags();
+        return;
+      }
+
+      nextBook = currentBook + 1;
+      nextJang = 1;
+      console.log(`[BACKGROUND_SERVICE] 📚 Moving to next book: ${nextBook}권 1장`);
+    }
+
+    console.log(`[BACKGROUND_SERVICE] 🎯 Target: ${nextBook}권 ${nextJang}장`);
+    console.log(`[BACKGROUND_SERVICE] 📝 Last processed chapter: ${lastChapterInfo.book}권 ${lastChapterInfo.jang}장`);
+
+    // 이미 다음 장을 처리했는지 확인 (목표 장 기준)
+    // 단, 초기값(0,0)은 무시
+    if (
+        lastChapterInfo.book === nextBook &&
+        lastChapterInfo.jang === nextJang &&
+        lastChapterInfo.book !== 0
+    ) {
       console.log(
-          `Auto next chapter skipped: isIlldocPlayer=${isIlldocPlayer}, autoNextEnabled=${autoNextEnabled}`
+          `[BACKGROUND_SERVICE] ⚠️ Already processed target chapter: ${nextBook}권 ${nextJang}장 - skipping`
       );
       clearProcessingFlags();
       return;
     }
 
-    const currentBook = defaultStorage.getNumber("bible_book") ?? 1;
-    const currentJang = defaultStorage.getNumber("bible_jang") ?? 1;
-
-    let nextBook = currentBook;
-    let nextJang = currentJang + 1;
-
-    // 다음 장 계산 로직
-    const maxChapters = BibleStep[currentBook - 1]?.jang || 1;
-    if (nextJang > maxChapters) {
-      nextBook = currentBook + 1;
-      nextJang = 1;
-
-      if (nextBook > 66) {
-        console.log("Reached end of Bible");
-        clearProcessingFlags();
-        return;
-      }
-    }
+    console.log(`[BACKGROUND_SERVICE] ✅ New target chapter - proceeding`);
 
     // 상태 업데이트
     defaultStorage.set("bible_book", nextBook);
     defaultStorage.set("bible_jang", nextJang);
+    defaultStorage.set("bible_book_connec", nextBook);
+    defaultStorage.set("bible_jang_connec", nextJang);
 
-    // Redux 상태 업데이트
+    console.log(`[BACKGROUND_SERVICE] 💾 Storage updated`);
+
+    // Redux 상태 업데이트 - changePage 액션 사용
     try {
-      store.dispatch(bibleSelectSlice.actions.updateStep({
+      store.dispatch(bibleSelectSlice.actions.changePage({
         book: nextBook,
         jang: nextJang,
       }));
+      console.log(`[BACKGROUND_SERVICE] 🔄 Redux state updated`);
     } catch (error) {
-      console.error("Redux dispatch error:", error);
+      console.error("[BACKGROUND_SERVICE] ⚠️ Redux dispatch error (non-critical):", error);
+      // Redux 에러는 치명적이지 않으므로 계속 진행
     }
 
+    // 트랙 로드 및 재생
     const success = await loadTrack(nextBook, nextJang);
 
     if (success) {
-      await TrackPlayer.play();
-      console.log("Started playback of next chapter");
+      console.log(`[BACKGROUND_SERVICE] 🔄 Track loaded, attempting immediate playback...`);
+
+      try {
+        console.log(`[BACKGROUND_SERVICE] 🎵 Calling TrackPlayer.play()...`);
+
+        // 백그라운드에서는 setTimeout 사용 안 함 (지연될 수 있음)
+        await TrackPlayer.play();
+
+        console.log(`[BACKGROUND_SERVICE] ✅ Play command sent successfully`);
+
+        // 짧은 대기 후 상태 확인
+        setTimeout(async () => {
+          try {
+            const state = await TrackPlayer.getState();
+            console.log(`[BACKGROUND_SERVICE] 📊 Current player state after play: ${state}`);
+
+            if (state !== State.Playing && state !== State.Buffering) {
+              console.warn(`[BACKGROUND_SERVICE] ⚠️ Player not in playing state, retrying...`);
+              await TrackPlayer.play();
+            }
+          } catch (e) {
+            console.error(`[BACKGROUND_SERVICE] Error checking state:`, e);
+          }
+        }, 1000);
+
+        console.log(`[BACKGROUND_SERVICE] ✅ Started playback of ${nextBook}권 ${nextJang}장`);
+
+        // 처리 완료된 장 기록
+        lastChapterInfo = { book: nextBook, jang: nextJang };
+
+      } catch (playError) {
+        console.error(`[BACKGROUND_SERVICE] ❌ Failed to start playback:`, playError);
+
+        // 즉시 재시도 (setTimeout 사용 안 함)
+        console.log(`[BACKGROUND_SERVICE] 🔄 Retrying playback immediately...`);
+        try {
+          await TrackPlayer.play();
+          console.log(`[BACKGROUND_SERVICE] ✅ Playback started on retry`);
+          lastChapterInfo = { book: nextBook, jang: nextJang };
+        } catch (retryError) {
+          console.error(`[BACKGROUND_SERVICE] ❌ Retry also failed:`, retryError);
+        }
+      }
+    } else {
+      console.error(`[BACKGROUND_SERVICE] ❌ Failed to load track`);
     }
 
+    // 플래그 해제
     setTimeout(() => {
       processingChapter = false;
-      console.log("Cleared processing flag");
+      console.log("[BACKGROUND_SERVICE] ✅ Processing flag cleared");
     }, 2000);
+
   } catch (error) {
-    console.error("Error handling next chapter:", error);
+    console.error("[BACKGROUND_SERVICE] ❌ Error handling next chapter:", error);
     clearProcessingFlags();
 
+    // 에러 발생 시 재시도 (한 번만)
     setTimeout(() => {
-      console.log("Retrying after error");
+      console.log("[BACKGROUND_SERVICE] 🔄 Retrying after error...");
       moveToNextChapter();
     }, 3000);
   }
 };
 
-// PlaybackService 함수 - ES6 export로 변경
+// PlaybackService 함수
 const PlaybackService = async () => {
   try {
-    console.log("PlaybackService started");
+    console.log("[BACKGROUND_SERVICE] 🎬 PlaybackService started");
 
     clearProcessingFlags();
     lastChapterInfo = { book: 0, jang: 0 };
@@ -187,56 +275,58 @@ const PlaybackService = async () => {
           appKilledPlaybackBehavior:
           AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
         },
+        capabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.Stop,
+          Capability.SeekTo,
+          Capability.SkipToNext,
+          Capability.SkipToPrevious,
+        ],
+        compactCapabilities: [
+          Capability.Play,
+          Capability.Pause,
+        ],
         notification: {
           stopWithApp: true,
         },
       });
-      console.log("RepeatMode disabled");
+      console.log("[BACKGROUND_SERVICE] ✅ RepeatMode disabled and capabilities set");
       await TrackPlayer.setRepeatMode(RepeatMode.Off);
     } catch (error) {
-      console.error("Error setting repeat mode:", error);
+      console.error("[BACKGROUND_SERVICE] ⚠️ Error setting repeat mode:", error);
     }
 
-    // Queue end 이벤트 리스너
+    // Queue end 이벤트 리스너 - 백그라운드 전용 (성경 + 성경일독 모두 지원)
     const queueEndListener = TrackPlayer.addEventListener(
         Event.PlaybackQueueEnded,
         async (event) => {
-          console.log("Queue ended event received");
+          console.log("[BACKGROUND_SERVICE] 🎵 Queue ended event received");
+          console.log(`[BACKGROUND_SERVICE] 📱 App state: ${AppState.currentState}`);
 
+          // ⭐ 백그라운드에서만 처리 (포어그라운드는 각 플레이어에서 처리)
           if (AppState.currentState === "active") {
-            console.log("App is active, attempting to move to next chapter");
-            moveToNextChapter();
-          } else {
-            console.log("App is in background, skipping auto next");
-          }
-        }
-    );
-
-    // Progress 이벤트 리스너
-    const progressListener = TrackPlayer.addEventListener(
-        Event.PlaybackProgressUpdated,
-        async (event) => {
-          const info = event;
-          const isIlldocPlayer = defaultStorage.getBoolean("is_illdoc_player") ?? false;
-          const autoNextEnabled = defaultStorage.getBoolean("auto_next_chapter_enabled") ?? false;
-
-          if (isIlldocPlayer || !autoNextEnabled) {
+            console.log("[BACKGROUND_SERVICE] ℹ️ App is active, letting foreground player handle it");
             return;
           }
 
-          if (AppState.currentState !== "active") {
-            if (
-                info.position > 0 &&
-                info.duration > 0 &&
-                info.position >= info.duration - 0.5 &&
-                !processingChapter
-            ) {
-              console.log(
-                  `Background mode - Progress near end: ${info.position}/${info.duration}`
-              );
-              moveToNextChapter();
+          // 성경일독 플레이어인지 일반 성경 플레이어인지 확인
+          const isIlldocPlayer = defaultStorage.getBoolean("is_illdoc_player") ?? false;
+          console.log(`[BACKGROUND_SERVICE] 📖 Player type: ${isIlldocPlayer ? "성경일독" : "일반성경"}`);
+
+          // 일반 성경 플레이어의 경우 자동 다음 장 설정 확인
+          if (!isIlldocPlayer) {
+            const autoNextEnabled = defaultStorage.getBoolean("auto_next_chapter_enabled") ?? false;
+
+            if (!autoNextEnabled) {
+              console.log(`[BACKGROUND_SERVICE] ❌ Auto next disabled for Bible player`);
+              return;
             }
           }
+          // 성경일독 플레이어는 항상 자동으로 다음 장 재생
+
+          console.log("[BACKGROUND_SERVICE] ✅ Attempting to move to next chapter in background");
+          moveToNextChapter();
         }
     );
 
@@ -244,16 +334,16 @@ const PlaybackService = async () => {
     const stateListener = TrackPlayer.addEventListener(
         Event.PlaybackState,
         (event) => {
-          console.log(`Playback state changed: ${event.state}`);
+          console.log(`[BACKGROUND_SERVICE] 🎵 Playback state changed: ${event.state}`);
 
           if (event.state === State.Playing) {
             const isIlldocPlayer = defaultStorage.getBoolean("is_illdoc_player") ?? false;
             console.log(
-                `Current player is ${isIlldocPlayer ? "IllDoc" : "Bible"}`
+                `[BACKGROUND_SERVICE] Current player is ${isIlldocPlayer ? "IllDoc" : "Bible"}`
             );
 
             TrackPlayer.setRepeatMode(RepeatMode.Off).catch((e) => {
-              console.error("Error setting repeat mode on state change:", e);
+              console.error("[BACKGROUND_SERVICE] Error setting repeat mode on state change:", e);
             });
           }
         }
@@ -263,7 +353,7 @@ const PlaybackService = async () => {
     const errorListener = TrackPlayer.addEventListener(
         Event.PlaybackError,
         (event) => {
-          console.error("Playback error:", event);
+          console.error("[BACKGROUND_SERVICE] ❌ Playback error:", event);
           clearProcessingFlags();
         }
     );
@@ -272,10 +362,13 @@ const PlaybackService = async () => {
     const appStateSubscription = AppState.addEventListener(
         "change",
         async (nextAppState) => {
-          console.log("App state changed from", appState, "to", nextAppState);
+          console.log(`[BACKGROUND_SERVICE] 📱 App state changed from ${appState} to ${nextAppState}`);
 
           if (appState === "active" && nextAppState === "background") {
+            console.log("[BACKGROUND_SERVICE] ⬇️ App moved to background - ready for background playback");
             backgroundEventCount = 0;
+          } else if (appState === "background" && nextAppState === "active") {
+            console.log("[BACKGROUND_SERVICE] ⬆️ App returned to foreground");
           }
 
           appState = nextAppState;
@@ -283,15 +376,15 @@ const PlaybackService = async () => {
     );
 
     return () => {
+      console.log("[BACKGROUND_SERVICE] 🛑 Cleaning up listeners");
       queueEndListener.remove();
       stateListener.remove();
       errorListener.remove();
-      progressListener.remove();
       appStateSubscription.remove();
       clearProcessingFlags();
     };
   } catch (error) {
-    console.error("Error in PlaybackService:", error);
+    console.error("[BACKGROUND_SERVICE] ❌ Error in PlaybackService:", error);
     clearProcessingFlags();
   }
 };
