@@ -54,7 +54,7 @@ export default function ConectionPageBar({
             const finalRead = planData ? tableRead || planRead : false;
             setRead(finalRead);
 
-            console.log(`Chapter ${BOOK}:${JANG} - Table: ${tableRead}, Plan: ${planRead}, Final: ${finalRead}`);
+            // console.log(`Chapter ${BOOK}:${JANG} - Table: ${tableRead}, Plan: ${planRead}, Final: ${finalRead}`);
         };
 
         loadReadStatus();
