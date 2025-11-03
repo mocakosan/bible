@@ -1099,7 +1099,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
     initialize();
 
-    // 앱 상태 변경 감지
+    // ⭐⭐⭐ 앱 상태 변경 감지 - 백그라운드/포그라운드 재생 시간 동기화 추가 ⭐⭐⭐
     const subscription = AppState.addEventListener(
         "change",
         async (nextAppState) => {
@@ -1118,6 +1118,16 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
             console.log("App moved to background");
 
             try {
+              // ⭐ 백그라운드 진입 시 현재 재생 위치 저장
+              const currentPosition = await TrackPlayer.getPosition();
+              const playerState = await TrackPlayer.getState();
+
+              console.log("[BACKGROUND] 현재 재생 위치 저장:", currentPosition);
+              console.log("[BACKGROUND] 현재 재생 상태:", playerState);
+
+              defaultStorage.set("last_audio_position", currentPosition);
+              defaultStorage.set("was_playing_before_background", playerState === State.Playing);
+
               await TrackPlayer.setRepeatMode(RepeatMode.Off);
               await TrackPlayer.updateOptions({
                 android: {
@@ -1135,15 +1145,52 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
             }
           }
 
-          // 앱이 다시 활성화될 때
+          // ⭐ 앱이 다시 활성화될 때 - 재생 시간 동기화 추가
           if (
               appStateRef.current.match(/inactive|background/) &&
               nextAppState === "active"
           ) {
             console.log("App returned to foreground");
 
-            defaultStorage.set("is_illdoc_player", false);
-            defaultStorage.set("auto_next_chapter_enabled", enableAutoNext);
+            try {
+              // 백그라운드에서 재생 중이었는지 확인
+              const wasPlaying = defaultStorage.getBoolean("was_playing_before_background") ?? false;
+              const lastPosition = defaultStorage.getNumber("last_audio_position") ?? 0;
+
+              console.log("[FOREGROUND] 복귀 - 이전 재생 상태:", wasPlaying);
+              console.log("[FOREGROUND] 복귀 - 저장된 위치:", lastPosition);
+
+              if (wasPlaying && isPlayerInitialized) {
+                // 백그라운드에서 재생 중이었으면 현재 위치 가져오기
+                const currentPosition = await TrackPlayer.getPosition();
+                const currentState = await TrackPlayer.getState();
+
+                console.log("[FOREGROUND] 현재 TrackPlayer 위치:", currentPosition);
+                console.log("[FOREGROUND] 현재 TrackPlayer 상태:", currentState);
+
+                // 재생 중이면 UI만 업데이트, 아니면 위치 복원
+                if (currentState === State.Playing) {
+                  console.log("[FOREGROUND] 백그라운드에서 계속 재생 중 - UI 상태만 동기화");
+                  // progress는 useProgress() 훅이 자동으로 업데이트하므로 별도 처리 불필요
+                } else if (currentState === State.Paused) {
+                  // 일시정지 상태면 마지막 위치로 seek
+                  if (lastPosition > 0) {
+                    console.log("[FOREGROUND] 마지막 재생 위치로 복원:", lastPosition);
+                    await TrackPlayer.seekTo(lastPosition);
+                  }
+                }
+              }
+
+              defaultStorage.set("is_illdoc_player", false);
+              defaultStorage.set("auto_next_chapter_enabled", enableAutoNext);
+
+              // 저장된 임시 값 정리
+              defaultStorage.delete("was_playing_before_background");
+              // last_audio_position은 다음 백그라운드 진입 시 덮어쓰므로 삭제하지 않음
+
+            } catch (error) {
+              console.error("[FOREGROUND] 복귀 시 동기화 오류:", error);
+            }
           }
 
           appStateRef.current = nextAppState;
@@ -1156,7 +1203,7 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
       subscription.remove();
       stopAndResetPlayer();
     };
-  }, [enableAutoNext]);
+  }, [enableAutoNext, isPlayerInitialized]);
 
   // 수동 테스트 함수 (개발용)
   const testAutoNext = useCallback(() => {
