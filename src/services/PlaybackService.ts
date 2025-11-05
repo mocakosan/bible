@@ -92,12 +92,20 @@ const loadTrack = async (book: number, jang: number): Promise<boolean> => {
 const moveToNextChapter = async () => {
   const now = Date.now();
 
-  // 강제 플래그 해제 (5초 이상 걸리면 문제가 있는 것)
+  // 강제 플래그가 오래 걸려도 빠지지 않도록 기본 플래그 정리 유틸
+  const clearProcessingFlags = () => {
+    processingChapter = false;
+    if (processingTimer) {
+      clearTimeout(processingTimer);
+      processingTimer = null;
+    }
+  };
+
+  // 처리 중 타임아웃 해제
   if (processingChapter && now - lastProcessTimestamp > 5000) {
     console.log("[BACKGROUND_SERVICE] ⚠️ Force clearing stuck processing flag");
     clearProcessingFlags();
   }
-
   if (processingChapter) {
     console.log("[BACKGROUND_SERVICE] ⚠️ Already processing chapter change, skipping");
     return;
@@ -109,28 +117,41 @@ const moveToNextChapter = async () => {
   console.log(`[BACKGROUND_SERVICE] 📋 Last chapter info before processing: ${lastChapterInfo.book}권 ${lastChapterInfo.jang}장`);
 
   try {
-    const isIlldocPlayer = defaultStorage.getBoolean("is_illdoc_player") ?? false;
-    console.log(`[BACKGROUND_SERVICE] 📖 Processing for: ${isIlldocPlayer ? "성경일독" : "일반성경"} player`);
-
-    // 일반 성경 플레이어의 경우만 자동 다음 장 설정 확인
-    if (!isIlldocPlayer) {
-      const autoNextEnabled = defaultStorage.getBoolean("auto_next_chapter_enabled") ?? false;
-
-      if (!autoNextEnabled) {
-        console.log(
-            `[BACKGROUND_SERVICE] ❌ Auto next chapter skipped: autoNextEnabled=${autoNextEnabled}`
-        );
-        clearProcessingFlags();
-        return;
-      }
+    // 수동 이동 이후 자동진행 1회 강제 플래그
+    const forceOnce = defaultStorage.getBoolean("force_auto_next_once") ?? false;
+    if (forceOnce) {
+      console.log("[BACKGROUND_SERVICE] force_auto_next_once → skip guards once");
+      lastChapterInfo = { book: 0, jang: 0 };
+      processingChapter = false; // 이후 로직에서 다시 true로 세팅됨
+      defaultStorage.set("force_auto_next_once", false);
+      processingChapter = true;
+      lastProcessTimestamp = Date.now();
     }
-    // 성경일독 플레이어는 항상 자동 진행
 
+    // 수동 이동 이후 백그라운드 자동진행 재개를 위한 가드 우회
+    const manualAt = defaultStorage.getNumber("manual_navigation_at") ?? 0;
+    if (Date.now() - manualAt < 10000) {
+      console.log("[BACKGROUND_SERVICE] Manual navigation within 10s, reset markers");
+      lastChapterInfo = { book: 0, jang: 0 };
+      processingChapter = true; // 계속 처리
+    }
+
+    // 현재 위치 읽기
     const currentBook = defaultStorage.getNumber("bible_book") ?? 1;
     const currentJang = defaultStorage.getNumber("bible_jang") ?? 1;
-
     console.log(`[BACKGROUND_SERVICE] 📖 Current: ${currentBook}권 ${currentJang}장`);
 
+    //‘과거(이전장/이전권)’로 이동한 경우 내부 마커 초기화
+    const wentBackward =
+      currentBook < lastChapterInfo.book ||
+      (currentBook === lastChapterInfo.book && currentJang < lastChapterInfo.jang);
+    if (wentBackward) {
+      console.log("[BACKGROUND_SERVICE] Detected backward navigation → reset markers");
+      lastChapterInfo = { book: 0, jang: 0 };
+      processingChapter = true; // 계속 처리
+    }
+
+    // 다음 장 계산
     let nextBook = currentBook;
     let nextJang = currentJang + 1;
 
@@ -144,21 +165,18 @@ const moveToNextChapter = async () => {
         clearProcessingFlags();
         return;
       }
-
       nextBook = currentBook + 1;
       nextJang = 1;
-      console.log(`[BACKGROUND_SERVICE] 📚 Moving to next book: ${nextBook}권 1장`);
     }
-
     console.log(`[BACKGROUND_SERVICE] 🎯 Target: ${nextBook}권 ${nextJang}장`);
     console.log(`[BACKGROUND_SERVICE] 📝 Last processed chapter: ${lastChapterInfo.book}권 ${lastChapterInfo.jang}장`);
 
     // 이미 다음 장을 처리했는지 확인 (목표 장 기준)
     // 단, 초기값(0,0)은 무시
     if (
-        lastChapterInfo.book === nextBook &&
-        lastChapterInfo.jang === nextJang &&
-        lastChapterInfo.book !== 0
+      lastChapterInfo.book === nextBook &&
+      lastChapterInfo.jang === nextJang &&
+      lastChapterInfo.book !== 0
     ) {
       console.log(
           `[BACKGROUND_SERVICE] ⚠️ Already processed target chapter: ${nextBook}권 ${nextJang}장 - skipping`
@@ -167,17 +185,12 @@ const moveToNextChapter = async () => {
       return;
     }
 
-    console.log(`[BACKGROUND_SERVICE] ✅ New target chapter - proceeding`);
-
     // 상태 업데이트
     defaultStorage.set("bible_book", nextBook);
     defaultStorage.set("bible_jang", nextJang);
     defaultStorage.set("bible_book_connec", nextBook);
     defaultStorage.set("bible_jang_connec", nextJang);
-
-    console.log(`[BACKGROUND_SERVICE] 💾 Storage updated`);
-
-    // Redux 상태 업데이트 - changePage 액션 사용
+        // Redux 상태 업데이트 - changePage 액션 사용
     try {
       store.dispatch(bibleSelectSlice.actions.changePage({
         book: nextBook,
@@ -200,24 +213,6 @@ const moveToNextChapter = async () => {
 
         // 백그라운드에서는 setTimeout 사용 안 함 (지연될 수 있음)
         await TrackPlayer.play();
-
-        console.log(`[BACKGROUND_SERVICE] ✅ Play command sent successfully`);
-
-        // 짧은 대기 후 상태 확인
-        setTimeout(async () => {
-          try {
-            const state = await TrackPlayer.getState();
-            console.log(`[BACKGROUND_SERVICE] 📊 Current player state after play: ${state}`);
-
-            if (state !== State.Playing && state !== State.Buffering) {
-              console.warn(`[BACKGROUND_SERVICE] ⚠️ Player not in playing state, retrying...`);
-              await TrackPlayer.play();
-            }
-          } catch (e) {
-            console.error(`[BACKGROUND_SERVICE] Error checking state:`, e);
-          }
-        }, 1000);
-
         console.log(`[BACKGROUND_SERVICE] ✅ Started playback of ${nextBook}권 ${nextJang}장`);
 
         // 처리 완료된 장 기록

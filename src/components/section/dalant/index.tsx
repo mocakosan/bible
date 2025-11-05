@@ -530,7 +530,7 @@ export default function Dalant({ point, user, hmacData }: DalantProps) {
               resizeMode="cover"
             />
           </TouchableOpacity>
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={styles.coupangBanner}
             onPress={mangoLabClick}
           >
@@ -539,7 +539,7 @@ export default function Dalant({ point, user, hmacData }: DalantProps) {
               style={{ width: "100%", height: 100 }}
               resizeMode="cover"
             />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
           <TouchableOpacity style={styles.coupangBanner} onPress={stampClick}>
             <Image
               source={require("../../../assets/img/coupang_stamp.png")}

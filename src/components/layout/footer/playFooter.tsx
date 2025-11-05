@@ -98,6 +98,23 @@ export const bibleAudioList: string[] = [
   "Rev",
 ];
 
+// 가드 추가 : 이미 같은 장이 재생 중이면 다시 시작하지 않도록 확인하는 함수
+async function ensureNotRestarting(book: number, jang: number) {
+  try {
+    const queue = await TrackPlayer.getQueue();
+    const state = await TrackPlayer.getState();
+    const pos = await TrackPlayer.getPosition();
+    const urlPart = `${bibleAudioList[book - 1]}${String(jang).padStart(3, "0")}.mp3`;
+    const sameTrack =
+      queue.length > 0 &&
+      typeof (queue[0] as any)?.url === "string" &&
+      (queue[0] as any).url.includes(urlPart);
+    const isActive = state === State.Playing || state === State.Buffering;
+    if (sameTrack && isActive && pos > 1) return true;
+  } catch {}
+  return false;
+}
+
 // 플레이어 초기화 함수 - 단순화
 const setupPlayer = async (): Promise<boolean> => {
   try {
@@ -612,6 +629,9 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
       syncBibleState(nextBook, nextJang);
       onTrigger();
       setAutoPlayPending(true);
+  
+      // 추가: 수동 이동 플래그 + 내부 기록 재초기화 (백그라운드 자동진행 재개 유도)
+      defaultStorage.set("manual_navigation_at", Date.now());
     } catch (error) {
       console.error("다음 장 이동 오류:", error);
     } finally {
@@ -652,6 +672,9 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
       syncBibleState(nextBook, nextJang);
       onTrigger();
       setAutoPlayPending(true);
+  
+      // 추가: 수동 이동 플래그 + 내부 기록 재초기화 (백그라운드 자동진행 재개 유도)
+      defaultStorage.set("manual_navigation_at", Date.now());
     } catch (error) {
       console.error("이전 장 이동 오류:", error);
     } finally {
@@ -891,6 +914,15 @@ const PlayFooterLayout = ({ onTrigger, openSound }: PlayFooterLayoutProps) => {
 
     const autoPlay = async () => {
       try {
+        const noRestart = await ensureNotRestarting(currentBook, currentJang);
+        if (noRestart) {
+          currentTrackRef.current = { book: currentBook, jang: currentJang };
+          lastProcessedChapterRef.current = null;
+          await TrackPlayer.play().catch(() => {});
+          setAutoPlayPending(false);
+          return;
+        }
+        
         console.log(
             `[AUTO_PLAY] 자동 재생 시작: ${currentBook}권 ${currentJang}장`
         );
