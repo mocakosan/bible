@@ -21,7 +21,6 @@ import SupportScreen from '../components/page/support';
 import TranslateScreen from '../components/page/translate';
 import VersionInfoScreen from '../components/page/version';
 import WordScreen from '../components/page/words';
-
 import BibleConectionScreen from '../components/page/bible/connection';
 import BookMarkDetailScreen from '../components/page/bookmarkdetail';
 import CopyRightScreen from '../components/page/copyright';
@@ -35,6 +34,9 @@ import IllDocSettingScreen from '../components/page/setting/illDoc';
 import IllDocTranslateScreen from '../components/page/translate/illDoc';
 import MyPageScreen from "../components/page/mypage";
 import PointHistoryScreen from "../components/page/dalantdetail";
+import HymnListScreen from "../components/page/hymn";
+import HymnDetailScreen from "../components/section/hymn/HymnDetailScreen";
+import HymnDocScreen from "../components/section/hymn/HymnDocScreen";
 
 export const route = [
   {
@@ -63,7 +65,15 @@ export const route = [
   },
   {
     name: 'HymnScreen',
-    component: HymnScreen
+    component: HymnListScreen
+  },
+  {
+    name: 'HymnDetailScreen',
+    component: HymnDetailScreen
+  },
+  {
+    name: 'HymnDocScreen ',
+    component: HymnDocScreen
   },
   {
     name: 'BibleStudyScreen',

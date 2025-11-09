@@ -24,8 +24,7 @@ const DrawerNavigator = () => {
                 },
                 drawerType: 'front',
                 swipeEnabled: false,
-                // 전체 드로어 화면에서 가로 모드 허용
-                orientation: 'all' // 모든 방향 허용
+                orientation: 'all'
             }}
         >
             <Drawer.Screen
@@ -34,7 +33,7 @@ const DrawerNavigator = () => {
             />
             <Drawer.Screen
                 name="CommonScreen"
-                component={route[9].component}
+                component={route[11].component}
             />
         </Drawer.Navigator>
     );
@@ -43,22 +42,15 @@ const DrawerNavigator = () => {
 export const AppNavigator = () => {
     const Stack = createStackNavigator();
 
-    // Android targetSdk 35 대응을 위한 공통 스크린 옵션
     const commonScreenOptions = {
         headerShown: false,
         cardStyle: { backgroundColor: '#fff' },
         cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-        // 기본적으로 모든 화면에서 가로 모드 허용
         orientation: 'all',
-        // Android 네비게이션 바 관련 설정
         ...(Platform.OS === 'android' && {
-            // Android 네비게이션 바를 항상 표시 (targetSdk 35 대응)
             navigationBarHidden: false,
-            // 네비게이션 바 색상 설정 (선택사항)
             navigationBarColor: '#FFFFFF',
-            // 상태바 투명도 설정
             statusBarTranslucent: false,
-            // 컨텐츠가 시스템 UI 아래로 가지 않도록 설정
             autoHideHomeIndicator: false,
         })
     };
@@ -76,7 +68,6 @@ export const AppNavigator = () => {
                 }}
             />
 
-            {/* 마이페이지 스크린 - 가로 모드 허용 및 네비게이션 바 설정 */}
             <Stack.Screen
                 name="MyPageScreen"
                 component={MyPageScreen}
@@ -86,7 +77,6 @@ export const AppNavigator = () => {
                 }}
             />
 
-            {/* 기존 route 기반의 스크린들 - 모든 스크린에 navigationBarHidden: false 추가 */}
             <Stack.Screen
                 name="HomeScreen"
                 component={route[0].component}
@@ -135,6 +125,8 @@ export const AppNavigator = () => {
                     navigationBarHidden: false
                 }}
             />
+
+            {/* 찬송가 관련 스크린 */}
             <Stack.Screen
                 name="HymnScreen"
                 component={route[6].component}
@@ -144,7 +136,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="BibleStudyScreen"
+                name="HymnDetailScreen"
                 component={route[7].component}
                 options={{
                     orientation: 'all',
@@ -152,15 +144,16 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="WordScreen"
+                name="HymnDocScreen"
                 component={route[8].component}
                 options={{
                     orientation: 'all',
                     navigationBarHidden: false
                 }}
             />
+
             <Stack.Screen
-                name="CommonScreen"
+                name="BibleStudyScreen"
                 component={route[9].component}
                 options={{
                     orientation: 'all',
@@ -168,7 +161,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="ReadingBibleScreen"
+                name="WordScreen"
                 component={route[10].component}
                 options={{
                     orientation: 'all',
@@ -176,18 +169,15 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="ProgressScreen"
+                name="CommonScreen"
                 component={route[11].component}
                 options={{
-                    header: () => <HeaderBackButton />,
-                    headerShown: false,
                     orientation: 'all',
                     navigationBarHidden: false
                 }}
             />
-            {/* 나머지 스크린들도 동일하게 orientation: 'all' 및 navigationBarHidden: false 추가 */}
             <Stack.Screen
-                name="MenuListScreen"
+                name="ReadingBibleScreen"
                 component={route[12].component}
                 options={{
                     orientation: 'all',
@@ -195,15 +185,17 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="MenuDetailScreen"
+                name="ProgressScreen"
                 component={route[13].component}
                 options={{
+                    header: () => <HeaderBackButton />,
+                    headerShown: false,
                     orientation: 'all',
                     navigationBarHidden: false
                 }}
             />
             <Stack.Screen
-                name="PreferencesScreen"
+                name="MenuListScreen"
                 component={route[14].component}
                 options={{
                     orientation: 'all',
@@ -211,7 +203,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="ManualScreen"
+                name="MenuDetailScreen"
                 component={route[15].component}
                 options={{
                     orientation: 'all',
@@ -219,7 +211,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="TranslateScreen"
+                name="PreferencesScreen"
                 component={route[16].component}
                 options={{
                     orientation: 'all',
@@ -227,7 +219,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="AssociateScreen"
+                name="ManualScreen"
                 component={route[17].component}
                 options={{
                     orientation: 'all',
@@ -235,7 +227,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="SupportScreen"
+                name="TranslateScreen"
                 component={route[18].component}
                 options={{
                     orientation: 'all',
@@ -243,7 +235,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="VersionInfoScreen"
+                name="AssociateScreen"
                 component={route[19].component}
                 options={{
                     orientation: 'all',
@@ -251,7 +243,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="BookMarkScreen"
+                name="SupportScreen"
                 component={route[20].component}
                 options={{
                     orientation: 'all',
@@ -259,7 +251,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="LightPenScreen"
+                name="VersionInfoScreen"
                 component={route[21].component}
                 options={{
                     orientation: 'all',
@@ -267,7 +259,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="MalSumNoteScreen"
+                name="BookMarkScreen"
                 component={route[22].component}
                 options={{
                     orientation: 'all',
@@ -275,7 +267,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="MalSumNoteDetailScreen"
+                name="LightPenScreen"
                 component={route[23].component}
                 options={{
                     orientation: 'all',
@@ -283,7 +275,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="BookMarkDetailScreen"
+                name="MalSumNoteScreen"
                 component={route[24].component}
                 options={{
                     orientation: 'all',
@@ -291,7 +283,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="LightPenDetailScreen"
+                name="MalSumNoteDetailScreen"
                 component={route[25].component}
                 options={{
                     orientation: 'all',
@@ -299,7 +291,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="NoteScreen"
+                name="BookMarkDetailScreen"
                 component={route[26].component}
                 options={{
                     orientation: 'all',
@@ -307,7 +299,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="CopyRightScreen"
+                name="LightPenDetailScreen"
                 component={route[27].component}
                 options={{
                     orientation: 'all',
@@ -315,7 +307,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="ChapterScreen2"
+                name="NoteScreen"
                 component={route[28].component}
                 options={{
                     orientation: 'all',
@@ -323,7 +315,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="HomeFocusScreen"
+                name="CopyRightScreen"
                 component={route[29].component}
                 options={{
                     orientation: 'all',
@@ -331,7 +323,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="IllDocSettingScreen"
+                name="ChapterScreen2"
                 component={route[30].component}
                 options={{
                     orientation: 'all',
@@ -339,7 +331,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="IllDocTranslateScreen"
+                name="HomeFocusScreen"
                 component={route[31].component}
                 options={{
                     orientation: 'all',
@@ -347,7 +339,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="InquiryScreen"
+                name="IllDocSettingScreen"
                 component={route[32].component}
                 options={{
                     orientation: 'all',
@@ -355,7 +347,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="NewsScreen"
+                name="IllDocTranslateScreen"
                 component={route[33].component}
                 options={{
                     orientation: 'all',
@@ -363,7 +355,7 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="KakaoScreen"
+                name="InquiryScreen"
                 component={route[34].component}
                 options={{
                     orientation: 'all',
@@ -371,13 +363,30 @@ export const AppNavigator = () => {
                 }}
             />
             <Stack.Screen
-                name="PointHistoryScreen"
+                name="NewsScreen"
                 component={route[35].component}
                 options={{
                     orientation: 'all',
                     navigationBarHidden: false
                 }}
             />
+            <Stack.Screen
+                name="KakaoScreen"
+                component={route[36].component}
+                options={{
+                    orientation: 'all',
+                    navigationBarHidden: false
+                }}
+            />
+            <Stack.Screen
+                name="PointHistoryScreen"
+                component={route[37].component}
+                options={{
+                    orientation: 'all',
+                    navigationBarHidden: false
+                }}
+            />
+
         </Stack.Navigator>
     );
 };
