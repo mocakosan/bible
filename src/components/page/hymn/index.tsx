@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect,useMemo  } from 'react';
 import {
     View,
     Text,
@@ -21,7 +21,7 @@ import BackHeaderLayout from "../../layout/header/backHeader";
 
 
 const HYMN_CATEGORIES: HymnCategory[] = [
-    '교독문','100', '200', '300', '400', '500', '600', '700' , '분류'
+    '교독문','100', '200', '300', '400', '500', '600'
 ];
 
 export default function HymnListScreen() {
@@ -48,7 +48,7 @@ export default function HymnListScreen() {
             // API_ENDPOINTS.HYMN_LIST = '/chansong/song'
             const response = await apiClient.get(API_ENDPOINTS.HYMN_LIST, {
                 params: {
-                    take: 100,
+                    take: 700,
                     page: 1,
                 }
             });
@@ -126,6 +126,24 @@ export default function HymnListScreen() {
             setLoading(false);
         }
     };
+    // 숫자만 뽑아 안전하게 변환
+    const toNum = (v: unknown) => {
+        const n = parseInt(String(v).replace(/[^\d]/g, ''), 10);
+        return Number.isNaN(n) ? null : n;
+    };
+
+    const filteredHymnList = useMemo(() => {
+        // '교독문'이나 '분류' 같은 비숫자 탭이면 전체 노출
+        const catNum = parseInt(String(selectedCategory), 10);
+        if (!Number.isFinite(catNum)) return hymnList;
+
+        const lower = catNum;                           // 100, 200, …
+        const upper = catNum === 700 ? Infinity : catNum + 100; // 700은 700+
+        return hymnList.filter((it) => {
+            const n = toNum(it?.num);
+            return n !== null && n >= lower && n < upper;
+        });
+    }, [hymnList, selectedCategory]);
 
     const renderCategoryHeader = () => (
         <View style={styles.categoryContainer}>
@@ -133,12 +151,12 @@ export default function HymnListScreen() {
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 data={HYMN_CATEGORIES}
-                keyExtractor={(item) => item}
+                keyExtractor={(item) => `tab-${String(item)}`}
                 renderItem={({ item }) => (
                     <TouchableOpacity
                         style={[
                             styles.categoryItem,
-                            selectedCategory === item && styles.categoryItemActive
+                            selectedCategory === item && styles.categoryItemActive,
                         ]}
                         onPress={() => {
                             if (item === '교독문') {
@@ -154,7 +172,7 @@ export default function HymnListScreen() {
                         <Text
                             style={[
                                 styles.categoryText,
-                                selectedCategory === item && styles.categoryTextActive
+                                selectedCategory === item && styles.categoryTextActive,
                             ]}
                         >
                             {item}
@@ -264,7 +282,7 @@ export default function HymnListScreen() {
                 <View style={styles.hymnInfo}>
                     <Text style={styles.hymnTitle}>{item.title}</Text>
                     <Text style={styles.hymnOldNum}>
-                        {item.oldnum ? `통일 찬송가 ${item.oldnum}장` : ''}
+                        {`통일 찬송가${item?.oldnum !== undefined && item.oldnum !== null && String(item.oldnum).trim() !== '' ? ` ${item.oldnum}장` : ''}`}
                     </Text>
                 </View>
             </View>
@@ -297,9 +315,13 @@ export default function HymnListScreen() {
                 renderDocList()
             ) : (
                 <FlatList
-                    data={hymnList}
+                    data={filteredHymnList}
                     renderItem={renderHymnItem}
-                    keyExtractor={(item) => item.id.toString()}
+                    keyExtractor={(item, idx) =>
+                        item?.id != null
+                            ? `hymn-${String(item.id)}`
+                            : `hymn-fallback-${String(item?.num ?? '')}-${idx}`
+                    }
                     contentContainerStyle={[
                         styles.listContainer,
                         { paddingBottom: insets.bottom + 80 }
