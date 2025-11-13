@@ -37,6 +37,8 @@ import PointHistoryScreen from "../components/page/dalantdetail";
 import HymnListScreen from "../components/page/hymn";
 import HymnDetailScreen from "../components/section/hymn/HymnDetailScreen";
 import HymnDocScreen from "../components/section/hymn/HymnDocScreen";
+// 교독문 상세 화면 추가
+import GyodokDetailScreen from "../components/section/hymn/GyodokDetailScreen";
 
 export const route = [
   {
@@ -72,7 +74,7 @@ export const route = [
     component: HymnDetailScreen
   },
   {
-    name: 'HymnDocScreen ',
+    name: 'HymnDocScreen',
     component: HymnDocScreen
   },
   {
@@ -189,6 +191,11 @@ export const route = [
   },
   {
     name: 'PointHistoryScreen',
-    component : PointHistoryScreen
+    component: PointHistoryScreen
+  },
+  // 교독문 상세 화면 추가
+  {
+    name: 'GyodokDetailScreen',
+    component: GyodokDetailScreen
   },
 ];

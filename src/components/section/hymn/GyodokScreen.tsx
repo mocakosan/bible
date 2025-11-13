@@ -10,54 +10,42 @@ import {
     SafeAreaView,
 } from 'react-native';
 import axios from 'axios';
-import { API_BASE_URL } from '../../../config/env';
+import {API_BASE_URL} from "../../../config/env";
 
-type ContentType = 'gyodok' | 'kido' | 'sado';
 
-interface DocItem {
+interface GyodokItem {
     id: number;
     title: string;
 }
 
-interface HymnDocScreenProps {
-    navigation?: any;
+interface GyodokScreenProps {
+    navigation?: any; // React Navigation 사용 시
 }
 
-const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
-    const [selectedContent, setSelectedContent] = useState<ContentType>('gyodok');
-    const [selectedVersion, setSelectedVersion] = useState<1 | 2>(1);
-    const [docList, setDocList] = useState<DocItem[]>([]);
+const GyodokScreen: React.FC<GyodokScreenProps> = ({ navigation }) => {
+    const [selectedVersion, setSelectedVersion] = useState<1 | 2>(1); // 1: 개역개정, 2: 개역한글
+    const [gyodokList, setGyodokList] = useState<GyodokItem[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // API 엔드포인트 설정
-    const API_ENDPOINTS = {
-        gyodok: '/chansong/gyodok',
-        kido: '/chansong/kido',
-        sado: '/chansong/sado',
-    };
-
-    const CONTENT_TITLES = {
-        gyodok: '교독문',
-        kido: '주기도문',
-        sado: '사도신경',
-    };
+    // API 설정
+    const API_ENDPOINT = '/chansong/gyodok';
 
     useEffect(() => {
-        loadDocList();
-    }, [selectedContent, selectedVersion]);
+        loadGyodokList();
+    }, [selectedVersion]);
 
-    const loadDocList = async () => {
+    const loadGyodokList = async () => {
         setLoading(true);
         try {
-            const endpoint = API_ENDPOINTS[selectedContent];
-            const response = await axios.get(`${API_BASE_URL}${endpoint}`, {
+            const response = await axios.get(`${API_BASE_URL}${API_ENDPOINT}`, {
                 params: { version: selectedVersion },
                 timeout: 10000,
             });
 
-            console.log(`✅ ${CONTENT_TITLES[selectedContent]} 목록 로드 성공:`, response.data);
+            console.log('✅ 교독문 목록 로드 성공:', response.data);
 
-            let list: DocItem[] = [];
+            // 응답 데이터 처리
+            let list: GyodokItem[] = [];
             if (Array.isArray(response.data)) {
                 list = response.data;
             } else if (response.data.list && Array.isArray(response.data.list)) {
@@ -66,14 +54,14 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
                 list = response.data.data;
             }
 
-            setDocList(list);
+            setGyodokList(list);
         } catch (error) {
-            console.error(`❌ ${CONTENT_TITLES[selectedContent]} 목록 로드 실패:`, error);
+            console.error('❌ 교독문 목록 로드 실패:', error);
             Alert.alert(
                 '데이터 로드 실패',
-                `${CONTENT_TITLES[selectedContent]} 목록을 불러오는데 실패했습니다.\n네트워크 연결을 확인해주세요.`,
+                '교독문 목록을 불러오는데 실패했습니다.\n네트워크 연결을 확인해주세요.',
                 [
-                    { text: '다시 시도', onPress: () => loadDocList() },
+                    { text: '다시 시도', onPress: () => loadGyodokList() },
                     { text: '취소', style: 'cancel' },
                 ]
             );
@@ -82,71 +70,17 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
         }
     };
 
-    const handleDocItemPress = (item: DocItem) => {
+    const handleGyodokItemPress = (item: GyodokItem) => {
+        // 상세 화면으로 이동 (React Navigation 사용 시)
         if (navigation) {
-            // ✅ GyodokDetailScreen으로 네비게이션
-            navigation.navigate('GyodokDetailScreen', {
+            navigation.navigate('GyodokDetail', {
                 id: item.id,
                 title: item.title,
                 version: selectedVersion,
-                type: selectedContent,
             });
         }
-        console.log('문서 선택:', item);
+        console.log('교독문 선택:', item);
     };
-
-    const renderContentTabs = () => (
-        <View style={styles.contentTabContainer}>
-            <TouchableOpacity
-                style={[
-                    styles.contentTab,
-                    selectedContent === 'gyodok' && styles.contentTabActive,
-                ]}
-                onPress={() => setSelectedContent('gyodok')}
-            >
-                <Text
-                    style={[
-                        styles.contentTabText,
-                        selectedContent === 'gyodok' && styles.contentTabTextActive,
-                    ]}
-                >
-                    교독문
-                </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-                style={[
-                    styles.contentTab,
-                    selectedContent === 'kido' && styles.contentTabActive,
-                ]}
-                onPress={() => setSelectedContent('kido')}
-            >
-                <Text
-                    style={[
-                        styles.contentTabText,
-                        selectedContent === 'kido' && styles.contentTabTextActive,
-                    ]}
-                >
-                    주기도문
-                </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-                style={[
-                    styles.contentTab,
-                    selectedContent === 'sado' && styles.contentTabActive,
-                ]}
-                onPress={() => setSelectedContent('sado')}
-            >
-                <Text
-                    style={[
-                        styles.contentTabText,
-                        selectedContent === 'sado' && styles.contentTabTextActive,
-                    ]}
-                >
-                    사도신경
-                </Text>
-            </TouchableOpacity>
-        </View>
-    );
 
     const renderVersionTab = () => (
         <View style={styles.tabContainer}>
@@ -185,31 +119,31 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
         </View>
     );
 
-    const renderDocList = () => {
+    const renderGyodokList = () => {
         if (loading) {
             return (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#2AC1BC" />
-                    <Text style={styles.loadingText}>불러오는 중...</Text>
+                    <Text style={styles.loadingText}>교독문을 불러오는 중...</Text>
                 </View>
             );
         }
 
-        if (docList.length === 0) {
+        if (gyodokList.length === 0) {
             return (
                 <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>목록이 없습니다.</Text>
+                    <Text style={styles.emptyText}>교독문이 없습니다.</Text>
                 </View>
             );
         }
 
         return (
             <ScrollView style={styles.listContainer}>
-                {docList.map((item, index) => (
+                {gyodokList.map((item, index) => (
                     <TouchableOpacity
                         key={item.id || index}
                         style={styles.listItem}
-                        onPress={() => handleDocItemPress(item)}
+                        onPress={() => handleGyodokItemPress(item)}
                         activeOpacity={0.7}
                     >
                         <Text style={styles.listItemText}>{item.title}</Text>
@@ -222,11 +156,10 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>찬송가</Text>
+                <Text style={styles.headerTitle}>교독문</Text>
             </View>
-            {renderContentTabs()}
             {renderVersionTab()}
-            {renderDocList()}
+            {renderGyodokList()}
         </SafeAreaView>
     );
 };
@@ -246,31 +179,6 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
         color: '#333333',
-    },
-    contentTabContainer: {
-        flexDirection: 'row',
-        borderBottomWidth: 1,
-        borderBottomColor: '#ECECEC',
-        backgroundColor: '#F8F8F8',
-    },
-    contentTab: {
-        flex: 1,
-        paddingVertical: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    contentTabActive: {
-        borderBottomWidth: 3,
-        borderBottomColor: '#2AC1BC',
-    },
-    contentTabText: {
-        fontSize: 14,
-        color: 'rgba(0, 0, 0, 0.5)',
-        fontWeight: '500',
-    },
-    contentTabTextActive: {
-        color: '#2AC1BC',
-        fontWeight: '700',
     },
     tabContainer: {
         flexDirection: 'row',
@@ -333,4 +241,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default HymnDocScreen;
+export default GyodokScreen;

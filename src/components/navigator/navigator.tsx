@@ -151,7 +151,15 @@ export const AppNavigator = () => {
                     navigationBarHidden: false
                 }}
             />
-
+            {/* 교독문 상세 화면 추가 */}
+            <Stack.Screen
+                name="GyodokDetailScreen"
+                component={route[38].component}
+                options={{
+                    orientation: 'all',
+                    navigationBarHidden: false
+                }}
+            />
             <Stack.Screen
                 name="BibleStudyScreen"
                 component={route[9].component}
