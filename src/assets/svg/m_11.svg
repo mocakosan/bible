@@ -1,0 +1,84 @@
+<svg
+                  class="w-6 h-6"
+                  version="1.1"
+                  id="svg87"
+                  xml:space="preserve"
+                  width="682.66669"
+                  height="682.66669"
+                  viewBox="0 0 682.66669 682.66669"
+                  xmlns="http://www.w3.org/2000/svg"
+                  xmlns:svg="http://www.w3.org/2000/svg">
+                  <defs id="defs91">
+                    <clipPath clipPathUnits="userSpaceOnUse" id="clipPath101">
+                      <path d="M 0,512 H 512 V 0 H 0 Z" id="path99" />
+                    </clipPath>
+                  </defs>
+                  <g
+                    id="g93"
+                    transform="matrix(1.3333333,0,0,-1.3333333,0,682.66667)">
+                    <g id="g95">
+                      <g id="g97" clip-path="url(#clipPath101)">
+                        <g id="g103" transform="translate(443.2651,458.8223)">
+                          <path
+                            d="m 0,0 43.212,-46.814 c 14.433,-15.634 14.49,-39.716 0.133,-55.419 l -230.61,-252.23 -128,128 L -57.309,2.832 C -40.625,17.661 -15.14,16.402 0,0 Z"
+                            style="
+                              fill: none;
+                              stroke: #000000;
+                              stroke-width: 30;
+                              stroke-linecap: round;
+                              stroke-linejoin: round;
+                              stroke-miterlimit: 10;
+                              stroke-dasharray: none;
+                              stroke-opacity: 1;
+                            "
+                            id="path105" />
+                        </g>
+                        <g id="g107" transform="translate(88,112.3594)">
+                          <path
+                            d="m 0,0 -73,-72 h 97 l 24,24 z"
+                            style="
+                              fill: none;
+                              stroke: #000000;
+                              stroke-width: 30;
+                              stroke-linecap: round;
+                              stroke-linejoin: round;
+                              stroke-miterlimit: 10;
+                              stroke-dasharray: none;
+                              stroke-opacity: 1;
+                            "
+                            id="path109" />
+                        </g>
+                        <g id="g111" transform="translate(136,64.3594)">
+                          <path
+                            d="m 0,0 c 14.662,14.662 36.189,20.953 56.928,15.768 18.982,-4.746 39.456,0.616 53.719,14.88 L 120,40 -8,168 -17.353,158.648 C -31.403,144.597 -37.051,124.205 -32.232,104.928 -27.203,84.812 -32.884,63.116 -48,48 -48.1,47.9 -49.36,49.36 0,0 Z"
+                            style="
+                              fill: none;
+                              stroke: #000000;
+                              stroke-width: 30;
+                              stroke-linecap: round;
+                              stroke-linejoin: round;
+                              stroke-miterlimit: 10;
+                              stroke-dasharray: none;
+                              stroke-opacity: 1;
+                            "
+                            id="path113" />
+                        </g>
+                        <g id="g115" transform="translate(272,40.3594)">
+                          <path
+                            d="M 0,0 H 144"
+                            style="
+                              fill: none;
+                              stroke: #000000;
+                              stroke-width: 30;
+                              stroke-linecap: round;
+                              stroke-linejoin: round;
+                              stroke-miterlimit: 10;
+                              stroke-dasharray: none;
+                              stroke-opacity: 1;
+                            "
+                            id="path117" />
+                        </g>
+                      </g>
+                    </g>
+                  </g>
+                </svg>
