@@ -39,8 +39,9 @@ export default function BackHeaderLayout({ title, onNavigate }: Props) {
           borderBottomColor={color.status}
           borderBottomWidth={'1'}
         >
-          <Flex w={'100%'} flexDirection={'row'}>
+          <Flex w={'100%'} flexDirection={'row'} alignItems={'center'} marginTop={2}>
             <IconButton
+                style={{marginTop:-8}}
               icon={
                 <Icon
                   name="arrow-back-ios"

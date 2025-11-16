@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import { API_BASE_URL } from '../../../config/env';
+import BackHeaderLayout from "../../layout/header/backHeader";
+import BannerAdComponent from "../../../adforus";
 
 type ContentType = 'gyodok' | 'kido' | 'sado';
 
@@ -82,71 +84,24 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
         }
     };
 
-    const handleDocItemPress = (item: DocItem) => {
-        if (navigation) {
-            // ✅ GyodokDetailScreen으로 네비게이션
-            navigation.navigate('GyodokDetailScreen', {
-                id: item.id,
-                title: item.title,
-                version: selectedVersion,
-                type: selectedContent,
-            });
-        }
-        console.log('문서 선택:', item);
+    const handleDocItemPress = (item: DocItem, index: number) => {
+        const num = String(index + 1).padStart(3, '0');
+        console.log('📍 네비게이션 파라미터:', {
+            id: item.id,
+            title: item.title,
+            version: selectedVersion,
+            type: selectedContent,
+            num: num,
+            index: index
+        });
+        navigation.navigate('GyodokDetailScreen', {
+            id: item.id,
+            title: item.title,
+            version: selectedVersion,
+            type: selectedContent,
+            num: num,
+        });
     };
-
-    const renderContentTabs = () => (
-        <View style={styles.contentTabContainer}>
-            <TouchableOpacity
-                style={[
-                    styles.contentTab,
-                    selectedContent === 'gyodok' && styles.contentTabActive,
-                ]}
-                onPress={() => setSelectedContent('gyodok')}
-            >
-                <Text
-                    style={[
-                        styles.contentTabText,
-                        selectedContent === 'gyodok' && styles.contentTabTextActive,
-                    ]}
-                >
-                    교독문
-                </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-                style={[
-                    styles.contentTab,
-                    selectedContent === 'kido' && styles.contentTabActive,
-                ]}
-                onPress={() => setSelectedContent('kido')}
-            >
-                <Text
-                    style={[
-                        styles.contentTabText,
-                        selectedContent === 'kido' && styles.contentTabTextActive,
-                    ]}
-                >
-                    주기도문
-                </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-                style={[
-                    styles.contentTab,
-                    selectedContent === 'sado' && styles.contentTabActive,
-                ]}
-                onPress={() => setSelectedContent('sado')}
-            >
-                <Text
-                    style={[
-                        styles.contentTabText,
-                        selectedContent === 'sado' && styles.contentTabTextActive,
-                    ]}
-                >
-                    사도신경
-                </Text>
-            </TouchableOpacity>
-        </View>
-    );
 
     const renderVersionTab = () => (
         <View style={styles.tabContainer}>
@@ -209,10 +164,15 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
                     <TouchableOpacity
                         key={item.id || index}
                         style={styles.listItem}
-                        onPress={() => handleDocItemPress(item)}
+                        onPress={() => handleDocItemPress(item, index)}
                         activeOpacity={0.7}
                     >
-                        <Text style={styles.listItemText}>{item.title}</Text>
+                        <Text style={styles.listItemText}>
+                            <Text style={styles.listItemNumber}>
+                                {String(index + 1).padStart(3, '0')}
+                            </Text>
+                            {'\u00A0'}{item.title}
+                        </Text>
                     </TouchableOpacity>
                 ))}
             </ScrollView>
@@ -221,10 +181,10 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>찬송가</Text>
+            <BackHeaderLayout title="교독문" />
+            <View style={styles.bannerContainer}>
+                <BannerAdComponent />
             </View>
-            {renderContentTabs()}
             {renderVersionTab()}
             {renderDocList()}
         </SafeAreaView>
@@ -234,6 +194,11 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#FFFFFF',
+    },
+    bannerContainer: {
+        paddingVertical: 8,
+        alignItems: 'center',
         backgroundColor: '#FFFFFF',
     },
     header: {
@@ -276,6 +241,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         borderBottomWidth: 1,
         borderBottomColor: '#ECECEC',
+        backgroundColor: '#FFFFFF',
     },
     tabButton: {
         flex: 1,
@@ -283,13 +249,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#FFFFFF',
+        borderBottomWidth: 0,
     },
     tabButtonActive: {
         backgroundColor: '#2AC1BC',
+        borderBottomWidth: 0,
     },
     tabButtonText: {
-        fontSize: 14,
-        color: 'rgba(0, 0, 0, 0.5)',
+        fontSize: 16,
+        color: '#000000',
         fontWeight: '500',
     },
     tabButtonTextActive: {
@@ -318,18 +286,29 @@ const styles = StyleSheet.create({
         color: '#999999',
     },
     listContainer: {
-        flex: 1,
+        backgroundColor: '#FFFFFF',
     },
     listItem: {
-        paddingVertical: 16,
-        paddingHorizontal: 20,
+        flex:1,
+        FlexDirection : 'column',
+        AlignItems : 'center',
         borderBottomWidth: 1,
         borderBottomColor: '#ECECEC',
+        backgroundColor: '#FFFFFF',
+
+    },
+    listItemNumber: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#2AC1BC',
     },
     listItemText: {
+        marginTop: 12,
+        marginBottom: -8,
         fontSize: 16,
-        color: '#333333',
+        color: '#000000',
         fontWeight: '500',
+        lineHeight: 22,
     },
 });
 

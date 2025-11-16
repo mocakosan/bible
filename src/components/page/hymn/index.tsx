@@ -35,7 +35,7 @@ export default function HymnListScreen() {
     const [loading, setLoading] = useState(false);
     const [searchKeyword, setSearchKeyword] = useState('');
     const [isDocMode, setIsDocMode] = useState(false);
-    // 웹 검색 기능을 위한 상태 추가
+    //검색 기능을 위한 상태 추가
     const [isSearchMode, setIsSearchMode] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
 
@@ -268,8 +268,6 @@ export default function HymnListScreen() {
                     <Text style={styles.searchButtonText}>검색</Text>
                 </TouchableOpacity>
             </View>
-
-            {/* 웹 스타일의 검색 결과 헤더 */}
             {isSearchMode && (
                 <View style={styles.searchResultHeader}>
                     <Text style={styles.searchResultText}>
@@ -376,15 +374,18 @@ export default function HymnListScreen() {
             <Box safeAreaTop bg={color.status} />
 
             {/* 배너 광고 */}
-            <View style={[styles.adContainer, { top: 65 }]}>
+            <View style={[styles.adContainer, { top: 75 }]}>
                 <BannerAdComponent />
             </View>
 
+            {/* 검색바 */}
+            <View style={{ top:80}}>
+            {renderSearchBar()}
+            </View>
             {/* 카테고리 헤더 */}
             {renderCategoryHeader()}
 
-            {/* 검색바 */}
-            {!isDocMode && renderSearchBar()}
+
 
             {/* 컨텐츠 영역 */}
             {loading ? (

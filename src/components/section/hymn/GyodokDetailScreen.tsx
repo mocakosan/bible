@@ -7,10 +7,11 @@ import {
     ActivityIndicator,
     Alert,
     SafeAreaView,
-    TouchableOpacity,
 } from 'react-native';
 import axios from 'axios';
 import { API_BASE_URL } from '../../../config/env';
+import BackHeaderLayout from "../../layout/header/backHeader";
+import BannerAdComponent from "../../../adforus";
 
 interface GyodokDetailProps {
     route?: {
@@ -19,6 +20,7 @@ interface GyodokDetailProps {
             title: string;
             version: number;
             type?: 'gyodok' | 'kido' | 'sado';
+            num?: string;
         };
     };
     navigation?: any;
@@ -28,10 +30,16 @@ interface GyodokContent {
     id?: number;
     title: string;
     content: string;
+    together?: number;  // 마지막 줄이 다같이인지 표시하는 플래그
 }
 
 const GyodokDetailScreen: React.FC<GyodokDetailProps> = ({ route, navigation }) => {
-    const { id, title, version, type = 'gyodok' } = route?.params || { id: 1, title: '', version: 1, type: 'gyodok' };
+    const { id, title, version, type = 'gyodok', num } = route?.params || {
+        id: 1,
+        title: '',
+        version: 1,
+        type: 'gyodok'
+    };
 
     const [contentData, setContentData] = useState<GyodokContent | null>(null);
     const [loading, setLoading] = useState(false);
@@ -55,16 +63,14 @@ const GyodokDetailScreen: React.FC<GyodokDetailProps> = ({ route, navigation }) 
             const response = await axios.get(`${API_BASE_URL}${API_ENDPOINT}`, {
                 params: {
                     version: version,
-                    id: id  // id 파라미터 추가
+                    id: id
                 },
                 timeout: 10000,
             });
 
             console.log('✅ 교독문 내용 로드 성공:', response.data);
 
-            // 응답 데이터 처리 개선
             if (response.data) {
-                // 배열로 응답이 온 경우 id와 일치하는 항목 찾기
                 if (Array.isArray(response.data)) {
                     const foundItem = response.data.find(item => item.id === id);
                     if (foundItem) {
@@ -72,13 +78,9 @@ const GyodokDetailScreen: React.FC<GyodokDetailProps> = ({ route, navigation }) 
                     } else {
                         throw new Error('해당 교독문을 찾을 수 없습니다.');
                     }
-                }
-                // 객체로 응답이 온 경우
-                else if (response.data.content || response.data.title) {
+                } else if (response.data.content || response.data.title) {
                     setContentData(response.data);
-                }
-                // data 속성 안에 있는 경우
-                else if (response.data.data) {
+                } else if (response.data.data) {
                     if (Array.isArray(response.data.data)) {
                         const foundItem = response.data.data.find(item => item.id === id);
                         if (foundItem) {
@@ -110,89 +112,41 @@ const GyodokDetailScreen: React.FC<GyodokDetailProps> = ({ route, navigation }) 
         }
     };
 
-    const handleBackPress = () => {
-        if (navigation) {
-            navigation.goBack();
-        }
-    };
-
-    // HTML 태그를 텍스트로 변환하는 함수
-    const parseHtmlContent = (htmlContent: string): string => {
-        if (!htmlContent) return '';
-
-        return htmlContent
-            // <br>, <br/>, <br /> 등 모든 줄바꿈 태그를 실제 줄바꿈으로 변환
-            .replace(/<br\s*\/?>/gi, '\n')
-            // <p> 태그는 앞뒤로 줄바꿈 추가
-            .replace(/<p[^>]*>/gi, '\n')
-            .replace(/<\/p>/gi, '\n')
-            // 기타 HTML 태그 제거
-            .replace(/<[^>]+>/g, '')
-            // HTML 엔티티 변환
-            .replace(/&nbsp;/g, ' ')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&amp;/g, '&')
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'")
-            // 연속된 줄바꿈을 2개까지만 허용
-            .replace(/\n{3,}/g, '\n\n')
-            // 앞뒤 공백 제거
-            .trim();
-    };
-
-    // 교독문 내용을 파싱하여 구조화된 컴포넌트로 렌더링
-    const renderFormattedContent = (content: string) => {
-        const cleanContent = parseHtmlContent(content);
-        const lines = cleanContent.split('\n');
+    // 웹과 동일한 로직: 인덱스 기반으로 (인도자), (회중), (다같이) 구분
+    const renderFormattedContent = (content: string, together?: number) => {
+        // HTML의 <br /> 태그로 분리
+        const lines = content.split('<br />').filter(line => line.trim());
 
         return lines.map((line, index) => {
             const trimmedLine = line.trim();
             if (!trimmedLine) {
-                // 빈 줄은 간격으로 표시
-                return <View key={index} style={styles.emptyLine} />;
+                return null;
             }
 
-            // (인도자), (회중), (다같이) 표시 확인
-            if (trimmedLine.includes('(인도자)') || trimmedLine.includes('인도자:')) {
+            // 마지막 줄이고 together 플래그가 있으면 (다같이)
+            if (together && index === lines.length - 1) {
                 return (
-                    <View key={index} style={styles.leaderContainer}>
-                        <Text style={styles.leaderLabel}>[인도자]</Text>
-                        <Text style={styles.leaderText}>
-                            {trimmedLine.replace(/\(인도자\)|인도자:/g, '').trim()}
-                        </Text>
-                    </View>
+                    <Text key={index} style={styles.congregationText}>
+                        (다같이) {trimmedLine}
+                    </Text>
                 );
             }
-
-            if (trimmedLine.includes('(회중)') || trimmedLine.includes('회중:')) {
+            // 첫 줄(0) 또는 짝수 인덱스 → (인도자) - 청록색
+            else if (index === 0 || index % 2 === 0) {
                 return (
-                    <View key={index} style={styles.congregationContainer}>
-                        <Text style={styles.congregationLabel}>[회중]</Text>
-                        <Text style={styles.congregationText}>
-                            {trimmedLine.replace(/\(회중\)|회중:/g, '').trim()}
-                        </Text>
-                    </View>
+                    <Text key={index} style={styles.leaderText}>
+                        (인도자) {trimmedLine}
+                    </Text>
                 );
             }
-
-            if (trimmedLine.includes('(다같이)') || trimmedLine.includes('다같이:')) {
+            // 홀수 인덱스 → (회중) - 검정색
+            else {
                 return (
-                    <View key={index} style={styles.allTogetherContainer}>
-                        <Text style={styles.allTogetherLabel}>[다같이]</Text>
-                        <Text style={styles.allTogetherText}>
-                            {trimmedLine.replace(/\(다같이\)|다같이:/g, '').trim()}
-                        </Text>
-                    </View>
+                    <Text key={index} style={styles.congregationText}>
+                        (회중) {trimmedLine}
+                    </Text>
                 );
             }
-
-            // 일반 텍스트
-            return (
-                <Text key={index} style={styles.normalText}>
-                    {trimmedLine}
-                </Text>
-            );
         });
     };
 
@@ -201,7 +155,7 @@ const GyodokDetailScreen: React.FC<GyodokDetailProps> = ({ route, navigation }) 
             return (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#2AC1BC" />
-                    <Text style={styles.loadingText}>교독문을 불러오는 중...</Text>
+                    <Text style={styles.loadingText}>불러오는 중...</Text>
                 </View>
             );
         }
@@ -209,7 +163,7 @@ const GyodokDetailScreen: React.FC<GyodokDetailProps> = ({ route, navigation }) 
         if (!contentData) {
             return (
                 <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>교독문 내용이 없습니다.</Text>
+                    <Text style={styles.emptyText}>내용이 없습니다.</Text>
                 </View>
             );
         }
@@ -217,13 +171,7 @@ const GyodokDetailScreen: React.FC<GyodokDetailProps> = ({ route, navigation }) 
         return (
             <ScrollView style={styles.contentContainer}>
                 <View style={styles.contentWrapper}>
-                    {/* 교독문 제목 */}
-                    {contentData.title && (
-                        <Text style={styles.titleText}>{contentData.title}</Text>
-                    )}
-
-                    {/* 교독문 내용 - 구조화된 렌더링 */}
-                    {renderFormattedContent(contentData.content)}
+                    {renderFormattedContent(contentData.content, contentData.together)}
                 </View>
             </ScrollView>
         );
@@ -231,25 +179,10 @@ const GyodokDetailScreen: React.FC<GyodokDetailProps> = ({ route, navigation }) 
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity
-                    onPress={handleBackPress}
-                    style={styles.backButton}
-                >
-                    <Text style={styles.backButtonText}>←</Text>
-                </TouchableOpacity>
-                <Text style={styles.headerTitle} numberOfLines={1}>
-                    {title}
-                </Text>
-                <View style={styles.headerRight} />
+            <BackHeaderLayout title={num ? `${num} ${title}` : title}/>
+            <View style={styles.bannerContainer}>
+                <BannerAdComponent />
             </View>
-
-            <View style={styles.versionBadge}>
-                <Text style={styles.versionText}>
-                    {version === 1 ? '개역개정' : '개역한글'}
-                </Text>
-            </View>
-
             {renderContent()}
         </SafeAreaView>
     );
@@ -260,44 +193,10 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#FFFFFF',
     },
-    header: {
-        flexDirection: 'row',
+    bannerContainer: {
+        paddingVertical: 8,
         alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#ECECEC',
-        backgroundColor: '#F8F8F8',
-    },
-    backButton: {
-        padding: 8,
-    },
-    backButtonText: {
-        fontSize: 24,
-        color: '#333333',
-    },
-    headerTitle: {
-        flex: 1,
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333333',
-        textAlign: 'center',
-        marginHorizontal: 8,
-    },
-    headerRight: {
-        width: 40,
-    },
-    versionBadge: {
-        padding: 12,
-        backgroundColor: '#F0F9F9',
-        borderBottomWidth: 1,
-        borderBottomColor: '#ECECEC',
-    },
-    versionText: {
-        fontSize: 14,
-        color: '#2AC1BC',
-        fontWeight: '600',
-        textAlign: 'center',
+        backgroundColor: '#FFFFFF',
     },
     loadingContainer: {
         flex: 1,
@@ -324,92 +223,24 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     contentWrapper: {
-        padding: 20,
+        paddingVertical: 20,
+        paddingHorizontal: 20,
+        paddingBottom: 60,
     },
-    titleText: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#2AC1BC',
-        marginBottom: 20,
-        textAlign: 'center',
-    },
-    contentText: {
-        fontSize: 16,
-        lineHeight: 28,
-        color: '#333333',
-        letterSpacing: 0.3,
-    },
-    // 빈 줄
-    emptyLine: {
-        height: 12,
-    },
-    // 인도자 스타일
-    leaderContainer: {
-        marginVertical: 8,
-        paddingLeft: 8,
-        borderLeftWidth: 3,
-        borderLeftColor: '#2AC1BC',
-    },
-    leaderLabel: {
-        fontSize: 13,
-        fontWeight: 'bold',
-        color: '#2AC1BC',
-        marginBottom: 4,
-    },
+    // (인도자) - 청록색 + 볼드
     leaderText: {
-        fontSize: 16,
-        lineHeight: 26,
-        color: '#333333',
-    },
-    // 회중 스타일
-    congregationContainer: {
-        marginVertical: 8,
-        paddingLeft: 16,
-        backgroundColor: '#F8F8F8',
-        paddingVertical: 8,
-        paddingRight: 8,
-        borderRadius: 4,
-    },
-    congregationLabel: {
-        fontSize: 13,
-        fontWeight: 'bold',
-        color: '#666666',
-        marginBottom: 4,
-    },
-    congregationText: {
-        fontSize: 16,
-        lineHeight: 26,
-        color: '#555555',
-    },
-    // 다같이 스타일
-    allTogetherContainer: {
-        marginVertical: 12,
-        padding: 12,
-        backgroundColor: '#E8F5F4',
-        borderRadius: 8,
-        borderWidth: 2,
-        borderColor: '#2AC1BC',
-    },
-    allTogetherLabel: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#2AC1BC',
-        marginBottom: 6,
-        textAlign: 'center',
-    },
-    allTogetherText: {
         fontSize: 17,
-        lineHeight: 28,
-        color: '#333333',
-        fontWeight: '600',
-        textAlign: 'center',
+        lineHeight: 32,
+        color: '#2AC1BC',
+        fontWeight: '500',
+        marginBottom: 20,
     },
-    // 일반 텍스트
-    normalText: {
-        fontSize: 16,
-        lineHeight: 26,
-        color: '#333333',
-        marginVertical: 4,
+    // (회중), (다같이) - 검정색
+    congregationText: {
+        fontSize: 17,
+        lineHeight: 32,
+        color: '#000000',
+        marginBottom: 20,
     },
 });
 
