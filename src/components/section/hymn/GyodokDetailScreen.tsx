@@ -112,10 +112,12 @@ const GyodokDetailScreen: React.FC<GyodokDetailProps> = ({ route, navigation }) 
         }
     };
 
-    // 웹과 동일한 로직: 인덱스 기반으로 (인도자), (회중), (다같이) 구분
+    // ✅ 교독문/주기도문/사도신경에 따라 다른 렌더링
     const renderFormattedContent = (content: string, together?: number) => {
-        // HTML의 <br /> 태그로 분리
-        const lines = content.split('<br />').filter(line => line.trim());
+        // HTML의 <br /> 태그 또는 \n으로 분리
+        // 먼저 \n을 <br />로 통일
+        const normalizedContent = content.replace(/\n/g, '<br />');
+        const lines = normalizedContent.split('<br />').filter(line => line.trim());
 
         return lines.map((line, index) => {
             const trimmedLine = line.trim();
@@ -123,27 +125,38 @@ const GyodokDetailScreen: React.FC<GyodokDetailProps> = ({ route, navigation }) 
                 return null;
             }
 
-            // 마지막 줄이고 together 플래그가 있으면 (다같이)
-            if (together && index === lines.length - 1) {
-                return (
-                    <Text key={index} style={styles.congregationText}>
-                        (다같이) {trimmedLine}
-                    </Text>
-                );
+            // 교독문인 경우: (인도자), (회중), (다같이) 표시
+            if (type === 'gyodok') {
+                // 마지막 줄이고 together 플래그가 있으면 (다같이)
+                if (together && index === lines.length - 1) {
+                    return (
+                        <Text key={index} style={styles.congregationText}>
+                            (다같이) {trimmedLine}
+                        </Text>
+                    );
+                }
+                // 첫 줄(0) 또는 짝수 인덱스 → (인도자) - 청록색
+                else if (index === 0 || index % 2 === 0) {
+                    return (
+                        <Text key={index} style={styles.leaderText}>
+                            (인도자) {trimmedLine}
+                        </Text>
+                    );
+                }
+                // 홀수 인덱스 → (회중) - 검정색
+                else {
+                    return (
+                        <Text key={index} style={styles.congregationText}>
+                            (회중) {trimmedLine}
+                        </Text>
+                    );
+                }
             }
-            // 첫 줄(0) 또는 짝수 인덱스 → (인도자) - 청록색
-            else if (index === 0 || index % 2 === 0) {
-                return (
-                    <Text key={index} style={styles.leaderText}>
-                        (인도자) {trimmedLine}
-                    </Text>
-                );
-            }
-            // 홀수 인덱스 → (회중) - 검정색
+            // ✅ 주기도문, 사도신경인 경우: 그냥 텍스트만 표시 (인도자/회중 표시 없음)
             else {
                 return (
-                    <Text key={index} style={styles.congregationText}>
-                        (회중) {trimmedLine}
+                    <Text key={index} style={styles.plainText}>
+                        {trimmedLine}
                     </Text>
                 );
             }
@@ -227,7 +240,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingBottom: 60,
     },
-    // (인도자) - 청록색 + 볼드
+    // (인도자) - 청록색 + 볼드 (교독문용)
     leaderText: {
         fontSize: 17,
         lineHeight: 32,
@@ -235,12 +248,19 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         marginBottom: 20,
     },
-    // (회중), (다같이) - 검정색
+    // (회중), (다같이) - 검정색 (교독문용)
     congregationText: {
         fontSize: 17,
         lineHeight: 32,
         color: '#000000',
         marginBottom: 20,
+    },
+    // ✅ 주기도문, 사도신경용 - 검정색, (인도자)/(회중) 표시 없음
+    plainText: {
+        fontSize: 17,
+        lineHeight: 32,
+        color: '#000000',
+        marginBottom: 8,
     },
 });
 

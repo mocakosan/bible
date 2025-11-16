@@ -23,6 +23,7 @@ import Slider from '@react-native-community/slider';
 import { apiClient, API_ENDPOINTS } from '../../../utils/api';
 import { defaultStorage } from '../../../utils/mmkv';
 import BannerAdComponent from "../../../adforus";
+import BackHeaderLayout from "../../layout/header/backHeader";
 
 interface HymnData {
     id: number;
@@ -336,20 +337,7 @@ export default function HymnDetailScreen() {
             <Box safeAreaTop bg={color.status} />
 
             {/* 헤더 */}
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Text style={styles.backButtonText}>←</Text>
-                </TouchableOpacity>
-                <View style={styles.headerTitleContainer}>
-                    <Text style={styles.headerTitle}>
-                        {hymnData.num}장 {hymnData.title}
-                    </Text>
-                </View>
-                <View style={styles.headerRight} />
-            </View>
+            <BackHeaderLayout title={`${hymnData.num}장 ${hymnData.title}`} />
             <View style={[styles.adContainer, { top: 65 }]}>
                 <BannerAdComponent />
             </View>
@@ -391,10 +379,13 @@ export default function HymnDetailScreen() {
                     )}
                 </ScrollView>
 
-                {/* 가사 오버레이 */}
+                {/* ✅ 가사 오버레이 - 스크롤 가능 */}
                 {showLyrics && hymnData.content && (
                     <View style={styles.lyricsOverlay}>
-                        <ScrollView style={styles.lyricsScrollView}>
+                        <ScrollView
+                            style={styles.lyricsScrollView}
+                            showsVerticalScrollIndicator={true}
+                        >
                             <View style={styles.lyricsBox}>
                                 <Text style={styles.lyricsText}>
                                     {processContent(hymnData.content)}
@@ -671,6 +662,7 @@ const styles = StyleSheet.create({
         minHeight: 500,
         marginTop: -160,
     },
+    // ✅ 가사 오버레이 스타일 수정 - 스크롤 가능하게
     lyricsOverlay: {
         position: 'absolute',
         top: 0,
@@ -678,13 +670,15 @@ const styles = StyleSheet.create({
         right: 0,
         bottom: 0,
         backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        padding: 20,
     },
     lyricsScrollView: {
         flex: 1,
+        paddingHorizontal: 20,
+        paddingVertical: 20,
     },
     lyricsBox: {
         paddingVertical: 10,
+        paddingBottom: 300, // ✅ 하단 플레이어 공간 확보
     },
     lyricsText: {
         fontSize: 16,
@@ -754,7 +748,7 @@ const styles = StyleSheet.create({
     playbackControls: {
         flexDirection: 'row',
         alignItems: 'center',
-         gap: 8,
+        gap: 8,
     },
     controlButton: {
         width: 40,

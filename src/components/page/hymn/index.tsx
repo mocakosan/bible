@@ -472,7 +472,7 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 1,
                     type: 'gyodok',
-                    title: '교독문 - 개역개정'
+                    // title: '교독문 - 개역개정'
                 })}
             >
                 <Text style={styles.docItemText}>개역개정</Text>
@@ -482,7 +482,7 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 2,
                     type: 'gyodok',
-                    title: '교독문 - 개역한글'
+                    // title: '교독문 - 개역한글'
                 })}
             >
                 <Text style={styles.docItemText}>개역한글</Text>
@@ -494,7 +494,7 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 1,
                     type: 'kido',
-                    title: '주기도문 - 개역개정'
+                    // title: '주기도문 - 개역개정'
                 })}
             >
                 <Text style={styles.docItemText}>개역개정</Text>
@@ -504,7 +504,7 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 2,
                     type: 'kido',
-                    title: '주기도문 - 개역한글'
+                    // title: '주기도문 - 개역한글'
                 })}
             >
                 <Text style={styles.docItemText}>개역한글</Text>
@@ -516,7 +516,7 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 1,
                     type: 'sado',
-                    title: '사도신경 - 개역개정'
+                    // title: '사도신경 - 개역개정'
                 })}
             >
                 <Text style={styles.docItemText}>개역개정</Text>
@@ -526,7 +526,7 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 2,
                     type: 'sado',
-                    title: '사도신경 - 개역한글'
+                    // title: '사도신경 - 개역한글'
                 })}
             >
                 <Text style={styles.docItemText}>개역한글</Text>

@@ -21,14 +21,30 @@ interface DocItem {
     title: string;
 }
 
+interface DocContent {
+    id?: number;
+    title: string;
+    content: string;
+}
+
 interface HymnDocScreenProps {
+    route?: {
+        params: {
+            type?: ContentType;
+            version?: 1 | 2;
+        };
+    };
     navigation?: any;
 }
 
-const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
-    const [selectedContent, setSelectedContent] = useState<ContentType>('gyodok');
-    const [selectedVersion, setSelectedVersion] = useState<1 | 2>(1);
+const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ route, navigation }) => {
+    const initialType = route?.params?.type || 'gyodok';
+    const initialVersion = route?.params?.version || 1;
+
+    const [selectedContent] = useState<ContentType>(initialType);
+    const [selectedVersion, setSelectedVersion] = useState<1 | 2>(initialVersion);
     const [docList, setDocList] = useState<DocItem[]>([]);
+    const [contentData, setContentData] = useState<DocContent | null>(null); // 주기도문/사도신경 내용
     const [loading, setLoading] = useState(false);
 
     // API 엔드포인트 설정
@@ -57,18 +73,40 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
                 timeout: 10000,
             });
 
-            console.log(`✅ ${CONTENT_TITLES[selectedContent]} 목록 로드 성공:`, response.data);
+            // 주기도문과 사도신경은 바로 내용을 표시
+            if (selectedContent === 'kido' || selectedContent === 'sado') {
+                let itemData = null;
 
-            let list: DocItem[] = [];
-            if (Array.isArray(response.data)) {
-                list = response.data;
-            } else if (response.data.list && Array.isArray(response.data.list)) {
-                list = response.data.list;
-            } else if (response.data.data && Array.isArray(response.data.data)) {
-                list = response.data.data;
+                // response.data.data 구조 확인
+                if (response.data.data) {
+                    itemData = response.data.data;
+                } else if (response.data) {
+                    itemData = response.data;
+                }
+
+                // 내용이 있으면 contentData에 저장
+                if (itemData && (itemData.content || itemData.title)) {
+                    setContentData({
+                        id: itemData.id || 1,
+                        title: itemData.title || CONTENT_TITLES[selectedContent],
+                        content: itemData.content || ''
+                    });
+                } else {
+                    console.warn('⚠️ 응답 데이터 구조:', response.data);
+                    setContentData(null);
+                }
+            } else {
+                // 교독문은 목록으로 반환
+                let list: DocItem[] = [];
+                if (Array.isArray(response.data)) {
+                    list = response.data;
+                } else if (response.data.list && Array.isArray(response.data.list)) {
+                    list = response.data.list;
+                } else if (response.data.data && Array.isArray(response.data.data)) {
+                    list = response.data.data;
+                }
+                setDocList(list);
             }
-
-            setDocList(list);
         } catch (error) {
             console.error(`❌ ${CONTENT_TITLES[selectedContent]} 목록 로드 실패:`, error);
             Alert.alert(
@@ -86,22 +124,16 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
 
     const handleDocItemPress = (item: DocItem, index: number) => {
         const num = String(index + 1).padStart(3, '0');
-        console.log('📍 네비게이션 파라미터:', {
-            id: item.id,
-            title: item.title,
-            version: selectedVersion,
-            type: selectedContent,
-            num: num,
-            index: index
-        });
         navigation.navigate('GyodokDetailScreen', {
             id: item.id,
             title: item.title,
             version: selectedVersion,
             type: selectedContent,
-            num: num,
+            num: selectedContent === 'gyodok' ? num : undefined,
         });
     };
+
+
 
     const renderVersionTab = () => (
         <View style={styles.tabContainer}>
@@ -140,7 +172,26 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
         </View>
     );
 
-    const renderDocList = () => {
+    //주기도문/사도신경 내용 직접 표시
+    const renderFormattedContent = (content: string) => {
+        const normalizedContent = content.replace(/\n/g, '<br />');
+        const lines = normalizedContent.split('<br />').filter(line => line.trim());
+
+        return lines.map((line, index) => {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) {
+                return null;
+            }
+
+            return (
+                <Text key={index} style={styles.contentText}>
+                    {trimmedLine}
+                </Text>
+            );
+        });
+    };
+
+    const renderContent = () => {
         if (loading) {
             return (
                 <View style={styles.loadingContainer}>
@@ -150,6 +201,26 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
             );
         }
 
+        // 주기도문이나 사도신경인 경우 바로 내용 표시
+        if (selectedContent === 'kido' || selectedContent === 'sado') {
+            if (!contentData || !contentData.content) {
+                return (
+                    <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>내용이 없습니다.</Text>
+                    </View>
+                );
+            }
+
+            return (
+                <ScrollView style={styles.contentScrollContainer}>
+                    <View style={styles.contentWrapper}>
+                        {renderFormattedContent(contentData.content)}
+                    </View>
+                </ScrollView>
+            );
+        }
+
+        // 교독문인 경우 목록 표시
         if (docList.length === 0) {
             return (
                 <View style={styles.emptyContainer}>
@@ -168,10 +239,12 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
                         activeOpacity={0.7}
                     >
                         <Text style={styles.listItemText}>
-                            <Text style={styles.listItemNumber}>
-                                {String(index + 1).padStart(3, '0')}
-                            </Text>
-                            {'\u00A0'}{item.title}
+                            {selectedContent === 'gyodok' && (
+                                <Text style={styles.listItemNumber}>
+                                    {String(index + 1).padStart(3, '0')}{'\u00A0'}
+                                </Text>
+                            )}
+                            {item.title}
                         </Text>
                     </TouchableOpacity>
                 ))}
@@ -181,12 +254,12 @@ const HymnDocScreen: React.FC<HymnDocScreenProps> = ({ navigation }) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <BackHeaderLayout title="교독문" />
+            <BackHeaderLayout title={CONTENT_TITLES[selectedContent]} />
             <View style={styles.bannerContainer}>
                 <BannerAdComponent />
             </View>
             {renderVersionTab()}
-            {renderDocList()}
+            {renderContent()}
         </SafeAreaView>
     );
 };
@@ -200,42 +273,6 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         alignItems: 'center',
         backgroundColor: '#FFFFFF',
-    },
-    header: {
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#ECECEC',
-        backgroundColor: '#F8F8F8',
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#333333',
-    },
-    contentTabContainer: {
-        flexDirection: 'row',
-        borderBottomWidth: 1,
-        borderBottomColor: '#ECECEC',
-        backgroundColor: '#F8F8F8',
-    },
-    contentTab: {
-        flex: 1,
-        paddingVertical: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    contentTabActive: {
-        borderBottomWidth: 3,
-        borderBottomColor: '#2AC1BC',
-    },
-    contentTabText: {
-        fontSize: 14,
-        color: 'rgba(0, 0, 0, 0.5)',
-        fontWeight: '500',
-    },
-    contentTabTextActive: {
-        color: '#2AC1BC',
-        fontWeight: '700',
     },
     tabContainer: {
         flexDirection: 'row',
@@ -295,7 +332,7 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#ECECEC',
         backgroundColor: '#FFFFFF',
-
+        marginLeft:16
     },
     listItemNumber: {
         fontSize: 16,
@@ -309,6 +346,21 @@ const styles = StyleSheet.create({
         color: '#000000',
         fontWeight: '500',
         lineHeight: 22,
+    },
+    contentScrollContainer: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+    },
+    contentWrapper: {
+        paddingVertical: 20,
+        paddingHorizontal: 20,
+        paddingBottom: 60,
+    },
+    contentText: {
+        fontSize: 17,
+        lineHeight: 32,
+        color: '#000000',
+        marginBottom: 8,
     },
 });
 

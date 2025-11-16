@@ -41,7 +41,7 @@ export default function BackHeaderLayout({ title, onNavigate }: Props) {
         >
           <Flex w={'100%'} flexDirection={'row'} alignItems={'center'} marginTop={2}>
             <IconButton
-                style={{marginTop:-8}}
+                style={{marginTop:4}}
               icon={
                 <Icon
                   name="arrow-back-ios"
