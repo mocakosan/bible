@@ -13,9 +13,11 @@ import { store } from "../provider/redux/store";
 
 // 전역 변수
 let processingChapter = false;
+let processingHymn = false; // ✅ 찬송가 처리 플래그 추가
 let processingTimer: NodeJS.Timeout | null = null;
 let lastProcessTimestamp = 0;
 let lastChapterInfo = { book: 0, jang: 0 };
+let lastHymnId = 0; // ✅ 마지막 처리된 찬송가 ID
 let appState = "active";
 let backgroundEventCount = 0;
 
@@ -33,6 +35,7 @@ const bibleAudioList: string[] = [
 // 플래그 초기화 함수
 const clearProcessingFlags = () => {
   processingChapter = false;
+  processingHymn = false; // ✅ 찬송가 플래그도 초기화
   if (processingTimer) {
     clearTimeout(processingTimer);
     processingTimer = null;
@@ -85,6 +88,129 @@ const loadTrack = async (book: number, jang: number): Promise<boolean> => {
   } catch (error) {
     console.error("[BACKGROUND_SERVICE] ❌ Error loading track:", error);
     return false;
+  }
+};
+
+// ✅ 찬송가 다음 곡으로 이동하는 함수
+const moveToNextHymn = async () => {
+  const now = Date.now();
+
+  // 처리 중 타임아웃 해제
+  if (processingHymn && now - lastProcessTimestamp > 5000) {
+    console.log("[HYMN_SERVICE] ⚠️ Force clearing stuck processing flag");
+    processingHymn = false;
+  }
+
+  if (processingHymn) {
+    console.log("[HYMN_SERVICE] ⚠️ Already processing hymn change, skipping");
+    return;
+  }
+
+  processingHymn = true;
+  lastProcessTimestamp = now;
+  console.log("[HYMN_SERVICE] 🚀 Starting to process next hymn");
+
+  try {
+    // 현재 찬송가 ID 가져오기
+    const currentHymnId = defaultStorage.getNumber("current_hymn_id") ?? 1;
+    const randomPlay = defaultStorage.getBoolean("hymn_random_play_enabled") ?? false;
+    const isAccompany = defaultStorage.getBoolean("hymn_is_accompany") ?? false;
+
+    console.log(`[HYMN_SERVICE] 📖 Current hymn: ${currentHymnId}장`);
+    console.log(`[HYMN_SERVICE] 📝 Last processed hymn: ${lastHymnId}장`);
+
+    // ✅ 이미 처리한 찬송가인지 확인 - 현재 곡 기준으로 체크
+    if (lastHymnId === currentHymnId && lastHymnId !== 0) {
+      console.log(`[HYMN_SERVICE] ⚠️ Already processed hymn ${currentHymnId} - skipping`);
+      processingHymn = false;
+      return;
+    }
+
+    let nextHymnId: number;
+
+    if (randomPlay) {
+      nextHymnId = Math.floor(Math.random() * 647) + 1;
+      console.log(`[HYMN_SERVICE] 🎲 Random hymn: ${nextHymnId}장`);
+    } else if (currentHymnId < 647) {
+      nextHymnId = currentHymnId + 1;
+      console.log(`[HYMN_SERVICE] ➡️ Next hymn: ${nextHymnId}장`);
+    } else {
+      console.log("[HYMN_SERVICE] 🏁 Last hymn reached - stopping");
+      processingHymn = false;
+      return;
+    }
+
+    // 다음 찬송가 ID 저장
+    defaultStorage.set("current_hymn_id", nextHymnId);
+    defaultStorage.set("hymn_was_playing", true);
+
+    // ✅ 처리 완료 - 다음 곡 ID를 lastHymnId로 설정 (중복 방지)
+    lastHymnId = nextHymnId;
+    console.log(`[HYMN_SERVICE] ✅ Processing complete, lastHymnId set to ${nextHymnId}`);
+
+    // ✅ 백그라운드에서 바로 재생하기 위해 트랙 로드
+    console.log(`[HYMN_SERVICE] 🔄 백그라운드에서 트랙 로드 시작: ${nextHymnId}장`);
+
+    try {
+      // 플레이어 리셋
+      await TrackPlayer.reset();
+      console.log(`[HYMN_SERVICE] ✅ 플레이어 리셋 완료`);
+
+      // RepeatMode 확인
+      await TrackPlayer.setRepeatMode(RepeatMode.Off);
+      console.log(`[HYMN_SERVICE] ✅ RepeatMode.Off 설정`);
+
+      // 찬송가 오디오 URL 생성
+      const baseUrl = "https://data.bible25.com/chansong/audio/";
+      const audioUrl = isAccompany
+          ? `${baseUrl}mr${nextHymnId}.mp3`
+          : `${baseUrl}${nextHymnId}.mp3`;
+
+      console.log(`[HYMN_SERVICE] 🎵 트랙 URL: ${audioUrl}`);
+
+      // 트랙 추가
+      await TrackPlayer.add({
+        id: `hymn-${nextHymnId}-${Date.now()}`,
+        url: audioUrl,
+        title: `찬송가 ${nextHymnId}장`,
+        artist: isAccompany ? '반주' : '찬양',
+      });
+
+      console.log(`[HYMN_SERVICE] ✅ 트랙 추가 완료`);
+
+      // ✅ 즉시 재생 시도
+      console.log(`[HYMN_SERVICE] 🎵 재생 시도 중...`);
+      await TrackPlayer.play();
+      console.log(`[HYMN_SERVICE] ✅ 백그라운드에서 ${nextHymnId}장 재생 시작`);
+
+    } catch (playError) {
+      console.error("[HYMN_SERVICE] ❌ 트랙 로드/재생 실패:", playError);
+
+      // ✅ 재시도
+      console.log("[HYMN_SERVICE] 🔄 재생 재시도 중...");
+      try {
+        await TrackPlayer.play();
+        console.log(`[HYMN_SERVICE] ✅ 재시도 성공: ${nextHymnId}장 재생`);
+      } catch (retryError) {
+        console.error("[HYMN_SERVICE] ❌ 재시도도 실패:", retryError);
+        // 실패 시 포그라운드 복귀 시 자동 로드하도록 플래그만 설정
+        defaultStorage.set("hymn_background_next", true);
+        console.log("[HYMN_SERVICE] 📱 포그라운드 복귀 시 자동 로드 예정");
+        // 실패 시 lastHymnId 초기화
+        lastHymnId = 0;
+      }
+    }
+
+    // 플래그 해제
+    setTimeout(() => {
+      processingHymn = false;
+      console.log("[HYMN_SERVICE] ✅ Processing flag cleared");
+    }, 2000);
+
+  } catch (error) {
+    console.error("[HYMN_SERVICE] ❌ Error handling next hymn:", error);
+    processingHymn = false;
+    lastHymnId = 0; // ✅ 에러 시 리셋
   }
 };
 
@@ -141,10 +267,10 @@ const moveToNextChapter = async () => {
     const currentJang = defaultStorage.getNumber("bible_jang") ?? 1;
     console.log(`[BACKGROUND_SERVICE] 📖 Current: ${currentBook}권 ${currentJang}장`);
 
-    //‘과거(이전장/이전권)’로 이동한 경우 내부 마커 초기화
+    //'과거(이전장/이전권)'로 이동한 경우 내부 마커 초기화
     const wentBackward =
-      currentBook < lastChapterInfo.book ||
-      (currentBook === lastChapterInfo.book && currentJang < lastChapterInfo.jang);
+        currentBook < lastChapterInfo.book ||
+        (currentBook === lastChapterInfo.book && currentJang < lastChapterInfo.jang);
     if (wentBackward) {
       console.log("[BACKGROUND_SERVICE] Detected backward navigation → reset markers");
       lastChapterInfo = { book: 0, jang: 0 };
@@ -156,7 +282,7 @@ const moveToNextChapter = async () => {
     let nextJang = currentJang + 1;
 
     // 다음 장 계산 로직 - BibleStep 구조 수정
-    const maxChapters = BibleStep[currentBook - 1]?.count || 1; // jang → count로 수정
+    const maxChapters = BibleStep[currentBook - 1]?.count || 1;
     console.log(`[BACKGROUND_SERVICE] 📊 Max chapters in book ${currentBook}: ${maxChapters}`);
 
     if (nextJang > maxChapters) {
@@ -174,9 +300,9 @@ const moveToNextChapter = async () => {
     // 이미 다음 장을 처리했는지 확인 (목표 장 기준)
     // 단, 초기값(0,0)은 무시
     if (
-      lastChapterInfo.book === nextBook &&
-      lastChapterInfo.jang === nextJang &&
-      lastChapterInfo.book !== 0
+        lastChapterInfo.book === nextBook &&
+        lastChapterInfo.jang === nextJang &&
+        lastChapterInfo.book !== 0
     ) {
       console.log(
           `[BACKGROUND_SERVICE] ⚠️ Already processed target chapter: ${nextBook}권 ${nextJang}장 - skipping`
@@ -190,7 +316,8 @@ const moveToNextChapter = async () => {
     defaultStorage.set("bible_jang", nextJang);
     defaultStorage.set("bible_book_connec", nextBook);
     defaultStorage.set("bible_jang_connec", nextJang);
-        // Redux 상태 업데이트 - changePage 액션 사용
+
+    // Redux 상태 업데이트 - changePage 액션 사용
     try {
       store.dispatch(bibleSelectSlice.actions.changePage({
         book: nextBook,
@@ -199,7 +326,6 @@ const moveToNextChapter = async () => {
       console.log(`[BACKGROUND_SERVICE] 🔄 Redux state updated`);
     } catch (error) {
       console.error("[BACKGROUND_SERVICE] ⚠️ Redux dispatch error (non-critical):", error);
-      // Redux 에러는 치명적이지 않으므로 계속 진행
     }
 
     // 트랙 로드 및 재생
@@ -210,18 +336,11 @@ const moveToNextChapter = async () => {
 
       try {
         console.log(`[BACKGROUND_SERVICE] 🎵 Calling TrackPlayer.play()...`);
-
-        // 백그라운드에서는 setTimeout 사용 안 함 (지연될 수 있음)
         await TrackPlayer.play();
         console.log(`[BACKGROUND_SERVICE] ✅ Started playback of ${nextBook}권 ${nextJang}장`);
-
-        // 처리 완료된 장 기록
         lastChapterInfo = { book: nextBook, jang: nextJang };
-
       } catch (playError) {
         console.error(`[BACKGROUND_SERVICE] ❌ Failed to start playback:`, playError);
-
-        // 즉시 재시도 (setTimeout 사용 안 함)
         console.log(`[BACKGROUND_SERVICE] 🔄 Retrying playback immediately...`);
         try {
           await TrackPlayer.play();
@@ -260,6 +379,7 @@ const PlaybackService = async () => {
 
     clearProcessingFlags();
     lastChapterInfo = { book: 0, jang: 0 };
+    lastHymnId = 0; // ✅ 찬송가 초기화
     backgroundEventCount = 0;
     appState = "active";
 
@@ -292,7 +412,7 @@ const PlaybackService = async () => {
       console.error("[BACKGROUND_SERVICE] ⚠️ Error setting repeat mode:", error);
     }
 
-    // Queue end 이벤트 리스너 - 백그라운드 전용 (성경 + 성경일독 모두 지원)
+    // Queue end 이벤트 리스너 - 백그라운드 전용 (성경 + 성경일독 + 찬송가 모두 지원)
     const queueEndListener = TrackPlayer.addEventListener(
         Event.PlaybackQueueEnded,
         async (event) => {
@@ -302,6 +422,27 @@ const PlaybackService = async () => {
           // ⭐ 백그라운드에서만 처리 (포어그라운드는 각 플레이어에서 처리)
           if (AppState.currentState === "active") {
             console.log("[BACKGROUND_SERVICE] ℹ️ App is active, letting foreground player handle it");
+            return;
+          }
+
+          // ✅ 찬송가 플레이어인지 먼저 확인 (우선순위 높임)
+          const isHymnPlayer = defaultStorage.getBoolean("is_hymn_player") ?? false;
+          const hymnAutoPlay = defaultStorage.getBoolean("hymn_auto_play_enabled") ?? false;
+
+          console.log(`[BACKGROUND_SERVICE] 🔍 플래그 확인:`);
+          console.log(`[BACKGROUND_SERVICE]   - is_hymn_player: ${isHymnPlayer}`);
+          console.log(`[BACKGROUND_SERVICE]   - hymn_auto_play_enabled: ${hymnAutoPlay}`);
+
+          if (isHymnPlayer) {
+            console.log("[BACKGROUND_SERVICE] 🎵 찬송가 플레이어 감지됨");
+
+            if (!hymnAutoPlay) {
+              console.log("[BACKGROUND_SERVICE] ❌ 찬송가 자동재생 비활성화");
+              return;
+            }
+
+            console.log("[BACKGROUND_SERVICE] ✅ 찬송가 다음 곡으로 이동 시작");
+            moveToNextHymn();
             return;
           }
 
@@ -318,7 +459,6 @@ const PlaybackService = async () => {
               return;
             }
           }
-          // 성경일독 플레이어는 항상 자동으로 다음 장 재생
 
           console.log("[BACKGROUND_SERVICE] ✅ Attempting to move to next chapter in background");
           moveToNextChapter();
@@ -332,10 +472,18 @@ const PlaybackService = async () => {
           console.log(`[BACKGROUND_SERVICE] 🎵 Playback state changed: ${event.state}`);
 
           if (event.state === State.Playing) {
+            const isHymnPlayer = defaultStorage.getBoolean("is_hymn_player") ?? false;
             const isIlldocPlayer = defaultStorage.getBoolean("is_illdoc_player") ?? false;
-            console.log(
-                `[BACKGROUND_SERVICE] Current player is ${isIlldocPlayer ? "IllDoc" : "Bible"}`
-            );
+
+            let playerType = "Bible";
+            if (isHymnPlayer) {
+              playerType = "Hymn";
+            } else if (isIlldocPlayer) {
+              playerType = "IllDoc";
+            }
+
+            console.log(`[BACKGROUND_SERVICE] Current player is ${playerType}`);
+            console.log(`[BACKGROUND_SERVICE] 플래그 상태: hymn=${isHymnPlayer}, illdoc=${isIlldocPlayer}`);
 
             TrackPlayer.setRepeatMode(RepeatMode.Off).catch((e) => {
               console.error("[BACKGROUND_SERVICE] Error setting repeat mode on state change:", e);
@@ -364,6 +512,9 @@ const PlaybackService = async () => {
             backgroundEventCount = 0;
           } else if (appState === "background" && nextAppState === "active") {
             console.log("[BACKGROUND_SERVICE] ⬆️ App returned to foreground");
+
+            // ✅ 찬송가 플레이어 마커 리셋
+            lastHymnId = 0;
           }
 
           appState = nextAppState;
