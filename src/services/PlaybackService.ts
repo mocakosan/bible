@@ -91,7 +91,7 @@ const loadTrack = async (book: number, jang: number): Promise<boolean> => {
   }
 };
 
-// ✅ 찬송가 다음 곡으로 이동하는 함수
+// ✅ 찬송가 다음 곡으로 이동하는 함수 - 수정됨
 const moveToNextHymn = async () => {
   const now = Date.now();
 
@@ -119,13 +119,7 @@ const moveToNextHymn = async () => {
     console.log(`[HYMN_SERVICE] 📖 Current hymn: ${currentHymnId}장`);
     console.log(`[HYMN_SERVICE] 📝 Last processed hymn: ${lastHymnId}장`);
 
-    // ✅ 이미 처리한 찬송가인지 확인 - 현재 곡 기준으로 체크
-    if (lastHymnId === currentHymnId && lastHymnId !== 0) {
-      console.log(`[HYMN_SERVICE] ⚠️ Already processed hymn ${currentHymnId} - skipping`);
-      processingHymn = false;
-      return;
-    }
-
+    // ✅ 1단계: 다음 곡 ID 먼저 계산
     let nextHymnId: number;
 
     if (randomPlay) {
@@ -140,18 +134,28 @@ const moveToNextHymn = async () => {
       return;
     }
 
+    // ✅ 2단계: 다음 곡 ID로 중복 체크 (현재 곡이 아닌 다음 곡 기준)
+    if (lastHymnId === nextHymnId && lastHymnId !== 0) {
+      console.log(`[HYMN_SERVICE] ⚠️ Already processing hymn ${nextHymnId} - skipping`);
+      processingHymn = false;
+      return;
+    }
+
+    // ✅ 3단계: 트랙 로드 전에 lastHymnId 업데이트 (중복 방지)
+    lastHymnId = nextHymnId;
+    console.log(`[HYMN_SERVICE] ✅ lastHymnId set to ${nextHymnId} before loading`);
+
     // 다음 찬송가 ID 저장
     defaultStorage.set("current_hymn_id", nextHymnId);
     defaultStorage.set("hymn_was_playing", true);
-
-    // ✅ 처리 완료 - 다음 곡 ID를 lastHymnId로 설정 (중복 방지)
-    lastHymnId = nextHymnId;
-    console.log(`[HYMN_SERVICE] ✅ Processing complete, lastHymnId set to ${nextHymnId}`);
 
     // ✅ 백그라운드에서 바로 재생하기 위해 트랙 로드
     console.log(`[HYMN_SERVICE] 🔄 백그라운드에서 트랙 로드 시작: ${nextHymnId}장`);
 
     try {
+      // ✅ 재생 중이던 상태 먼저 저장
+      defaultStorage.set("hymn_was_playing", true);
+
       // 플레이어 리셋
       await TrackPlayer.reset();
       console.log(`[HYMN_SERVICE] ✅ 플레이어 리셋 완료`);
@@ -160,17 +164,17 @@ const moveToNextHymn = async () => {
       await TrackPlayer.setRepeatMode(RepeatMode.Off);
       console.log(`[HYMN_SERVICE] ✅ RepeatMode.Off 설정`);
 
-      // 찬송가 오디오 URL 생성
-      const baseUrl = "https://data.bible25.com/chansong/audio/";
+      // ✅ 찬송가 오디오 URL 생성 - 수정된 패턴
       const audioUrl = isAccompany
-          ? `${baseUrl}mr${nextHymnId}.mp3`
-          : `${baseUrl}${nextHymnId}.mp3`;
+          ? `https://data.bible25.com/chansong/audio_mr/${nextHymnId}.mp3`
+          : `https://data.bible25.com/chansong/audio/${nextHymnId}.mp3`;
 
+      console.log(`[HYMN_SERVICE] 🔍 반주모드: ${isAccompany}`);
       console.log(`[HYMN_SERVICE] 🎵 트랙 URL: ${audioUrl}`);
 
-      // 트랙 추가
+      // 트랙 추가 - ID를 hymn- 형식으로 명확히 설정
       await TrackPlayer.add({
-        id: `hymn-${nextHymnId}-${Date.now()}`,
+        id: `hymn-${nextHymnId}`,
         url: audioUrl,
         title: `찬송가 ${nextHymnId}장`,
         artist: isAccompany ? '반주' : '찬양',
@@ -196,7 +200,7 @@ const moveToNextHymn = async () => {
         // 실패 시 포그라운드 복귀 시 자동 로드하도록 플래그만 설정
         defaultStorage.set("hymn_background_next", true);
         console.log("[HYMN_SERVICE] 📱 포그라운드 복귀 시 자동 로드 예정");
-        // 실패 시 lastHymnId 초기화
+        // ✅ 실패 시 lastHymnId 초기화 (다음 시도를 위해)
         lastHymnId = 0;
       }
     }
