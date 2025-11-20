@@ -49,8 +49,8 @@ apiClient.interceptors.response.use(
 // API 엔드포인트 상수
 export const API_ENDPOINTS = {
     // 찬송가
-    HYMN_LIST: '/chansong/song',
-    HYMN_DETAIL: '/chansong/song', // ?id={id} 파라미터 사용
+    HYMN_LIST: '/chansong/song',      // 찬송가 목록 조회
+    HYMN_DETAIL: '/chansong/song',    // 찬송가 상세 조회 (id 파라미터 필요)
     HYMN_CATEGORY: '/hymm/category',
     HYMN_CATEGORY_LIST: '/hymm/list',
 
