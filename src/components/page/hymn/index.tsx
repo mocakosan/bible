@@ -20,6 +20,8 @@ import { API_ENDPOINTS, apiClient } from "../../../utils/api";
 import BannerAdComponent from "../../../adforus";
 import FooterLayout from "../../layout/footer/footer";
 import BackHeaderLayout from "../../layout/header/backHeader";
+import TrackPlayer, {State} from "react-native-track-player";
+import {defaultStorage} from "../../../utils/mmkv";
 
 
 const HYMN_CATEGORIES: HymnCategory[] = [
@@ -66,6 +68,54 @@ export default function HymnListScreen() {
     const [totalPages, setTotalPages] = useState(1);
 
     const searchInputRef = useRef<TextInput>(null);
+
+    useEffect(() => {
+        const stopHymnPlayer = async () => {
+            try {
+                console.log('[HYMN_LIST] 찬송가 플레이어 정지 시작');
+
+                // ✅ 플레이어 상태 확인
+                const state = await TrackPlayer.getState();
+                console.log(`[HYMN_LIST] 현재 플레이어 상태: ${state}`);
+
+                // ✅ 재생 중이거나 일시정지 상태면 정지
+                if (state === State.Playing || state === State.Paused || state === State.Ready || state === State.Buffering) {
+                    await TrackPlayer.pause();
+                    console.log('[HYMN_LIST] ⏸ 일시정지 완료');
+
+                    await TrackPlayer.stop();
+                    console.log('[HYMN_LIST] ⏹ 정지 완료');
+                }
+
+                // ✅ 큐 리셋
+                await TrackPlayer.reset();
+                console.log('[HYMN_LIST] 🔄 큐 리셋 완료');
+
+                // ✅ 찬송가 관련 모든 스토리지 초기화
+                defaultStorage.set('hymn_was_playing', false);
+                defaultStorage.set('is_hymn_player', false);
+                defaultStorage.delete('current_hymn_id'); // ✅ 현재 찬송가 ID 삭제
+                console.log('[HYMN_LIST] 📝 플래그 초기화 완료 (is_hymn_player = false, current_hymn_id 삭제)');
+
+                console.log('[HYMN_LIST] ✅ 찬송가 플레이어 완전 정지 및 초기화 완료');
+            } catch (error) {
+                console.error('[HYMN_LIST] ❌ 플레이어 정지 실패:', error);
+            }
+        };
+
+        stopHymnPlayer();
+
+        // ✅ 포커스 리스너 추가 - 화면 복귀 시에도 플레이어 정지 보장
+        const unsubscribeFocus = navigation.addListener('focus', () => {
+            console.log('[HYMN_LIST] 화면 포커스 - 플레이어 상태 재확인');
+            stopHymnPlayer();
+        });
+
+        return () => {
+            console.log('[HYMN_LIST] 화면 언마운트');
+            unsubscribeFocus();
+        };
+    }, [navigation]);
 
     // 찬송가 데이터 로드
     useEffect(() => {
