@@ -64,12 +64,10 @@ export default function HymnDetailScreen() {
     const isNavigatingRef = useRef(false);
     const isPlaying = playbackState.state === State.Playing;
     const isInitializing = useRef(false);
-    const hasAutoPlayed = useRef(false);
     const lastHymnId = useRef(hymnId);
     const isSyncingTrack = useRef(false);
     const isUpdatingTrack = useRef(false);
     const appStateRef = useRef(AppState.currentState);
-
 
     useEffect(() => {
         const subscription = AppState.addEventListener('change', handleAppStateChange);
@@ -78,29 +76,24 @@ export default function HymnDetailScreen() {
             console.log('🎵 찬송가 화면 포커스');
             isNavigatingRef.current = false;
 
-            // ✅ 자동 다음곡 이동 완료
             if (isAutoNextingRef.current) {
                 console.log('[FOCUS] 🔄 자동 다음곡 이동 완료');
                 isAutoNextingRef.current = false;
 
-                // ✅ 자동 다음곡 처리 플래그 해제 (약간의 지연)
                 setTimeout(() => {
                     isProcessingAutoNext.current = false;
                 }, 500);
             }
 
-            // ✅ 찬송가 플레이어 플래그 활성화
             defaultStorage.set("is_hymn_player", true);
             console.log('[FOCUS] is_hymn_player = true');
 
-            // ✅ current_hymn_id가 없으면 현재 화면 ID로 설정 (HymnListScreen에서 온 경우)
             const storedHymnId = defaultStorage.getNumber('current_hymn_id');
             if (!storedHymnId || storedHymnId === 0) {
                 console.log('[FOCUS] 📝 스토리지 ID 없음 - 현재 화면 ID로 초기화');
                 defaultStorage.set('current_hymn_id', hymnId);
             }
 
-            // ✅ 백그라운드 동기화 체크
             try {
                 const backgroundHymnId = defaultStorage.getNumber('current_hymn_id') ?? hymnId;
                 const backgroundIsAccompany = defaultStorage.getBoolean('hymn_is_accompany') ?? false;
@@ -108,13 +101,10 @@ export default function HymnDetailScreen() {
                 console.log(`[FOCUS] 현재 화면: ${hymnId}장, 스토리지: ${backgroundHymnId}장`);
                 console.log(`[FOCUS] 현재 반주모드: ${isAccompany ? '반주' : '찬양'}, 스토리지: ${backgroundIsAccompany ? '반주' : '찬양'}`);
 
-                // ✅ 현재 재생 중인 트랙 확인
                 const currentTrack = await TrackPlayer.getActiveTrack();
 
-                // ✅ 트랙이 없으면 새로 시작 (HymnListScreen에서 온 경우)
                 if (!currentTrack) {
                     console.log('[FOCUS] 🆕 트랙 없음 - 새로 시작');
-                    // ✅ 반주 모드 UI 동기화
                     if (backgroundIsAccompany !== isAccompany) {
                         console.log(`[FOCUS] 🎹 반주모드 UI 동기화: ${backgroundIsAccompany ? '반주' : '찬양'}`);
                         setIsAccompany(backgroundIsAccompany);
@@ -129,7 +119,6 @@ export default function HymnDetailScreen() {
                     console.log(`[FOCUS] 트랙 찬송가: ${trackHymnId}장`);
                     console.log(`[FOCUS] 트랙 타입: ${currentTrack.artist}`);
 
-                    // ✅ 재생 위치 확인
                     try {
                         const position = await TrackPlayer.getPosition();
                         const duration = await TrackPlayer.getDuration();
@@ -138,11 +127,9 @@ export default function HymnDetailScreen() {
                         console.log(`[FOCUS] 플레이어 상태: ${state}`);
                         console.log(`[FOCUS] 재생 위치: ${position.toFixed(2)}s / ${duration.toFixed(2)}s`);
 
-                        // ✅ ended 상태이면 트랙 동기화 하지 않음 (다음 곡으로 이동한 것이므로)
                         if (state === State.Ended) {
                             console.log('[FOCUS] ⚠️ 이전 트랙이 ended 상태 - 동기화 스킵 (정상적인 다음 곡 이동)');
 
-                            // ✅ 반주 모드 UI 동기화만 수행
                             if (backgroundIsAccompany !== isAccompany) {
                                 console.log(`[FOCUS] 🎹 반주모드 UI 동기화: ${backgroundIsAccompany ? '반주' : '찬양'}`);
                                 setIsAccompany(backgroundIsAccompany);
@@ -153,25 +140,18 @@ export default function HymnDetailScreen() {
                         console.log(`[FOCUS] 재생 위치 확인 불가`);
                     }
 
-                    // ✅ 트랙 찬송가와 화면 찬송가가 다르면 동기화
                     if (trackHymnId !== hymnId) {
                         console.log(`[FOCUS] 🔄 백그라운드에서 ${trackHymnId}장으로 변경됨 - 화면 동기화`);
-
-                        // ✅ 네비게이션 플래그 설정 (플레이어 유지)
                         isNavigatingRef.current = true;
-
-                        // ✅ 화면 이동
                         navigation.replace('HymnDetailScreen', { hymnId: trackHymnId });
                         return;
                     }
 
-                    // ✅ 같은 찬송가지만 반주 모드가 다른 경우 UI 동기화
                     if (backgroundIsAccompany !== isAccompany) {
                         console.log(`[FOCUS] 🎹 반주모드 UI 동기화: ${backgroundIsAccompany ? '반주' : '찬양'}`);
                         setIsAccompany(backgroundIsAccompany);
                     }
                 } else if (backgroundHymnId !== hymnId) {
-                    // ✅ 트랙이 없지만 스토리지가 다르면 동기화
                     console.log(`[FOCUS] 🔄 스토리지 동기화 - ${backgroundHymnId}장으로 이동`);
                     isNavigatingRef.current = true;
                     navigation.replace('HymnDetailScreen', { hymnId: backgroundHymnId });
@@ -185,17 +165,14 @@ export default function HymnDetailScreen() {
         const unsubscribeBlur = navigation.addListener('blur', async () => {
             console.log('👋 찬송가 화면 블러 (포커스 벗어남)');
 
-            // ✅ 자동재생 플래그 확인
             const wasPlaying = defaultStorage.getBoolean('hymn_was_playing') ?? false;
             console.log(`[BLUR] 자동재생 플래그: ${wasPlaying ? 'ON' : 'OFF'}`);
 
-            // ✅ 자동 다음곡 이동 중이거나 자동재생 플래그가 켜져있으면 플레이어 유지
             if (isAutoNextingRef.current || wasPlaying) {
                 console.log('[BLUR] 🎵 자동 다음곡 이동 중 또는 자동재생 ON - 플레이어 유지');
                 return;
             }
 
-            // ✅ 네비게이션 중인지 확인
             if (isNavigatingRef.current) {
                 console.log('[BLUR] 🔄 다른 찬송가로 화면 전환 중 - 플레이어 유지');
                 return;
@@ -207,8 +184,6 @@ export default function HymnDetailScreen() {
 
                 if (state === State.Playing || state === State.Buffering || state === State.Loading) {
                     console.log('[BLUR] 🎵 재생 중 또는 버퍼링 중 - 백그라운드 재생 유지');
-                    // ✅ is_hymn_player 플래그 유지 (백그라운드 자동재생을 위해)
-                    // stopAndResetPlayer()를 호출하지 않음
                 } else {
                     console.log('[BLUR] ⏹ 재생 중 아님 - 플레이어 정지');
                     stopAndResetPlayer();
@@ -245,7 +220,6 @@ export default function HymnDetailScreen() {
         if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
             console.log('[FOREGROUND] 찬송가 화면 복귀');
 
-            // ✅ 찬송가 플레이어 플래그 확인
             const isHymnPlayer = defaultStorage.getBoolean('is_hymn_player') ?? false;
 
             if (!isHymnPlayer) {
@@ -254,12 +228,10 @@ export default function HymnDetailScreen() {
             }
 
             try {
-                // ✅ 백그라운드에서 변경된 찬송가 ID 확인
                 const backgroundHymnId = defaultStorage.getNumber('current_hymn_id') ?? hymnId;
                 console.log(`[FOREGROUND] 현재 화면 찬송가: ${hymnId}장`);
                 console.log(`[FOREGROUND] 백그라운드 찬송가: ${backgroundHymnId}장`);
 
-                // ✅ 현재 재생 중인 트랙 확인
                 const currentTrack = await TrackPlayer.getActiveTrack();
                 let trackHymnId = backgroundHymnId;
 
@@ -269,14 +241,9 @@ export default function HymnDetailScreen() {
                     console.log(`[FOREGROUND] 트랙 찬송가: ${trackHymnId}장`);
                 }
 
-                // ✅ 백그라운드에서 다른 찬송가로 변경되었으면 화면 업데이트
                 if (trackHymnId !== hymnId) {
                     console.log(`[FOREGROUND] 🔄 백그라운드에서 ${trackHymnId}장으로 변경됨 - 화면 동기화`);
-
-                    // ✅ 네비게이션 플래그 설정
                     isNavigatingRef.current = true;
-
-                    // ✅ 화면 이동
                     navigation.replace('HymnDetailScreen', { hymnId: trackHymnId });
                     return;
                 }
@@ -288,7 +255,6 @@ export default function HymnDetailScreen() {
                 console.log(`[FOREGROUND] 플레이어 상태: ${state}`);
                 console.log(`[FOREGROUND] 재생 위치: ${position.toFixed(2)}s / ${duration.toFixed(2)}s`);
 
-                // ✅ 자동재생 플래그 확인
                 const shouldAutoPlay = defaultStorage.getBoolean('hymn_was_playing') ?? false;
                 console.log(`[FOREGROUND] 자동재생 플래그: ${shouldAutoPlay ? 'ON' : 'OFF'}`);
 
@@ -301,7 +267,6 @@ export default function HymnDetailScreen() {
                         try {
                             const currentPosition = await TrackPlayer.getPosition();
                             console.log(`[FOREGROUND] ${currentPosition.toFixed(2)}s 위치에서 재생 재개`);
-
                             await TrackPlayer.play();
                             console.log('[FOREGROUND] ✅ 재생 재개 성공');
                         } catch (error) {
@@ -393,11 +358,9 @@ export default function HymnDetailScreen() {
         try {
             console.log('[STOP] 플레이어 정지 시작');
 
-            // ✅ 자동재생 플래그 확인
             const wasPlaying = defaultStorage.getBoolean('hymn_was_playing') ?? false;
             console.log(`[STOP] 자동재생 플래그: ${wasPlaying ? 'ON' : 'OFF'}`);
 
-            // ✅ 자동재생 플래그가 켜져있으면 플레이어 정지하지 않음
             if (wasPlaying) {
                 console.log('[STOP] ⚠️ 자동재생 플래그 ON - 플레이어 유지');
                 return;
@@ -438,7 +401,8 @@ export default function HymnDetailScreen() {
         loadHymnDetail();
         initializePlayer();
 
-        const savedAutoPlay = defaultStorage.getBoolean("hymn_auto_play_enabled") ?? true;
+        // ✅ 자동재생 기본값을 false로 변경
+        const savedAutoPlay = defaultStorage.getBoolean("hymn_auto_play_enabled") ?? false; // true → false
         const savedRandomPlay = defaultStorage.getBoolean("hymn_random_play_enabled") ?? false;
         const savedIsAccompany = defaultStorage.getBoolean("hymn_is_accompany") ?? false;
 
@@ -456,7 +420,6 @@ export default function HymnDetailScreen() {
         if (hymnData && playerReady) {
             console.log(`[EFFECT] hymnId 변경됨: ${hymnId}장 - 동기화 시작`);
 
-            // ✅ 약간의 딜레이 후 동기화 (로드 완료 보장)
             const timer = setTimeout(() => {
                 checkAndSyncTrack();
             }, 300);
@@ -465,7 +428,6 @@ export default function HymnDetailScreen() {
         }
     }, [hymnData, playerReady, hymnId]);
 
-    // ✅ 자동 다음곡 재생 - 포그라운드 전용
     useTrackPlayerEvents([Event.PlaybackQueueEnded, Event.PlaybackState], async (event) => {
         console.log(`[HYMN_EVENT] 이벤트: ${event.type}, 앱 상태: ${AppState.currentState}`);
 
@@ -474,90 +436,79 @@ export default function HymnDetailScreen() {
             return;
         }
 
-        // ✅ PlaybackQueueEnded 이벤트 처리
+        // ✅ 트랙 업데이트 중이면 모든 이벤트 무시
+        if (isUpdatingTrack.current) {
+            console.log(`⏭️ [${event.type}] 트랙 업데이트 중 - 이벤트 무시`);
+            return;
+        }
+
+        // ✅ 이미 처리 중이면 모든 이벤트 무시
+        if (isProcessingAutoNext.current) {
+            console.log(`⏭️ [${event.type}] 이미 자동 다음곡 처리 중 - 이벤트 무시`);
+            return;
+        }
+
         if (event.type === Event.PlaybackQueueEnded) {
             console.log('🎯 [포그라운드] PlaybackQueueEnded 이벤트');
-
-            // ✅ 이미 처리 중이면 스킵
-            if (isProcessingAutoNext.current) {
-                console.log('⏭️ 이미 자동 다음곡 처리 중 - 이벤트 무시');
-                return;
-            }
 
             const currentAutoPlay = defaultStorage.getBoolean("hymn_auto_play_enabled") ?? false;
 
             if (currentAutoPlay) {
-                console.log(`✅ 자동 다음곡 실행 (QueueEnded)`);
+                console.log(`✅ [QueueEnded] 자동 다음곡 실행 시작`);
                 isProcessingAutoNext.current = true;
                 defaultStorage.set('hymn_was_playing', true);
 
                 setTimeout(() => {
+                    console.log(`🚀 [QueueEnded] handleNext 호출`);
                     handleNext();
-                    setTimeout(() => {
-                        isProcessingAutoNext.current = false;
-                    }, 1000);
                 }, 300);
             }
         }
 
-        // ✅ PlaybackState 변경 이벤트 처리
         else if (event.type === Event.PlaybackState) {
             const state = event.state;
             console.log(`🎯 [포그라운드] 상태 변경: ${state}`);
 
-            // ✅ 이미 처리 중이면 모든 상태 변경 무시
-            if (isProcessingAutoNext.current) {
-                console.log('⏭️ 이미 자동 다음곡 처리 중 - 상태 변경 무시');
-                return;
-            }
-
-            // ✅ Ended 상태 처리
             if (state === State.Ended) {
                 console.log('🎯 [포그라운드] State.Ended 감지');
 
                 const currentAutoPlay = defaultStorage.getBoolean("hymn_auto_play_enabled") ?? false;
 
                 if (currentAutoPlay) {
-                    console.log(`✅ 자동 다음곡 실행 (Ended)`);
+                    console.log(`✅ [Ended] 자동 다음곡 실행 시작`);
                     isProcessingAutoNext.current = true;
                     defaultStorage.set('hymn_was_playing', true);
 
                     setTimeout(() => {
+                        console.log(`🚀 [Ended] handleNext 호출`);
                         handleNext();
-                        setTimeout(() => {
-                            isProcessingAutoNext.current = false;
-                        }, 1000);
                     }, 300);
                 }
             }
 
-            // ✅ Stopped 상태 처리 (재생 완료 시 stopped로 변경되는 경우)
             else if (state === State.Stopped) {
                 console.log('🎯 [포그라운드] State.Stopped 감지');
 
-                // ✅ 재생 위치 확인 (완료된 것인지 수동 정지인지 구분)
                 try {
                     const position = await TrackPlayer.getPosition();
                     const duration = await TrackPlayer.getDuration();
 
                     console.log(`🔍 재생 위치: ${position.toFixed(2)}s / ${duration.toFixed(2)}s`);
 
-                    // ✅ 재생이 거의 끝까지 진행되었으면 완료로 간주 (마지막 1초 이내)
+                    // ✅ 재생 완료 감지 조건 강화
                     if (duration > 0 && (duration - position) < 1) {
                         console.log('🎯 [포그라운드] 재생 완료 감지 (Stopped at end)');
 
                         const currentAutoPlay = defaultStorage.getBoolean("hymn_auto_play_enabled") ?? false;
 
                         if (currentAutoPlay) {
-                            console.log(`✅ 자동 다음곡 실행 (Stopped)`);
+                            console.log(`✅ [Stopped] 자동 다음곡 실행 시작`);
                             isProcessingAutoNext.current = true;
                             defaultStorage.set('hymn_was_playing', true);
 
                             setTimeout(() => {
+                                console.log(`🚀 [Stopped] handleNext 호출`);
                                 handleNext();
-                                setTimeout(() => {
-                                    isProcessingAutoNext.current = false;
-                                }, 1000);
                             }, 300);
                         }
                     } else {
@@ -572,8 +523,7 @@ export default function HymnDetailScreen() {
 
     useEffect(() => {
         if (lastHymnId.current !== hymnId) {
-            hasAutoPlayed.current = false;
-            isProcessingAutoNext.current = false; // ✅ 추가
+            isProcessingAutoNext.current = false;
             lastHymnId.current = hymnId;
             console.log(`📌 찬송가 변경: ${hymnId}장, 플래그 리셋`);
         }
@@ -670,64 +620,6 @@ export default function HymnDetailScreen() {
             isInitializing.current = false;
         }
     };
-    // const lastProgressRef = useRef({ position: 0, duration: 0 });
-
-    // useEffect(() => {
-    //     // ✅ 재생이 진행 중일 때만 체크
-    //     if (isPlaying && progress.duration > 0) {
-    //         lastProgressRef.current = {
-    //             position: progress.position,
-    //             duration: progress.duration,
-    //         };
-    //
-    //         // ✅ 재생이 끝에 가까워지면 (마지막 2초 이내)
-    //         const remaining = progress.duration - progress.position;
-    //         if (remaining > 0 && remaining < 2) {
-    //             console.log(`⏱️ 재생 거의 완료: ${remaining.toFixed(2)}초 남음`);
-    //         }
-    //     }
-    // }, [progress.position, progress.duration, isPlaying]);
-
-    // useEffect(() => {
-    //     const checkPlaybackCompletion = async () => {
-    //         // ✅ 이미 처리 중이면 스킵
-    //         if (isProcessingAutoNext.current) {
-    //             console.log('[PLAYBACK_CHECK] ⏭️ 이미 자동 다음곡 처리 중 - 스킵');
-    //             return;
-    //         }
-    //
-    //         if (!isPlaying && lastProgressRef.current.duration > 0) {
-    //             const { position, duration } = lastProgressRef.current;
-    //             const remaining = duration - position;
-    //
-    //             console.log(`[PLAYBACK_CHECK] 재생 정지됨`);
-    //             console.log(`[PLAYBACK_CHECK] 마지막 위치: ${position.toFixed(2)}s / ${duration.toFixed(2)}s`);
-    //             console.log(`[PLAYBACK_CHECK] 남은 시간: ${remaining.toFixed(2)}s`);
-    //
-    //             // ✅ 재생이 거의 완료되었고 (2초 이내), 자동재생이 켜져있으면
-    //             if (remaining < 2) {
-    //                 const currentAutoPlay = defaultStorage.getBoolean("hymn_auto_play_enabled") ?? false;
-    //
-    //                 console.log(`[PLAYBACK_CHECK] 자동재생: ${currentAutoPlay ? 'ON' : 'OFF'}`);
-    //
-    //                 if (currentAutoPlay) {
-    //                     console.log(`✅ [PLAYBACK_CHECK] 재생 완료 감지 - 다음 곡 실행`);
-    //                     isProcessingAutoNext.current = true;
-    //                     defaultStorage.set('hymn_was_playing', true);
-    //
-    //                     setTimeout(() => {
-    //                         handleNext();
-    //                         setTimeout(() => {
-    //                             isProcessingAutoNext.current = false;
-    //                         }, 1000);
-    //                     }, 300);
-    //                 }
-    //             }
-    //         }
-    //     };
-    //
-    //     checkPlaybackCompletion();
-    // }, [isPlaying, handleNext]);
 
     const checkAndSyncTrack = async () => {
         if (isSyncingTrack.current) {
@@ -751,7 +643,6 @@ export default function HymnDetailScreen() {
             const queue = await TrackPlayer.getQueue();
             console.log(`[SYNC] 큐 길이: ${queue.length}`);
 
-            // ✅ 큐가 비어있으면 새로 시작
             if (queue.length === 0) {
                 console.log('[SYNC] 🆕 큐가 비어있음 - 새로 시작');
                 await updateTrack();
@@ -761,7 +652,6 @@ export default function HymnDetailScreen() {
 
             const currentTrack = await TrackPlayer.getActiveTrack();
 
-            // ✅ 활성 트랙이 없으면 새로 시작
             if (!currentTrack) {
                 console.log('[SYNC] 🆕 활성 트랙 없음 - 새로 시작');
                 await updateTrack();
@@ -778,7 +668,6 @@ export default function HymnDetailScreen() {
 
                 console.log(`[SYNC] 트랙 찬송가: ${backgroundHymnId}장, 화면 찬송가: ${hymnId}장`);
 
-                // ✅ 트랙과 화면이 일치하는 경우
                 if (backgroundHymnId === hymnId) {
                     const shouldAutoPlay = defaultStorage.getBoolean('hymn_was_playing') ?? false;
                     const trackIsAccompany = currentTrack.artist === '반주';
@@ -788,8 +677,6 @@ export default function HymnDetailScreen() {
 
                     const state = await TrackPlayer.getState();
                     console.log(`🔍 현재 플레이어 상태: ${state}`);
-
-                    // ❌ ended 상태 처리 제거 - useTrackPlayerEvents에서 처리
 
                     if (shouldAutoPlay) {
                         if (state === State.Ready) {
@@ -809,9 +696,7 @@ export default function HymnDetailScreen() {
                     }
                     isSyncingTrack.current = false;
                     return;
-                }
-                // ✅ 트랙과 화면이 다른 경우 - 화면에 맞게 새로 로드
-                else {
+                } else {
                     console.log('[SYNC] ⚠️ 트랙과 화면 불일치 - 화면에 맞게 트랙 업데이트');
                     await updateTrack();
                     isSyncingTrack.current = false;
@@ -961,7 +846,7 @@ export default function HymnDetailScreen() {
 
         try {
             setIsProcessingAction(true);
-            isNavigatingRef.current = true; // ✅ 네비게이션 시작
+            isNavigatingRef.current = true;
 
             let prevId: number;
 
@@ -978,7 +863,6 @@ export default function HymnDetailScreen() {
                 return;
             }
 
-            // ✅ 반주 모드 상태 유지
             const currentIsAccompany = defaultStorage.getBoolean('hymn_is_accompany') ?? false;
             console.log(`📝 이전 곡 설정: ${prevId}장, 반주모드: ${currentIsAccompany ? '반주' : '찬양'}`);
 
@@ -993,17 +877,17 @@ export default function HymnDetailScreen() {
         }
     }, [randomPlay, hymnId, navigation, isProcessingAction]);
 
-    // ✅ 다음곡 핸들러 - 자동재생 상태 유지
     const handleNext = useCallback(async () => {
+        // ✅ 먼저 isProcessingAutoNext 체크는 제거하고 isProcessingAction만 체크
         if (isProcessingAction) {
-            console.log('[NEXT] 이미 처리 중');
+            console.log('[NEXT] ⛔ 이미 처리 중 - 스킵');
             return;
         }
 
         try {
             setIsProcessingAction(true);
-            isNavigatingRef.current = true; // ✅ 네비게이션 시작
-            isAutoNextingRef.current = true; // ✅ 자동 다음곡 플래그 설정
+            isNavigatingRef.current = true;
+            isAutoNextingRef.current = true;
 
             let nextId: number;
 
@@ -1018,14 +902,13 @@ export default function HymnDetailScreen() {
                 setIsProcessingAction(false);
                 isNavigatingRef.current = false;
                 isAutoNextingRef.current = false;
+                isProcessingAutoNext.current = false;
                 return;
             }
 
-            // ✅ 자동재생 플래그 설정
             defaultStorage.set('hymn_was_playing', true);
             defaultStorage.set('current_hymn_id', nextId);
 
-            // ✅ 반주 모드 상태 유지 (이미 저장되어 있음)
             const currentIsAccompany = defaultStorage.getBoolean('hymn_is_accompany') ?? false;
             console.log(`📝 다음 곡 설정: ${nextId}장, 자동재생 플래그: ON, 반주모드: ${currentIsAccompany ? '반주' : '찬양'}`);
 
@@ -1034,6 +917,7 @@ export default function HymnDetailScreen() {
             console.error('❌ 다음 곡 이동 실패:', error);
             isNavigatingRef.current = false;
             isAutoNextingRef.current = false;
+            isProcessingAutoNext.current = false;
         } finally {
             setTimeout(() => {
                 setIsProcessingAction(false);
@@ -1070,7 +954,6 @@ export default function HymnDetailScreen() {
         try {
             setIsProcessingAction(true);
 
-            // ✅ 반주 모드 변경 전 현재 상태 저장
             const wasPlaying = isPlaying;
             const currentPosition = wasPlaying ? await TrackPlayer.getPosition() : 0;
 
@@ -1119,7 +1002,6 @@ export default function HymnDetailScreen() {
                 artwork: hymnData.image,
             });
 
-            // ✅ 재생 위치 복원
             if (currentPosition > 0) {
                 try {
                     await TrackPlayer.seekTo(currentPosition);
@@ -1133,7 +1015,6 @@ export default function HymnDetailScreen() {
                 setTimeout(async () => {
                     try {
                         await TrackPlayer.play();
-                        // ✅ 자동재생 플래그 유지
                         defaultStorage.set('hymn_was_playing', true);
                         console.log(`[MODE] ${trackType} 모드로 재생 재개`);
                     } catch (error) {
@@ -1411,7 +1292,6 @@ export default function HymnDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-    // ... (스타일은 이전과 동일)
     container: {
         flex: 1,
         backgroundColor: '#FFFFFF',
