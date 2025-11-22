@@ -93,7 +93,7 @@ const loadTrack = async (book: number, jang: number): Promise<boolean> => {
   }
 };
 
-// ✅ 찬송가 다음 곡으로 이동하는 함수 - 수정됨
+// ✅ 찬송가 다음 곡으로 이동하는 함수 - 001~099장 URL 패딩 수정
 const moveToNextHymn = async () => {
   const now = Date.now();
 
@@ -155,12 +155,15 @@ const moveToNextHymn = async () => {
       await TrackPlayer.setRepeatMode(RepeatMode.Off);
       console.log(`[HYMN_SERVICE] ✅ RepeatMode.Off 설정`);
 
+      // ✅ 🔥 여기가 핵심 수정 부분: 001~099장을 위한 3자리 패딩 추가
+      const paddedHymnId = String(nextHymnId).padStart(3, '0');
       const audioUrl = isAccompany
-          ? `https://data.bible25.com/chansong/audio_mr/${nextHymnId}.mp3`
-          : `https://data.bible25.com/chansong/audio/${nextHymnId}.mp3`;
+          ? `https://data.bible25.com/chansong/audio_mr/${paddedHymnId}.mp3`
+          : `https://data.bible25.com/chansong/audio/${paddedHymnId}.mp3`;
 
       console.log(`[HYMN_SERVICE] 🔍 반주모드: ${isAccompany}`);
       console.log(`[HYMN_SERVICE] 🎵 트랙 URL: ${audioUrl}`);
+      console.log(`[HYMN_SERVICE] 📌 Padded ID: ${paddedHymnId} (Original: ${nextHymnId})`);
 
       await TrackPlayer.add({
         id: `hymn-${nextHymnId}`,
