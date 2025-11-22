@@ -9,4 +9,4 @@ export interface HymnData {
     accompanyUrl?: string;
 }
 
-export type HymnCategory = '100' | '200' | '300' | '400' | '500' | '600' | '700' | '교독문' | '분류';
+export type HymnCategory = '100' | '200' | '300' | '400' | '500' | '600' | '700' | '교독문' | '001';

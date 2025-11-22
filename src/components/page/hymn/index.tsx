@@ -25,7 +25,7 @@ import {defaultStorage} from "../../../utils/mmkv";
 
 
 const HYMN_CATEGORIES: HymnCategory[] = [
-    '교독문', '100', '200', '300', '400', '500', '600'
+    '교독문','001', '100', '200', '300', '400', '500', '600'
 ];
 
 const ITEMS_PER_PAGE = 20; // 페이지당 아이템 수
@@ -56,7 +56,7 @@ export default function HymnListScreen() {
     const { color } = useBaseStyle();
     const insets = useSafeAreaInsets();
 
-    const [selectedCategory, setSelectedCategory] = useState<HymnCategory>('100');
+    const [selectedCategory, setSelectedCategory] = useState<HymnCategory>('001');
     const [hymnList, setHymnList] = useState<HymnData[]>([]);
     const [allHymnList, setAllHymnList] = useState<HymnData[]>([]); // 전체 데이터 캐시
     const [searchResults, setSearchResults] = useState<HymnData[]>([]); // 검색 결과 전체
