@@ -1,5 +1,4 @@
-// src/utils/useBibleReading.ts (1/2)
-import { useState, useEffect, useCallback, useRef } from 'react';
+import {useState, useEffect, useCallback, useRef, useMemo} from 'react';
 import { Toast } from 'react-native-toast-message/lib/src/Toast';
 import { AppState } from 'react-native';
 import {
@@ -11,7 +10,7 @@ import {
     calculateProgress,
     getTodayChapters,
     getTodayProgressInfo,
-    getCurrentDay
+    getCurrentDay, invalidateTodayChaptersCache
 } from "./biblePlanUtils";
 import {
     ChapterReading,
@@ -66,19 +65,38 @@ const getBookAndChapterFromGlobalIndex = (globalIndex: number): { book: number, 
     };
 };
 
-// 🔥 readState를 매개변수로 받도록 수정
+//readState를 매개변수로 받도록 수정
 export const useBibleReading = (readState?: any) => {
     const [planData, setPlanData] = useState<BiblePlanData | null>(null);
     const [missedCount, setMissedCount] = useState(0);
-    const [todayReading, setTodayReading] = useState<DailyReading | null>(null);
     const [yesterdayReading, setYesterdayReading] = useState<DailyReading | null>(null);
     const [progressInfo, setProgressInfo] = useState<any>(null);
     const [readingTableData, setReadingTableData] = useState<{ [key: string]: boolean }>({});
     const [refreshKey, setRefreshKey] = useState(0);
     const appStateRef = useRef(AppState.currentState);
+    const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const refreshDebounceTime = 250;
 
-    // 🆕 전역 새로고침 콜백 상태 추가
+    //전역 새로고침 콜백 상태 추가
     const [globalRefreshCallback, setGlobalRefreshCallback] = useState<(() => void) | null>(null);
+
+    //todayReading을 useMemo로 메모이제이션
+    const todayReading = useMemo(() => {
+        if (!planData) {
+            console.log('planData 없음 - todayReading null');
+            return null;
+        }
+
+        try {
+            const today = new Date();
+            const todayData = getDailyReading(planData.planType, new Date(planData.startDate), today);
+            console.log(`오늘 읽을 내용: ${todayData?.chapters.length || 0}장`);
+            return todayData;
+        } catch (error) {
+            console.error('todayReading 계산 오류:', error);
+            return null;
+        }
+    }, [planData, refreshKey]); // refreshKey 변경 시에만 재계산
 
     useEffect(() => {
         loadPlan();
@@ -93,13 +111,11 @@ export const useBibleReading = (readState?: any) => {
 
     useEffect(() => {
         if (planData) {
-            updateTodayReading();
             updateYesterdayReading();
             updateProgressInfo();
             updateMissedCountAndBadge();
         } else {
             // planData가 없을 때 모든 상태 초기화
-            setTodayReading(null);
             setYesterdayReading(null);
             setProgressInfo(null);
             setMissedCount(0);
@@ -112,7 +128,7 @@ export const useBibleReading = (readState?: any) => {
             // 일독 계획 로드
             loadPlan();
 
-            // 🆕 reading_table 전체 데이터 자동 로드
+            //reading_table 전체 데이터 자동 로드
             await loadAllReadingTableData();
         };
 
@@ -139,6 +155,9 @@ export const useBibleReading = (readState?: any) => {
 
     // 수동 새로고침 함수
     const refreshData = useCallback(() => {
+        //캐시 무효화
+        invalidateTodayChaptersCache();
+
         setRefreshKey(prev => prev + 1);
         loadPlan();
         loadAllReadingTableData();
@@ -154,19 +173,6 @@ export const useBibleReading = (readState?: any) => {
         }
     }, []);
 
-    // 오늘 읽을 내용 업데이트
-    const updateTodayReading = useCallback(() => {
-        if (!planData) return;
-
-        try {
-            const today = new Date();
-            const todayData = getDailyReading(planData.planType, new Date(planData.startDate), today);
-            setTodayReading(todayData);
-        } catch (error) {
-            console.error('오늘 읽을 내용 업데이트 오류:', error);
-        }
-    }, [planData]);
-
     // 어제 읽을 내용 업데이트
     const updateYesterdayReading = useCallback(() => {
         if (!planData) return;
@@ -181,7 +187,7 @@ export const useBibleReading = (readState?: any) => {
         }
     }, [planData]);
 
-    // 🔥 진행률 정보 업데이트
+    //진행률 정보 업데이트
     const updateProgressInfo = useCallback(() => {
         if (!planData) {
             setProgressInfo(null);
@@ -282,15 +288,43 @@ export const useBibleReading = (readState?: any) => {
             if (Array.isArray(results)) {
                 results.forEach((result: any) => {
                     const key = `${result.book}_${result.jang}`;
-                    readingData[key] = result.read ? JSON.parse(result.read) : false;
+
+                    //read 값을 정확하게 파싱
+                    let isRead = false;
+                    if (typeof result.read === 'boolean') {
+                        isRead = result.read;
+                    } else if (typeof result.read === 'string') {
+                        isRead = result.read === 'true' || result.read === 'True' || result.read === '1';
+                    } else if (typeof result.read === 'number') {
+                        isRead = result.read === 1;
+                    }
+
+                    readingData[key] = isRead;
                 });
             } else if (results) {
                 // 단일 결과인 경우
                 const key = `${results.book}_${results.jang}`;
-                readingData[key] = results.read ? JSON.parse(results.read) : false;
+
+                //수정: read 값을 정확하게 파싱
+                let isRead = false;
+                if (typeof results.read === 'boolean') {
+                    isRead = results.read;
+                } else if (typeof results.read === 'string') {
+                    isRead = results.read === 'true' || results.read === 'True' || results.read === '1';
+                } else if (typeof results.read === 'number') {
+                    isRead = results.read === 1;
+                }
+
+                readingData[key] = isRead;
             }
 
             console.log('reading_table 데이터 로드 완료:', Object.keys(readingData).length, '개 항목');
+
+            //읽음/안읽음 개수 로그
+            const readCount = Object.values(readingData).filter(v => v === true).length;
+            const unreadCount = Object.values(readingData).filter(v => v === false).length;
+            console.log(`Read: ${readCount}, Unread: ${unreadCount}`);
+
             setReadingTableData(readingData);
 
         } catch (error) {
@@ -299,19 +333,19 @@ export const useBibleReading = (readState?: any) => {
         }
     }, []);
 
-    // 🆕 동기적 장 읽기 상태 확인 함수 (성능 최적화)
+    //동기적 장 읽기 상태 확인 함수 (성능 최적화)
     const isChapterReadSync = useCallback((book: number, chapter: number): boolean => {
         try {
             const key = `${book}_${chapter}`;
 
-            // 🆕 1. readState에서 먼저 확인 (최우선)
+            //readState에서 먼저 확인 (최우선)
             const foundInReadState = readState && Array.isArray(readState)
                 ? readState.some(item => item.book === book && item.jang === chapter)
                 : false;
 
             if (foundInReadState) return true; // 읽었다면 바로 반환
 
-            // 🆕 2. readingTableData에서 확인 (두 번째 우선순위)
+            //readingTableData에서 확인 (두 번째 우선순위)
             if (readingTableData && Object.keys(readingTableData).length > 0) {
                 const foundInReadingTable = readingTableData[key];
 
@@ -328,7 +362,7 @@ export const useBibleReading = (readState?: any) => {
                 return false;
             }
 
-            // 🆕 3. 일독 계획이 있는 경우에만 일독 계획 데이터 확인
+            //일독 계획이 있는 경우에만 일독 계획 데이터 확인
             if (planData) {
                 const planRead = planData.readChapters.some(
                     r => r.book === book && r.chapter === chapter && r.isRead
@@ -336,7 +370,7 @@ export const useBibleReading = (readState?: any) => {
                 if (planRead) return true;
             }
 
-            // 4. 모든 곳에서 읽지 않았다면 false
+            //모든 곳에서 읽지 않았다면 false
             return false;
 
         } catch (error) {
@@ -345,6 +379,7 @@ export const useBibleReading = (readState?: any) => {
         }
     }, [planData, readingTableData, refreshKey, readState]);
 
+    //markChapterAsRead에서 캐시 무효화 추가
     const markChapterAsRead = useCallback(async (book: number, chapter: number) => {
         if (!planData) return false;
 
@@ -376,11 +411,11 @@ export const useBibleReading = (readState?: any) => {
             setPlanData(updatedPlanData);
             saveBiblePlanData(updatedPlanData);
 
-            // 🆕 전역 새로고침 트리거
-            if (globalRefreshCallback) {
-                console.log('🔄 전역 새로고침 콜백 호출 (markChapterAsRead)');
-                globalRefreshCallback();
-            }
+            //캐시 무효화
+            invalidateTodayChaptersCache();
+
+            //새로고침은 updateReadingTableCache에서 디바운싱되어 처리됨
+            // 여기서는 제거!
 
             // 놓친 장수 재계산 및 뱃지 업데이트
             const newMissedCount = calculateMissedChapters(updatedPlanData);
@@ -389,10 +424,10 @@ export const useBibleReading = (readState?: any) => {
 
             return true;
         } catch (error) {
-            console.log('장 읽기 표시 오류:', error);
+            console.log('Mark chapter error:', error);
             return false;
         }
-    }, [planData, updateAppBadge, globalRefreshCallback]);
+    }, [planData, updateAppBadge]);
 
     const markChapterAsUnread = useCallback(async (book: number, chapter: number) => {
         if (!planData) return false;
@@ -410,9 +445,12 @@ export const useBibleReading = (readState?: any) => {
             setPlanData(updatedPlanData);
             saveBiblePlanData(updatedPlanData);
 
-            // 🆕 전역 새로고침 트리거
+            //캐시 무효화
+            invalidateTodayChaptersCache();
+
+            //전역 새로고침 트리거
             if (globalRefreshCallback) {
-                console.log('🔄 전역 새로고침 콜백 호출 (markChapterAsUnread)');
+                console.log('전역 새로고침 콜백 호출 (markChapterAsUnread)');
                 globalRefreshCallback();
             }
 
@@ -428,7 +466,7 @@ export const useBibleReading = (readState?: any) => {
         }
     }, [planData, updateAppBadge, globalRefreshCallback]);
 
-    // 🔥 수정: 시간 기반 계획과 통합된 장 상태 확인 함수
+    //수정: 시간 기반 계획과 통합된 장 상태 확인 함수
     const getChapterStatus = useCallback((book: number, chapter: number): 'today' | 'yesterday' | 'missed' | 'completed' | 'future' | 'normal' => {
         if (!planData) return 'normal';
 
@@ -563,7 +601,7 @@ export const useBibleReading = (readState?: any) => {
         }
     }, [planData, isChapterReadSync]);
 
-    // 🆕 향상된 장 스타일 계산 함수 (느낌표 포함)
+    //향상된 장 스타일 계산 함수 (느낌표 포함)
     const getChapterStyleWithExclamation = useCallback((book: number, chapter: number) => {
         try {
             const isRead = isChapterReadSync(book, chapter);
@@ -630,7 +668,7 @@ export const useBibleReading = (readState?: any) => {
         }
     }, [planData, isChapterReadSync, getChapterStatus]);
 
-    // 🔥 수정: 오늘 진도 계산 함수 (통합 버전 사용)
+    //오늘 진도 계산 함수
     const getTodayProgress = useCallback(() => {
         if (!planData) {
             return {
@@ -675,7 +713,7 @@ export const useBibleReading = (readState?: any) => {
         }
     }, [planData]);
 
-    // 🔥 수정: 어제 진도 계산 함수
+    //수정: 어제 진도 계산 함수
     const getYesterdayProgress = useCallback(() => {
         if (!planData) {
             return {
@@ -753,14 +791,14 @@ export const useBibleReading = (readState?: any) => {
         }
     }, [planData, yesterdayReading, isChapterReadSync]);
 
-    // 🆕 전역 새로고침 콜백 등록/해제 함수들
+    //전역 새로고침 콜백 등록/해제 함수들
     const registerGlobalRefreshCallback = useCallback((callback: () => void) => {
-        console.log('🔄 전역 새로고침 콜백 등록됨');
+        console.log('전역 새로고침 콜백 등록됨');
         setGlobalRefreshCallback(() => callback);
     }, []);
 
     const unregisterGlobalRefreshCallback = useCallback(() => {
-        console.log('🔄 전역 새로고침 콜백 해제됨');
+        console.log('전역 새로고침 콜백 해제됨');
         setGlobalRefreshCallback(null);
     }, []);
 
@@ -768,7 +806,6 @@ export const useBibleReading = (readState?: any) => {
         try {
             deleteBiblePlanData();
             setPlanData(null);
-            setTodayReading(null);
             setYesterdayReading(null);
             setProgressInfo(null);
             setMissedCount(0);
@@ -789,32 +826,37 @@ export const useBibleReading = (readState?: any) => {
         }
     }, [updateAppBadge]);
 
-    // 🆕 완전 초기화 함수 개선
+    //완전 초기화 함수 개선
     const resetAllData = useCallback(async () => {
         try {
-            console.log('=== useBibleReading 완전 초기화 시작 ===');
+            console.log('=== Reset all data start ===');
 
-            // 1. 로컬 상태 모두 초기화
+            //모든 타이머 정리
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+                refreshTimeoutRef.current = null;
+            }
+
+            // 로컬 상태 초기화
             setPlanData(null);
             setMissedCount(0);
-            setTodayReading(null);
             setYesterdayReading(null);
             setProgressInfo(null);
             setReadingTableData({});
 
-            // 2. 일독 계획 데이터 삭제
+            // 일독 계획 데이터 삭제
             deleteBiblePlanData();
 
-            // 3. SQLite reading_table 완전 삭제
+            // SQLite 완전 삭제
             try {
                 const deleteSql = `DELETE FROM reading_table`;
                 await fetchSql(bibleSetting, deleteSql, []);
-                console.log('SQLite reading_table 데이터 삭제 완료');
+                console.log('SQLite cleared');
             } catch (sqlError) {
-                console.error('SQLite 삭제 오류:', sqlError);
+                console.error('SQLite error:', sqlError);
             }
 
-            // 4. MMKV에서 성경 관련 데이터 삭제
+            // MMKV 데이터 삭제
             try {
                 const allKeys = defaultStorage.getAllKeys();
                 allKeys.forEach(key => {
@@ -823,99 +865,153 @@ export const useBibleReading = (readState?: any) => {
                         key.includes('plan') ||
                         key === 'calender') {
                         defaultStorage.delete(key);
-                        console.log('MMKV 키 삭제:', key);
                     }
                 });
+                console.log(' MMKV cleared');
             } catch (mmkvError) {
-                console.error('MMKV 삭제 오류:', mmkvError);
+                console.error(' MMKV error:', mmkvError);
             }
 
-            // 5. 앱 뱃지 초기화
+            // 앱 뱃지 초기화
             updateAppBadge(0);
 
-            // 6. refreshKey 업데이트
+            // refreshKey 업데이트
             setRefreshKey(prev => prev + 1);
 
-            // 7. 전역 새로고침 트리거
+            //단일 새로고침만 실행 (중복 제거)
             if (globalRefreshCallback) {
-                console.log('🔄 전역 새로고침 콜백 호출 (resetAllData)');
+                console.log('Triggering single refresh');
                 globalRefreshCallback();
-                setTimeout(() => globalRefreshCallback(), 200);
-                setTimeout(() => globalRefreshCallback(), 500);
             }
 
-            // 8. 데이터 다시 로드
+            // 데이터 재로드
             setTimeout(async () => {
                 await loadPlan();
                 await loadAllReadingTableData();
-                console.log('초기화 후 데이터 재로드 완료');
-            }, 100);
+                console.log('Data reloaded');
+            }, 300);
 
             return true;
         } catch (error) {
-            console.error('useBibleReading 초기화 오류:', error);
+            console.error('Reset error:', error);
             return false;
         }
     }, [updateAppBadge, loadPlan, loadAllReadingTableData, globalRefreshCallback]);
 
-    // 🆕 강제 새로고침 함수 추가
+    //강제 새로고침 함수 추가
     const forceRefresh = useCallback(async () => {
         try {
-            console.log('useBibleReading 강제 새로고침 시작');
+            console.log('Force refresh start');
+
+            //타이머 취소 (중복 방지)
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+                refreshTimeoutRef.current = null;
+            }
 
             await loadPlan();
             await loadAllReadingTableData();
             setRefreshKey(prev => prev + 1);
 
+            //단일 새로고침만 실행
             if (globalRefreshCallback) {
-                console.log('🔄 전역 새로고침 콜백 호출 (forceRefresh)');
                 globalRefreshCallback();
             }
 
-            console.log('useBibleReading 강제 새로고침 완료');
+            console.log('Force refresh complete');
         } catch (error) {
-            console.error('강제 새로고침 오류:', error);
+            console.error('Force refresh error:', error);
         }
     }, [loadPlan, loadAllReadingTableData, globalRefreshCallback]);
 
-    // reading_table에서 읽기 상태 확인 (개별 조회)
+    //reading_table에서 읽기 상태 확인 (개별 조회) - 캐시 덮어쓰기 방지
     const loadReadingTableData = useCallback(async (book: number, chapter: number): Promise<boolean> => {
         try {
+            const key = `${book}_${chapter}`;
+
+            //먼저 기존 캐시 확인 (있으면 그대로 반환 - DB 조회 안함)
+            if (readingTableData[key] !== undefined) {
+                console.log(`📚 [CACHE HIT] ${key} = ${readingTableData[key]}`);
+                return readingTableData[key];
+            }
+
+            //DB에서 조회
             const settingSelectSql = `${defineSQL(['read'], 'SELECT', 'reading_table', {
                 WHERE: {BOOK: '?', JANG: '?'}
             })}`;
 
             const result = await fetchSql(bibleSetting, settingSelectSql, [book, chapter], 0);
-            const isRead = result ? JSON.parse(result.read) : false;
 
-            // 캐시에 저장
-            setReadingTableData(prev => ({
-                ...prev,
-                [`${book}_${chapter}`]: isRead
-            }));
+            //DB에 데이터가 있을 때만 캐시 업데이트
+            if (result && result.read !== undefined) {
+                // read 값을 정확하게 파싱
+                let isRead = false;
+                if (typeof result.read === 'boolean') {
+                    isRead = result.read;
+                } else if (typeof result.read === 'string') {
+                    isRead = result.read === 'true' || result.read === 'True' || result.read === '1';
+                } else if (typeof result.read === 'number') {
+                    isRead = result.read === 1;
+                }
 
-            return isRead;
+                console.log(`💾 [DB→CACHE] ${key} = ${isRead}`);
+
+                // 캐시에 저장
+                setReadingTableData(prev => ({
+                    ...prev,
+                    [key]: isRead
+                }));
+
+                return isRead;
+            }
+
+            //DB에 데이터가 없으면 캐시 업데이트 안함! (핵심 수정)
+            // 기존: false로 캐시에 저장 → 버그 발생!
+            // 수정: 캐시 업데이트 없이 false 반환
+            console.log(`📭 [NO DATA] ${key} - DB에 데이터 없음, 캐시 업데이트 안함`);
+            return false;
+
         } catch (error) {
             console.log('reading_table 조회 오류:', error);
             return false;
         }
-    }, []);
+    }, [readingTableData]);  //의존성에 readingTableData 추가
 
     // reading_table 상태 업데이트 함수
     const updateReadingTableCache = useCallback((book: number, chapter: number, isRead: boolean) => {
         const key = `${book}_${chapter}`;
+
+        console.log(`💾 Cache updated: ${key} = ${isRead}`);
+
+        //캐시 즉시 업데이트
         setReadingTableData(prev => ({
             ...prev,
             [key]: isRead
         }));
 
+        //디바운싱된 새로고침 (중복 호출 방지)
         if (globalRefreshCallback) {
-            console.log('🔄 전역 새로고침 콜백 호출 (updateReadingTableCache)');
-            setTimeout(() => {
+            // 이전 타이머 취소
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+            }
+
+            // 새 타이머 설정 (마지막 호출만 실행됨)
+            refreshTimeoutRef.current = setTimeout(() => {
+                console.log('Debounced refresh triggered');
                 globalRefreshCallback();
-            }, 100);
+                refreshTimeoutRef.current = null;
+            }, refreshDebounceTime);
         }
     }, [globalRefreshCallback]);
+
+    useEffect(() => {
+        return () => {
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+            }
+        };
+    }, []);
 
     return {
         // 상태

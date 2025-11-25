@@ -1,17 +1,5 @@
-// src/utils/biblePlanUtils.ts
-// 기존 장 기반 계산과 새로운 시간 기반 계산을 통합한 유틸리티
-
 import { defaultStorage } from './mmkv';
 import { BibleStep } from './define';
-import {
-    createTimeBasedReadingPlan,
-    calculateReadingEstimate,
-    calculateProgressInfo,
-    getChapterStatus as getTimeBasedChapterStatus,
-    DailyReadingPlan
-} from './timeBasedBibleReading';
-import { loadChapterTimeDataFromCSV, getChapterTimeDataForPlan } from './csvDataLoader';
-import {createFixedTimeBasedReadingPlan} from "./timeBasedBibleReadingFixed";
 
 // 타입 정의
 export interface ReadingStatus {
@@ -44,31 +32,31 @@ export interface BiblePlanData {
     selectedBooks?: [number, number];
 }
 
-/**
- * 일독 계획 데이터 로드
- */
+// 캐시 변수들 추가
+let todayChaptersCache: {
+    planData: any;
+    result: ReadingStatus[];
+    timestamp: number;
+} | null = null;
+
+let isChapterReadCache = new Map<string, boolean>();
+let isChapterReadCacheTime = 0;
+
+const CACHE_DURATION = 5000; // 5초 캐시
+
 export const loadBiblePlanData = (): BiblePlanData | null => {
     const savedPlan = defaultStorage.getString('bible_reading_plan');
     return savedPlan ? JSON.parse(savedPlan) : null;
 };
 
-/**
- * 일독 계획 데이터 저장
- */
 export const saveBiblePlanData = (planData: BiblePlanData): void => {
     defaultStorage.set('bible_reading_plan', JSON.stringify(planData));
 };
 
-/**
- * 일독 계획 삭제
- */
 export const deleteBiblePlanData = (): void => {
     defaultStorage.delete('bible_reading_plan');
 };
 
-/**
- * 현재 날짜 기준으로 읽어야 할 일차 계산
- */
 export const getCurrentDay = (startDate: string): number => {
     const start = new Date(startDate);
     const today = new Date();
@@ -83,33 +71,73 @@ export const getCurrentDay = (startDate: string): number => {
     return diffDays + 1; // 1일차부터 시작
 };
 
-/**
- * 오늘 읽어야 할 장들 가져오기 - 통합 버전 (수정)
- */
+export const invalidateTodayChaptersCache = () => {
+    todayChaptersCache = null;
+    isChapterReadCache.clear();
+    isChapterReadCacheTime = 0;
+    console.log('🗑️ getTodayChapters 캐시 무효화');
+};
+
+const isChapterRead = (planData: any, book: number, chapter: number): boolean => {
+    const now = Date.now();
+    const cacheKey = `${book}_${chapter}`;
+
+    // 5초 캐시 확인
+    if (now - isChapterReadCacheTime < CACHE_DURATION) {
+        if (isChapterReadCache.has(cacheKey)) {
+            return isChapterReadCache.get(cacheKey)!;
+        }
+    } else {
+        // 캐시 만료 시 초기화
+        isChapterReadCache.clear();
+        isChapterReadCacheTime = now;
+    }
+
+    if (!planData.readChapters) {
+        isChapterReadCache.set(cacheKey, false);
+        return false;
+    }
+
+    const result = planData.readChapters.some((r: any) =>
+        r.book === book && r.chapter === chapter && r.isRead
+    );
+
+    isChapterReadCache.set(cacheKey, result);
+    return result;
+};
+
 export const getTodayChapters = (planData: BiblePlanData): ReadingStatus[] => {
     if (!planData) return [];
+
+    const now = Date.now();
+
+    // 캐시 확인 (5초 이내면 캐시 사용)
+    if (
+        todayChaptersCache &&
+        todayChaptersCache.planData === planData &&
+        now - todayChaptersCache.timestamp < CACHE_DURATION
+    ) {
+        return todayChaptersCache.result;
+    }
 
     try {
         // 시간 기반 계획이고 dailyPlan이 있는 경우
         if (planData.isTimeBasedCalculation && planData.dailyPlan && planData.dailyPlan.length > 0) {
             const currentDay = getCurrentDay(planData.startDate);
 
-            console.log(`
-                📚 오늘 읽을 장 계산 (시간 기반)
-                - 시작일: ${planData.startDate}
-                - 현재 일차: ${currentDay}일차
-                - 전체 일수: ${planData.totalDays}일
-                - dailyPlan 길이: ${planData.dailyPlan.length}
-            `);
+            // 로그는 캐시 미스 시에만 출력 (1번만!)
+            console.log(`📚 오늘 읽을 장 계산 (${currentDay}일차)`);
 
             // 일차로 오늘의 계획 찾기
             const todayPlan = planData.dailyPlan.find((plan: any) => plan.day === currentDay);
+
+            let result: ReadingStatus[];
 
             if (todayPlan && todayPlan.chapters) {
                 console.log(`✅ ${currentDay}일차 계획 찾음: ${todayPlan.chapters.length}장`);
 
                 // 읽기 상태 확인하여 반환
-                return todayPlan.chapters.map((ch: any) => ({
+                result = todayPlan.chapters.map((ch: any) => ({
                     book: ch.book,
                     bookName: ch.bookName,
                     chapter: ch.chapter,
@@ -117,21 +145,39 @@ export const getTodayChapters = (planData: BiblePlanData): ReadingStatus[] => {
                     estimatedMinutes: ch.minutes + (ch.seconds / 60)
                 }));
             } else {
-                console.log(`⚠️ ${currentDay}일차 계획을 찾을 수 없음`);
+                console.log(`${currentDay}일차 계획을 찾을 수 없음`);
 
                 // 계획 기간이 끝났거나 아직 시작 전인 경우
                 if (currentDay > planData.totalDays) {
                     console.log('일독 계획이 완료되었습니다.');
-                    return [];
+                    result = [];
                 } else if (currentDay < 1) {
                     console.log('일독 계획이 아직 시작되지 않았습니다.');
-                    return [];
+                    result = [];
+                } else {
+                    result = getLegacyTodayChapters(planData);
                 }
             }
+
+            todayChaptersCache = {
+                planData,
+                result,
+                timestamp: now
+            };
+
+            return result;
         }
 
         // 기존 장 기반 로직
-        return getLegacyTodayChapters(planData);
+        const result = getLegacyTodayChapters(planData);
+
+        todayChaptersCache = {
+            planData,
+            result,
+            timestamp: now
+        };
+
+        return result;
 
     } catch (error) {
         console.error('오늘 읽을 장 계산 오류:', error);
@@ -139,20 +185,6 @@ export const getTodayChapters = (planData: BiblePlanData): ReadingStatus[] => {
     }
 };
 
-/**
- * 특정 장이 읽었는지 확인
- */
-const isChapterRead = (planData: any, book: number, chapter: number): boolean => {
-    if (!planData.readChapters) return false;
-
-    return planData.readChapters.some((r: any) =>
-        r.book === book && r.chapter === chapter && r.isRead
-    );
-};
-
-/**
- * 장 상태 확인 - 통합 버전 (수정)
- */
 export const getChapterStatus = (
     planData: BiblePlanData,
     book: number,
@@ -204,9 +236,6 @@ export const getChapterStatus = (
     return getLegacyChapterStatus(planData, book, chapter);
 };
 
-/**
- * 진행률 계산 - 통합 버전
- */
 export const calculateProgress = (planData: BiblePlanData) => {
     if (!planData) {
         return {
@@ -259,9 +288,7 @@ export const calculateProgress = (planData: BiblePlanData) => {
     };
 };
 
-/**
- * 놓친 장 개수 계산 - 통합 버전 (수정)
- */
+
 export const calculateMissedChapters = (planData: BiblePlanData): number => {
     if (!planData) return 0;
 
@@ -288,9 +315,6 @@ export const calculateMissedChapters = (planData: BiblePlanData): number => {
     return calculateLegacyMissedChapters(planData);
 };
 
-/**
- * 장을 읽음으로 표시
- */
 export const markChapterAsRead = (
     planData: BiblePlanData,
     book: number,
@@ -324,20 +348,19 @@ export const markChapterAsRead = (
     };
 
     saveBiblePlanData(updatedPlanData);
+
+    invalidateTodayChaptersCache();
+
     return updatedPlanData;
 };
 
-/**
- * 날짜 포맷팅
- */
+
 export const formatDate = (date: string | Date): string => {
     const d = typeof date === 'string' ? new Date(date) : date;
     return `${d.getFullYear()}년${String(d.getMonth() + 1).padStart(2, '0')}월${String(d.getDate()).padStart(2, '0')}일`;
 };
 
-/**
- * 시간 포맷팅 (분 단위)
- */
+
 export const formatTime = (minutes: number): string => {
     const hours = Math.floor(minutes / 60);
     const mins = Math.round(minutes % 60);
@@ -348,9 +371,6 @@ export const formatTime = (minutes: number): string => {
     return `${mins}분`;
 };
 
-/**
- * 하루 목표 시간 표시 포맷 (분 단위)
- */
 export const formatDailyTarget = (minutes: number): string => {
     if (!minutes || minutes <= 0) {
         return '0분';
@@ -364,9 +384,6 @@ export const formatDailyTarget = (minutes: number): string => {
     return `${minutes}분`;
 };
 
-/**
- * 오늘 진행 정보 가져오기 (useBibleReading에서 사용)
- */
 export const getTodayProgressInfo = (planData: BiblePlanData): any => {
     if (!planData) return null;
 
@@ -385,7 +402,7 @@ export const getTodayProgressInfo = (planData: BiblePlanData): any => {
             }));
 
         console.log(`
-            📊 오늘 진행 정보
+            오늘 진행 정보
             - 전체: ${totalCount}장
             - 읽음: ${readCount}장
             - 남음: ${remainingChapters.length}장
@@ -406,9 +423,7 @@ export const getTodayProgressInfo = (planData: BiblePlanData): any => {
     }
 };
 
-/**
- * 책 번호로 책 이름 가져오기
- */
+
 function getBookName(bookIndex: number): string {
     const book = BibleStep.find(b => b.index === bookIndex);
     return book?.name || `책 ${bookIndex}`;

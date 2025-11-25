@@ -35,7 +35,7 @@ import BibleReadingList from "../../section/bibleReadingList";
 export default function BibleConectionScreen() {
     const dispatch = useDispatch();
     const isFocused = useIsFocused();
-    const insets = useSafeAreaInsets(); // ✅ Safe Area Insets 사용
+    const insets = useSafeAreaInsets();
     const [sound, setSound] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [autoPlay, setAutoPlay] = useState<boolean>(false);
@@ -45,26 +45,56 @@ export default function BibleConectionScreen() {
     const audioPlayerRef = useRef(null);
     const { loadPlan, markChapterAsRead, isChapterReadSync } = useBibleReading();
 
-    // 자동 진행 관련 상태 추가
+    // 자동 진행 관련 상태
     const [isAutoProgressEnabled, setIsAutoProgressEnabled] = useState(false);
     const [isAutoProcessing, setIsAutoProcessing] = useState(false);
     const autoProgressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    // 🆕 추가: 컴포넌트 마운트 상태 추적 및 타이머 관리
+    // 컴포넌트 마운트 상태 추적 및 타이머 관리
     const isMountedRef = useRef(true);
     const timerRefs = useRef<Set<NodeJS.Timeout>>(new Set());
+
+    //핵심 수정: 현재 BOOK/JANG을 추적하는 ref (클로저 문제 해결)
+    const currentBookRef = useRef(book);
+    const currentJangRef = useRef(jang);
 
     const {
         markChapterAsRead: markChapterAsReadHook,
         isChapterReadSync: isChapterReadSyncHook,
         planData,
         updateReadingTableCache,
-        forceRefresh,  // 기존
-        registerGlobalRefreshCallback,  // 🆕 추가
-        unregisterGlobalRefreshCallback
+        forceRefresh,
+        registerGlobalRefreshCallback,
+        unregisterGlobalRefreshCallback,
+        updateProgressInfo  //진도탭 연동을 위한 함수 추가
     } = useBibleReading();
 
-    // 🆕 안전한 타이머 설정 함수
+    // Redux에서 BOOK, JANG 가져오기
+    dispatch(illdocSelectSlice.actions.changePage({ book, jang }));
+    const BOOK = useSelector(
+        (state: any) => state.illDoc.book,
+        (left, right) => left.book !== right.book
+    );
+    const JANG = useSelector(
+        (state: any) => state.illDoc.jang,
+        (left, right) => left.jang !== right.jang
+    );
+
+    //핵심: BOOK/JANG 변경 시 ref 업데이트 + 자동 진행 상태 초기화
+    useEffect(() => {
+        currentBookRef.current = BOOK;
+        currentJangRef.current = JANG;
+        console.log(`📍 [REF UPDATE] BOOK=${BOOK}, JANG=${JANG}`);
+
+        // 페이지 변경 시 자동 진행 상태 초기화
+        setIsAutoProcessing(false);
+        if (autoProgressTimeoutRef.current) {
+            clearTimeout(autoProgressTimeoutRef.current);
+            autoProgressTimeoutRef.current = null;
+        }
+    }, [BOOK, JANG]);
+
+    // 안전한 타이머 설정 함수
     const safeSetTimeout = useCallback((callback: () => void, delay: number) => {
         if (!isMountedRef.current) {
             console.log("Component is unmounted, skipping timer");
@@ -82,7 +112,7 @@ export default function BibleConectionScreen() {
         return timer;
     }, []);
 
-    // 🆕 모든 타이머 정리 함수
+    // 모든 타이머 정리 함수
     const clearAllTimers = useCallback(() => {
         timerRefs.current.forEach(timer => {
             clearTimeout(timer);
@@ -95,22 +125,19 @@ export default function BibleConectionScreen() {
         }
     }, []);
 
-    // 🆕 안전한 오디오 재생 함수
+    // 안전한 오디오 재생 함수
     const safePlayCurrentPageAudio = useCallback(async () => {
         try {
-            // 컴포넌트 마운트 상태 확인
             if (!isMountedRef.current) {
                 console.log("Component is unmounted, skipping audio play");
                 return;
             }
 
-            // ref가 null인지 확인
             if (!audioPlayerRef.current) {
                 console.log("AudioPlayer ref is null, skipping audio play");
                 return;
             }
 
-            // playCurrentPageAudio 메서드가 존재하는지 확인
             if (typeof audioPlayerRef.current.playCurrentPageAudio !== 'function') {
                 console.log("playCurrentPageAudio method not available");
                 return;
@@ -123,15 +150,30 @@ export default function BibleConectionScreen() {
         }
     }, []);
 
+    const selectSql = `SELECT type, color, jul FROM 'bible_setting'
+                       WHERE book = ${BOOK} and jang = ${JANG}`;
+
+    const bibleName = `${BibleStep?.[BOOK - 1]?.name} ${JANG}장` ?? "";
+
+    const fetcher = async (url: string) => {
+        const data = await fetchSql(bibleSetting, url, []);
+        return data;
+    };
+
+    const { data: markData, mutate } = useSWR(selectSql, fetcher);
+
+    const handleUpdateData = useCallback(async () => {
+        if (!isMountedRef.current) return;
+
+        const data = await fetchSql(bibleSetting, selectSql, []);
+        return mutate(selectSql, data);
+    }, [BOOK, JANG]);
+
     const handleGlobalRefresh = useCallback(() => {
         if (!isMountedRef.current) return;
 
         console.log('🔄 BibleConectionScreen 전역 새로고침 실행');
-
-        // 현재 페이지 데이터 새로고침
         handleUpdateData();
-
-        // 추가적인 상태 업데이트가 필요하다면 여기에 추가
     }, [handleUpdateData]);
 
     useEffect(() => {
@@ -157,46 +199,134 @@ export default function BibleConectionScreen() {
         };
     }, [clearAllTimers]);
 
-    // TrackPlayer 이벤트 리스너 - 오디오 재생 완료 감지
-    useTrackPlayerEvents([
-        Event.PlaybackQueueEnded,
-        Event.PlaybackState,
-        Event.PlaybackTrackChanged
-    ], async (event) => {
+    //핵심 수정: 현재 장을 읽었음으로 표시 (BOOK/JANG을 인자로 받음)
+    const markChapterAsReadWithRef = useCallback(async (bookToMark: number, jangToMark: number) => {
         if (!isMountedRef.current) return;
 
-        console.log('🎵 TrackPlayer Event:', event.type, 'AutoProgress:', isAutoProgressEnabled);
+        try {
+            console.log(`📝 Marking chapter ${bookToMark}:${jangToMark} as read`);
 
-        // 자동 진행이 비활성화되어 있거나 이미 처리 중이면 리턴
-        if (!isAutoProgressEnabled || isAutoProcessing || !sound) {
-            console.log('❌ Auto progress skipped:', {
-                enabled: isAutoProgressEnabled,
-                processing: isAutoProcessing,
-                sound: sound
-            });
-            return;
-        }
+            const settingSelectSql = `${defineSQL(['read'], 'SELECT', 'reading_table', {
+                WHERE: { BOOK: '?', JANG: '?' }
+            })}`;
 
-        // 재생 완료 이벤트 처리
-        if (event.type === Event.PlaybackQueueEnded) {
-            console.log('🏁 Audio playback completed - starting auto progress');
-            await handleAutoProgress();
-        }
+            const result = await fetchSql(bibleSetting, settingSelectSql, [bookToMark, jangToMark], 0);
 
-        // 재생 상태가 종료로 변경된 경우도 처리
-        else if (event.type === Event.PlaybackState && event.state === State.Ended) {
-            console.log('🎯 Audio state ended - starting auto progress');
-            // 약간의 지연을 두고 실행 (중복 호출 방지)
-            if (autoProgressTimeoutRef.current) {
-                clearTimeout(autoProgressTimeoutRef.current);
+            if (result) {
+                const settingUpdateSql = `${defineSQL(
+                    ['read', 'time'],
+                    'UPDATE',
+                    'reading_table',
+                    { WHERE: { BOOK: bookToMark, JANG: jangToMark } }
+                )}`;
+                await fetchSql(bibleSetting, settingUpdateSql, [
+                    'true',
+                    String(new Date())
+                ]);
+                console.log('✅ Connection: Updated existing reading record');
+            } else {
+                const settingInsertSql = `${defineSQL(
+                    ['book', 'jang', 'read', 'time'],
+                    'INSERT',
+                    'reading_table',
+                    {}
+                )}`;
+                await fetchSql(bibleSetting, settingInsertSql, [
+                    bookToMark,
+                    jangToMark,
+                    'true',
+                    String(new Date())
+                ]);
+                console.log('✅ Connection: Created new reading record');
             }
-            autoProgressTimeoutRef.current = safeSetTimeout(async () => {
-                await handleAutoProgress();
-            }, 500);
-        }
-    });
 
-    // 자동 진행 메인 로직
+            // 캐시 업데이트
+            if (isMountedRef.current) {
+                updateReadingTableCache(bookToMark, jangToMark, true);
+                console.log(`✅ Connection: Updated cache for ${bookToMark}:${jangToMark}`);
+            }
+
+            // 일독 계획 업데이트
+            if (planData && isMountedRef.current) {
+                await markChapterAsReadHook(bookToMark, jangToMark);
+                console.log('✅ Connection: Updated plan data');
+            }
+
+            //진도탭 연동: 진행률 정보 업데이트
+            if (isMountedRef.current && updateProgressInfo) {
+                updateProgressInfo();
+                console.log('✅ Connection: Updated progress info for 진도탭');
+            }
+
+            console.log(`✅ Successfully marked ${bookToMark}:${jangToMark} as read`);
+
+        } catch (error) {
+            console.error('❌ Mark chapter as read error:', error);
+        }
+    }, [planData, updateReadingTableCache, markChapterAsReadHook, updateProgressInfo]);
+
+    // 기존 markCurrentChapterAsRead (현재 BOOK/JANG 사용)
+    const markCurrentChapterAsRead = useCallback(async () => {
+        const bookToMark = currentBookRef.current;
+        const jangToMark = currentJangRef.current;
+        await markChapterAsReadWithRef(bookToMark, jangToMark);
+    }, [markChapterAsReadWithRef]);
+
+    //ref를 사용하는 onPressNext
+    const onPressNextWithRef = useCallback(
+        (jang: number) => {
+            if (!isMountedRef.current) return;
+
+            const currentBook = currentBookRef.current;
+            const curJang = jang + 1;
+            const totalJang = BibleStep[currentBook - 1].count;
+
+            if (curJang > totalJang) {
+                if (currentBook === 66) {
+                    Toast.show({
+                        type: "success",
+                        text1: "🎉 성경 전체 완독을 축하합니다!",
+                        text2: "설정 화면으로 이동합니다.",
+                        visibilityTime: 3000,
+                        topOffset: insets.top + 10,
+                    });
+                    navigation.navigate("IllDocSettingScreen", {});
+                    return;
+                } else {
+                    defaultStorage.set("bible_book_connec", currentBook + 1);
+                    defaultStorage.set("bible_jang_connec", 1);
+                    dispatch(
+                        illdocSelectSlice.actions.changePage({
+                            book: currentBook + 1,
+                            jang: 1,
+                        })
+                    );
+                }
+            } else {
+                defaultStorage.set("bible_jang_connec", curJang);
+                dispatch(
+                    illdocSelectSlice.actions.changePage({
+                        book: currentBook,
+                        jang: curJang,
+                    })
+                );
+            }
+
+            handleUpdateData();
+            dispatch(bibleTextSlice.actions.reset());
+
+            if (sound && isMountedRef.current) {
+                console.log("🎵 Scheduling safe audio play after page change");
+                safeSetTimeout(() => {
+                    console.log("🎵 Executing delayed audio play");
+                    safePlayCurrentPageAudio();
+                }, 500);
+            }
+        },
+        [sound, handleUpdateData, navigation, safeSetTimeout, safePlayCurrentPageAudio, insets, dispatch]
+    );
+
+    //핵심 수정: 자동 진행 메인 로직 (ref에서 현재 값 읽기)
     const handleAutoProgress = useCallback(async () => {
         // 중복 실행 방지
         if (isAutoProcessing || !isMountedRef.current) {
@@ -204,34 +334,59 @@ export default function BibleConectionScreen() {
             return;
         }
 
-        console.log(`🚀 Connection: Starting auto progress for ${BOOK}:${JANG}`);
+        //ref에서 현재 BOOK/JANG 읽기 (클로저 문제 해결!)
+        const currentBook = currentBookRef.current;
+        const currentJang = currentJangRef.current;
+
+        console.log(`🚀 Connection: Starting auto progress for ${currentBook}:${currentJang}`);
         setIsAutoProcessing(true);
 
         try {
-            // 1. 재생 완료 알림 (즉시 표시)
+            //짧은 대기
+            await new Promise(resolve => safeSetTimeout(resolve, 500));
 
-            // 2. 짧은 대기 (사용자가 메시지를 확인할 수 있도록)
-            await new Promise(resolve => safeSetTimeout(resolve, 800));
+            //대기 중 페이지 변경 확인
+            const latestBook = currentBookRef.current;
+            const latestJang = currentJangRef.current;
 
-            // 3. 현재 장을 읽었음으로 자동 체크
-            console.log(`📖 Connection: Marking chapter ${BOOK}:${JANG} as read`);
-            await markCurrentChapterAsRead();
-
-            // 4. 🆕 추가 대기 및 상태 재확인 (동기화 보장)
-            await new Promise(resolve => safeSetTimeout(resolve, 200));
-
-            // 캐시 재업데이트 (확실한 동기화)
-            if (isMountedRef.current) {
-                updateReadingTableCache(BOOK, JANG, true);
-                console.log('🔄 Connection: Re-updated cache for safety');
+            if (latestBook !== currentBook || latestJang !== currentJang) {
+                console.log(`⚠️ Connection: Page changed during wait (${currentBook}:${currentJang} → ${latestBook}:${latestJang}), aborting`);
+                return;
             }
 
-            // 6. 추가 대기 후 다음 장으로 이동
-            await new Promise(resolve => safeSetTimeout(resolve, 1000));
+            //현재 장을 읽었음으로 자동 체크
+            console.log(`📖 Connection: Marking chapter ${latestBook}:${latestJang} as read`);
+            await markChapterAsReadWithRef(latestBook, latestJang);
 
+            //추가 대기
+            await new Promise(resolve => safeSetTimeout(resolve, 200));
+
+            //다시 확인
+            const finalBook = currentBookRef.current;
+            const finalJang = currentJangRef.current;
+
+            if (finalBook !== latestBook || finalJang !== latestJang) {
+                console.log(`⚠️ Connection: Page changed during marking, aborting navigation`);
+                return;
+            }
+
+            // 캐시 재업데이트
             if (isMountedRef.current) {
-                console.log(`⏭️ Connection: Moving to next chapter from ${BOOK}:${JANG}`);
-                onPressNext(JANG);
+                updateReadingTableCache(finalBook, finalJang, true);
+                console.log(`🔄 Connection: Cache updated for ${finalBook}:${finalJang}`);
+            }
+
+            //다음 장으로 이동 전 추가 대기
+            await new Promise(resolve => safeSetTimeout(resolve, 500));
+
+            // 최종 확인 후 이동
+            if (isMountedRef.current &&
+                currentBookRef.current === finalBook &&
+                currentJangRef.current === finalJang) {
+                console.log(`⏭️ Connection: Moving to next chapter from ${finalBook}:${finalJang}`);
+                onPressNextWithRef(finalJang);
+            } else {
+                console.log(`⚠️ Connection: Page changed, skipping navigation`);
             }
 
             console.log('✅ Connection: Auto progress completed successfully');
@@ -244,10 +399,9 @@ export default function BibleConectionScreen() {
                 text2: "수동으로 읽었음 체크 후 다음 장으로 이동해주세요.",
                 visibilityTime: 3000,
                 position: "top",
-                topOffset: insets.top + 10, // ✅ Safe Area 적용
+                topOffset: insets.top + 10,
             });
         } finally {
-            // 처리 상태 초기화
             if (isMountedRef.current) {
                 setIsAutoProcessing(false);
             }
@@ -256,112 +410,59 @@ export default function BibleConectionScreen() {
                 autoProgressTimeoutRef.current = null;
             }
         }
-    }, [BOOK, JANG, isAutoProcessing, markCurrentChapterAsRead, onPressNext, updateReadingTableCache, safeSetTimeout, insets]);
+    }, [isAutoProcessing, markChapterAsReadWithRef, onPressNextWithRef, updateReadingTableCache, safeSetTimeout, insets]);
+    //주의: 의존성에서 BOOK, JANG 제거!
 
-    // 현재 장을 읽었음으로 표시하는 함수
-    const markCurrentChapterAsRead = useCallback(async () => {
+    // TrackPlayer 이벤트 리스너
+    useTrackPlayerEvents([
+        Event.PlaybackQueueEnded,
+        Event.PlaybackState,
+        Event.PlaybackTrackChanged
+    ], async (event) => {
         if (!isMountedRef.current) return;
 
-        try {
-            console.log(`📝 Connection: Marking chapter ${BOOK}:${JANG} as read`);
+        //현재 ref 값으로 로깅
+        console.log(`🎵 TrackPlayer Event: ${event.type}, Current: ${currentBookRef.current}:${currentJangRef.current}, AutoProgress: ${isAutoProgressEnabled}`);
 
-            // reading_table SQL 쿼리 정의
-            const settingSelectSql = `${defineSQL(['read'], 'SELECT', 'reading_table', {
-                WHERE: { BOOK: '?', JANG: '?' }
-            })}`;
-
-            const settingInsertSql = `${defineSQL(
-                ['book', 'jang', 'read', 'time'],
-                'INSERT',
-                'reading_table',
-                {}
-            )}`;
-
-            const settingUpdateSql = `${defineSQL(
-                ['read', 'time'],
-                'UPDATE',
-                'reading_table',
-                {
-                    WHERE: { BOOK, JANG }
-                }
-            )}`;
-
-            // 기존 데이터 확인
-            const result = await fetchSql(bibleSetting, settingSelectSql, [BOOK, JANG], 0);
-
-            // reading_table 업데이트 또는 삽입
-            if (result) {
-                await fetchSql(bibleSetting, settingUpdateSql, [
-                    'true',
-                    String(new Date())
-                ]);
-                console.log('✅ Connection: Updated existing reading record');
-            } else {
-                await fetchSql(bibleSetting, settingInsertSql, [
-                    BOOK,
-                    JANG,
-                    'true',
-                    String(new Date())
-                ]);
-                console.log('✅ Connection: Created new reading record');
-            }
-
-            // 🆕 중요: 캐시 업데이트 (이것이 리스트 표시에 중요!)
-            if (isMountedRef.current) {
-                updateReadingTableCache(BOOK, JANG, true);
-                console.log('✅ Connection: Updated reading table cache');
-            }
-
-            // 일독 계획 데이터도 업데이트 (있는 경우)
-            if (planData && isMountedRef.current) {
-                await markChapterAsReadHook(BOOK, JANG);
-                console.log('✅ Connection: Updated plan data');
-            }
-
-            // 🔥 핵심: updateReadingTableCache 호출 시 자동으로 전역 새로고침이 트리거됨
-            // 추가적인 동기화를 위해 여러 번 호출
-            safeSetTimeout(() => {
-                if (isMountedRef.current) {
-                    updateReadingTableCache(BOOK, JANG, true);
-                    console.log('🔄 Connection: Additional cache update for sync');
-                }
-            }, 100);
-
-            safeSetTimeout(() => {
-                if (isMountedRef.current) {
-                    updateReadingTableCache(BOOK, JANG, true);
-                    console.log('🔄 Connection: Final cache update for sync');
-                }
-            }, 300);
-
-            // 상위 컴포넌트에 읽기 상태 변경 알림
-            if (handleReadStatusChange && isMountedRef.current) {
-                handleReadStatusChange(BOOK, JANG, true);
-                console.log('✅ Connection: Notified parent component');
-            }
-
-            console.log(`✅ Connection: Successfully marked chapter ${BOOK}:${JANG} as read`);
-
-        } catch (error) {
-            console.error('❌ Connection: Error marking chapter as read:', error);
-            throw error;
+        if (!isAutoProgressEnabled || isAutoProcessing || !sound) {
+            console.log('❌ Auto progress skipped:', {
+                enabled: isAutoProgressEnabled,
+                processing: isAutoProcessing,
+                sound: sound
+            });
+            return;
         }
-    }, [BOOK, JANG, planData, markChapterAsReadHook, updateReadingTableCache, handleReadStatusChange, safeSetTimeout]);
+
+        if (event.type === Event.PlaybackQueueEnded) {
+            console.log(`🏁 Audio completed at ${currentBookRef.current}:${currentJangRef.current}`);
+            await handleAutoProgress();
+        }
+        else if (event.type === Event.PlaybackState && event.state === State.Ended) {
+            console.log(`🎯 Audio ended at ${currentBookRef.current}:${currentJangRef.current}`);
+            if (autoProgressTimeoutRef.current) {
+                clearTimeout(autoProgressTimeoutRef.current);
+            }
+            autoProgressTimeoutRef.current = safeSetTimeout(async () => {
+                await handleAutoProgress();
+            }, 500);
+        }
+    });
 
     const onPressforward = useCallback(
         async (jang: number) => {
             if (!isMountedRef.current) return;
 
+            const currentBook = currentBookRef.current;
             const curJang = jang - 1;
 
             if (curJang === 0) {
-                if (BOOK > 1) {
-                    defaultStorage.set("bible_book_connec", BOOK - 1);
-                    defaultStorage.set("bible_jang_connec", BibleStep[BOOK - 2].count);
+                if (currentBook > 1) {
+                    defaultStorage.set("bible_book_connec", currentBook - 1);
+                    defaultStorage.set("bible_jang_connec", BibleStep[currentBook - 2].count);
                     dispatch(
                         illdocSelectSlice.actions.changePage({
-                            book: BOOK - 1,
-                            jang: BibleStep[BOOK - 2].count,
+                            book: currentBook - 1,
+                            jang: BibleStep[currentBook - 2].count,
                         })
                     );
                 }
@@ -369,7 +470,7 @@ export default function BibleConectionScreen() {
                 defaultStorage.set("bible_jang_connec", curJang);
                 dispatch(
                     illdocSelectSlice.actions.changePage({
-                        book: BOOK,
+                        book: currentBook,
                         jang: curJang,
                     })
                 );
@@ -383,90 +484,16 @@ export default function BibleConectionScreen() {
 
             dispatch(bibleTextSlice.actions.reset());
         },
-        [sound, BOOK, JANG]
+        [sound, handleUpdateData, dispatch]
     );
 
+    // 기존 onPressNext (BOOK/JANG 사용) - 버튼에서 사용
     const onPressNext = useCallback(
         (jang: number) => {
-            if (!isMountedRef.current) return;
-
-            const curJang = jang + 1;
-            const totalJang = BibleStep[BOOK - 1].count;
-
-            if (curJang > totalJang) {
-                if (BOOK === 66) {
-                    Toast.show({
-                        type: "success",
-                        text1: "🎉 성경 전체 완독을 축하합니다!",
-                        text2: "설정 화면으로 이동합니다.",
-                        visibilityTime: 3000,
-                        topOffset: insets.top + 10, // ✅ Safe Area 적용
-                    });
-                    navigation.navigate("IllDocSettingScreen", {});
-                    return;
-                } else {
-                    defaultStorage.set("bible_book_connec", BOOK + 1);
-                    defaultStorage.set("bible_jang_connec", 1);
-                    dispatch(
-                        illdocSelectSlice.actions.changePage({
-                            book: BOOK + 1,
-                            jang: 1,
-                        })
-                    );
-                }
-            } else {
-                defaultStorage.set("bible_jang_connec", curJang);
-                dispatch(
-                    illdocSelectSlice.actions.changePage({
-                        book: BOOK,
-                        jang: curJang,
-                    })
-                );
-            }
-
-            handleUpdateData();
-            dispatch(bibleTextSlice.actions.reset());
-
-            // 🆕 핵심 개선: 안전한 오디오 재생 호출
-            if (sound && isMountedRef.current) {
-                console.log("🎵 Scheduling safe audio play after page change");
-                safeSetTimeout(() => {
-                    console.log("🎵 Executing delayed audio play");
-                    safePlayCurrentPageAudio();
-                }, 500);
-            }
+            onPressNextWithRef(jang);
         },
-        [sound, BOOK, JANG, handleUpdateData, navigation, safeSetTimeout, safePlayCurrentPageAudio, insets]
+        [onPressNextWithRef]
     );
-
-    dispatch(illdocSelectSlice.actions.changePage({ book, jang }));
-    const BOOK = useSelector(
-        (state: any) => state.illDoc.book,
-        (left, right) => left.book !== right.book
-    );
-    const JANG = useSelector(
-        (state: any) => state.illDoc.jang,
-        (left, right) => left.jang !== right.jang
-    );
-
-    const selectSql = `SELECT type, color, jul FROM 'bible_setting'
-                       WHERE book = ${BOOK} and jang = ${JANG}`;
-
-    const bibleName = `${BibleStep?.[BOOK - 1]?.name} ${JANG}장` ?? "";
-
-    const fetcher = async (url: string) => {
-        const data = await fetchSql(bibleSetting, url, []);
-        return data;
-    };
-
-    const { data: markData, mutate } = useSWR(selectSql, fetcher);
-
-    const handleUpdateData = useCallback(async () => {
-        if (!isMountedRef.current) return;
-
-        const data = await fetchSql(bibleSetting, selectSql, []);
-        return mutate(selectSql, data);
-    }, [BOOK, JANG]);
 
     const handleReadStatusChange = useCallback((book: number, chapter: number, isRead: boolean) => {
         if (!isMountedRef.current) return;
@@ -513,7 +540,6 @@ export default function BibleConectionScreen() {
 
     return (
         <>
-            {/* Safe Area 상단 적용 */}
             <View style={{ paddingTop: insets.top }}>
                 <IllDocBibleHeaderLayout
                     {...{
@@ -544,7 +570,6 @@ export default function BibleConectionScreen() {
                         }}
                     />
                     {!sound && <BibleReadingList vector={false} menuIndex={menuIndex} onPress={onMenuPress} />}
-                    {/* Safe Area 하단 적용 */}
                     <View style={{ paddingBottom: insets.bottom }}>
                         <IllDocPlayFooterLayout
                             ref={audioPlayerRef}
@@ -556,7 +581,6 @@ export default function BibleConectionScreen() {
             ) : (
                 <>
                     <OtherPage uri={MenusRenderIndex()} />
-                    {/* Safe Area 하단 적용 */}
                     <View style={{ paddingBottom: insets.bottom }}>
                         <FooterLayout />
                     </View>
@@ -582,7 +606,7 @@ const getAutoProgressSetting = (): boolean => {
     return defaultStorage.getBoolean('auto_progress_enabled') ?? false;
 };
 
-// FloatingActionContainer와 나머지 함수들은 기존과 동일하지만 안전성 검사 추가
+// FloatingActionContainer
 const FloatingActionContainer = ({ BOOK, JANG, handleUpdateData, insets }: any) => {
     const fontStyle = JSON.parse(defaultStorage.getString("fontStyle") ?? "");
     const dispatch = useDispatch();
@@ -624,7 +648,7 @@ const FloatingActionContainer = ({ BOOK, JANG, handleUpdateData, insets }: any) 
                 <FloatingAction
                     position="right"
                     distanceToEdge={{
-                        vertical: 140 + insets.bottom, // ✅ 하단 Safe Area 고려
+                        vertical: 140 + insets.bottom,
                         horizontal: 10
                     }}
                     showBackground={false}

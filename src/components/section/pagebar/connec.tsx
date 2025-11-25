@@ -1,5 +1,5 @@
 import { Button, IconButton, Text } from 'native-base';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Dimensions } from 'react-native';
 import AntDesignIcon from 'react-native-vector-icons/AntDesign';
 import { useBaseStyle } from '../../../hooks';
@@ -26,129 +26,193 @@ export default function ConectionPageBar({
 }) {
     const { color } = useBaseStyle();
     const [read, setRead] = useState<boolean>(false);
+    const [isLoaded, setIsLoaded] = useState<boolean>(false);
+    const [isProcessing, setIsProcessing] = useState<boolean>(false);
+
+    // 중복 실행 방지
+    const isUpdatingRef = useRef(false);
+    const lastUpdateTimeRef = useRef(0);
+
     const {
         isChapterReadSync,
         markChapterAsRead,
         markChapterAsUnread,
         planData,
         updateReadingTableCache,
-        loadReadingTableData,
+        readingTableData,
         forceRefresh
     } = useBibleReading();
 
     const BOOK = defaultStorage.getNumber('bible_book_connec') ?? 1;
     const JANG = defaultStorage.getNumber('bible_jang_connec') ?? 1;
 
+    //핵심 수정: 읽기 상태 로드
     useEffect(() => {
         const loadReadStatus = async () => {
-            // 1. reading_table에서 상태 로드
-            const tableRead = await loadReadingTableData(BOOK, JANG);
+            setIsLoaded(false);
 
-            // 2. 일독 계획 여부 확인
-            let planRead = false;
-            if (planData) {
-                planRead = isChapterReadSync(BOOK, JANG);
+            const key = `${BOOK}_${JANG}`;
+
+            //먼저 메모리 캐시에서 확인
+            if (readingTableData && readingTableData[key] !== undefined) {
+                const cachedRead = readingTableData[key];
+                console.log(`[CACHE HIT] ${key} = ${cachedRead}`);
+
+                // 일독 계획도 확인
+                let planRead = false;
+                if (planData) {
+                    planRead = isChapterReadSync(BOOK, JANG);
+                }
+
+                const finalRead = cachedRead || planRead;
+                console.log(`[UI] Button: "${finalRead ? '안읽음 체크' : '읽었음 체크'}"`);
+
+                setRead(finalRead);
+                setIsLoaded(true);
+                return;
             }
 
-            // 3. 일독 계획이 없으면 읽음 상태는 무조건 false
-            const finalRead = planData ? tableRead || planRead : false;
-            setRead(finalRead);
+            //캐시에 없으면 DB에서 직접 조회
+            console.log(`[CACHE MISS] ${key} - DB에서 직접 조회 (캐시 업데이트 안함)`);
 
-            // console.log(`Chapter ${BOOK}:${JANG} - Table: ${tableRead}, Plan: ${planRead}, Final: ${finalRead}`);
+            try {
+                const sql = `SELECT read FROM reading_table WHERE book = ? AND jang = ?`;
+                const result = await fetchSql(bibleSetting, sql, [BOOK, JANG], 0);
+
+                let dbRead = false;
+                if (result && result.read !== undefined) {
+                    // read 값 정확하게 파싱
+                    if (typeof result.read === 'boolean') {
+                        dbRead = result.read;
+                    } else if (typeof result.read === 'string') {
+                        dbRead = result.read === 'true' || result.read === 'True' || result.read === '1';
+                    }
+                    console.log(`[DB] ${key} = ${dbRead}`);
+                } else {
+                    //DB에 데이터가 없으면 false, 하지만 캐시 업데이트 안함!
+                    console.log(`[NO DATA] ${key} - DB에 데이터 없음`);
+                    dbRead = false;
+                }
+
+                // 일독 계획도 확인
+                let planRead = false;
+                if (planData) {
+                    planRead = isChapterReadSync(BOOK, JANG);
+                }
+
+                const finalRead = dbRead || planRead;
+                console.log(`[UI] Button: "${finalRead ? '안읽음 체크' : '읽었음 체크'}"`);
+
+                setRead(finalRead);
+            } catch (error) {
+                console.error('DB 조회 오류:', error);
+                setRead(false);
+            }
+
+            setIsLoaded(true);
         };
 
         loadReadStatus();
-    }, [BOOK, JANG, loadReadingTableData, isChapterReadSync, planData]);
+    }, [BOOK, JANG, readingTableData, planData, isChapterReadSync]);
 
-    const onReadPress = async () => {
+    //읽기 상태 토글
+    const onReadPress = useCallback(async () => {
+        const now = Date.now();
+
+        // 디바운싱 (200ms)
+        if (now - lastUpdateTimeRef.current < 200) {
+            console.log('Debounce - skipping');
+            return;
+        }
+
+        if (isUpdatingRef.current || isProcessing) {
+            console.log('Already processing - skipping');
+            return;
+        }
+
         try {
+            isUpdatingRef.current = true;
+            setIsProcessing(true);
+            lastUpdateTimeRef.current = now;
+
+            //현재 상태의 반대로 토글
             const newReadStatus = !read;
 
-            //console.log(`🔄 ConectionPageBar: Changing read status for ${BOOK}:${JANG} from ${read} to ${newReadStatus}`);
+            console.log(`[TOGGLE] ${BOOK}:${JANG}: ${read} → ${newReadStatus}`);
 
-            // 1. reading_table 업데이트
-            const settingSelectSql = `${defineSQL(['read'], 'SELECT', 'reading_table', {
-                WHERE: { BOOK: '?', JANG: '?' }
-            })}`;
+            //UI 즉시 업데이트
+            setRead(newReadStatus);
 
-            const settingInserttSql = `${defineSQL(
-                ['book', 'jang', 'read', 'time'],
-                'INSERT',
-                'reading_table',
-                {}
-            )}`;
-
-            const settingUpdatetSql = `${defineSQL(
-                ['read', 'time'],
-                'UPDATE',
-                'reading_table',
-                {
-                    WHERE: { BOOK, JANG }
-                }
-            )}`;
-
+            //DB 업데이트
+            const settingSelectSql = `SELECT read FROM reading_table WHERE book = ? AND jang = ?`;
             const result = await fetchSql(bibleSetting, settingSelectSql, [BOOK, JANG], 0);
 
-            // reading_table 업데이트
             if (result) {
-                await fetchSql(bibleSetting, settingUpdatetSql, [
+                // 기존 레코드 업데이트
+                const updateSql = `UPDATE reading_table SET read = ?, time = ? WHERE book = ? AND jang = ?`;
+                await fetchSql(bibleSetting, updateSql, [
                     String(newReadStatus),
-                    String(new Date())
+                    String(new Date()),
+                    BOOK,
+                    JANG
                 ]);
-                console.log('✅ ConectionPageBar: Updated existing reading_table record');
+                console.log('DB: Updated existing record');
             } else {
-                await fetchSql(bibleSetting, settingInserttSql, [
+                // 새 레코드 삽입
+                const insertSql = `INSERT INTO reading_table (book, jang, read, time) VALUES (?, ?, ?, ?)`;
+                await fetchSql(bibleSetting, insertSql, [
                     BOOK,
                     JANG,
                     String(newReadStatus),
                     String(new Date())
                 ]);
-                console.log('✅ ConectionPageBar: Created new reading_table record');
+                console.log('DB: Created new record');
             }
 
-            // 2. 캐시 업데이트 (이것이 리스트 표시에 중요!)
+            //캐시 업데이트 (명시적 저장!)
             updateReadingTableCache(BOOK, JANG, newReadStatus);
-            console.log('✅ ConectionPageBar: Updated reading table cache');
+            console.log(`Cache updated: ${BOOK}_${JANG} = ${newReadStatus}`);
 
-            // 3. 일독 계획 데이터도 업데이트 (있는 경우)
+            //일독 계획 업데이트 (백그라운드)
             if (planData) {
                 if (newReadStatus) {
-                    await markChapterAsRead(BOOK, JANG);
-                    console.log('✅ ConectionPageBar: Marked chapter as read in plan data');
+                    markChapterAsRead(BOOK, JANG).catch(err => {
+                        console.error('Plan update error:', err);
+                    });
                 } else {
-                    await markChapterAsUnread(BOOK, JANG);
-                    console.log('✅ ConectionPageBar: Marked chapter as unread in plan data');
+                    markChapterAsUnread(BOOK, JANG).catch(err => {
+                        console.error('Plan update error:', err);
+                    });
                 }
             }
 
-            // 4. 로컬 상태 업데이트
-            setRead(newReadStatus);
-            console.log('✅ ConectionPageBar: Updated local read state');
-
-            // 5. 🆕 훅의 강제 새로고침 실행 (리스트 업데이트를 위해)
-            setTimeout(() => {
-                console.log('🔄 ConectionPageBar: Triggering forceRefresh after state change');
-                forceRefresh();
-            }, 100);
-
-            // 6. 상위 컴포넌트에 알림 (기존 로직)
+            //상위 컴포넌트 알림
             if (onReadStatusChange) {
                 onReadStatusChange(BOOK, JANG, newReadStatus);
-                console.log('✅ ConectionPageBar: Notified parent component');
             }
 
-            // 7. 읽었을 때만 다음 장으로 이동 (기존 로직)
+            //읽음으로 변경했을 때만 다음 장으로 이동!
             if (newReadStatus) {
-                console.log('➡️ ConectionPageBar: Moving to next chapter');
-                onPressNext(JANG);
+                console.log(`[NAV] Moving to next chapter`);
+                setTimeout(() => {
+                    onPressNext(JANG);
+                }, 50);
+            } else {
+                console.log(`[NAV] Staying (marked as unread)`);
             }
-
-            console.log(`✅ ConectionPageBar: Successfully updated read status to ${newReadStatus}`);
 
         } catch (error) {
-            console.error('❌ ConectionPageBar: 읽기 상태 업데이트 오류:', error);
+            console.error('Toggle error:', error);
+            // 롤백
+            setRead(!read);
+        } finally {
+            setTimeout(() => {
+                isUpdatingRef.current = false;
+                setIsProcessing(false);
+            }, 50);
         }
-    };
+    }, [read, BOOK, JANG, planData, isProcessing, updateReadingTableCache,
+        markChapterAsRead, markChapterAsUnread, onReadStatusChange, onPressNext]);
 
     return (
         <>
@@ -162,11 +226,13 @@ export default function ConectionPageBar({
                 borderRadius="full"
                 bg={read ? color.bible : color.gray4}
                 fontSize={12}
-                _pressed={{ bg: color.bible }}
+                _pressed={{ bg: read ? color.bible : color.gray3 }}
                 _hover={{}}
                 width={'120px'}
                 height={'30px'}
                 onPress={onReadPress}
+                isDisabled={isProcessing || !isLoaded}
+                opacity={isProcessing ? 0.6 : 1}
                 padding={0}
                 style={{
                     position: 'absolute',
@@ -175,7 +241,7 @@ export default function ConectionPageBar({
                 }}
             >
                 <Text color={read ? color.white : color.black} fontSize={'10px'}>
-                    {read ? '안읽음 체크' : '읽었음 체크'}
+                    {!isLoaded ? '로딩...' : (isProcessing ? '처리중...' : (read ? '안읽음 체크' : '읽었음 체크'))}
                 </Text>
             </Button>
             <IconButton

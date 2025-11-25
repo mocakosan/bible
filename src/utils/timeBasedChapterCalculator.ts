@@ -1,9 +1,6 @@
-// utils/timeBasedChapterCalculator.ts
-// 시간 목표를 장수로 변환하는 계산기
-
 import { BibleStep } from './define';
 
-// 🔥 시간 기반 장수 계산을 위한 확장된 BiblePlanData
+//시간 기반 장수 계산을 위한 확장된 BiblePlanData
 export interface TimeBasedBiblePlanData {
     planType: string;
     planName: string;
@@ -12,12 +9,12 @@ export interface TimeBasedBiblePlanData {
     totalDays: number;
 
     // UI에서 보여줄 장 기반 데이터
-    chaptersPerDay: number;        // 계산된 하루 장수 (UI 표시용)
+    chaptersPerDay: number;
     totalChapters: number;
 
     // 내부 시간 기반 데이터
-    targetMinutesPerDay: number;   // 실제 시간 목표
-    isTimeBasedCalculation: true;  // 시간 기반 계산 여부 표시
+    targetMinutesPerDay: number;
+    isTimeBasedCalculation: true;
 
     currentDay: number;
     readChapters: ReadingStatus[];
@@ -29,15 +26,12 @@ export interface ReadingStatus {
     chapter: number;
     date: string;
     isRead: boolean;
-    estimatedMinutes: number;  // 해당 장의 예상 읽기 시간
+    estimatedMinutes: number;
 }
 
 // 장별 시간 데이터 저장소
 let chapterTimeMap: Map<string, number> = new Map();
 
-/**
- * 음성 파일 데이터로 장별 시간 초기화
- */
 export const initializeChapterTimes = (audioData: any[]) => {
     chapterTimeMap.clear();
 
@@ -78,9 +72,6 @@ export const initializeChapterTimes = (audioData: any[]) => {
     console.log(`장별 시간 데이터 로드: ${chapterTimeMap.size}개`);
 };
 
-/**
- * 특정 장의 예상 읽기 시간 반환 (분)
- */
 export const getChapterReadingTime = (book: number, chapter: number): number => {
     const key = `${book}_${chapter}`;
     const actualTime = chapterTimeMap.get(key);
@@ -90,15 +81,12 @@ export const getChapterReadingTime = (book: number, chapter: number): number => 
     }
 
     // 기본 추정치
-    if (book === 19) return 2.5;      // 시편
-    if (book === 20) return 3.5;      // 잠언
-    if (book <= 39) return 4.0;       // 구약
-    return 4.2;                       // 신약
+    if (book === 19) return 2.5;
+    if (book === 20) return 3.5;
+    if (book <= 39) return 4.0;
+    return 4.2;
 };
 
-/**
- * 🔥 시간 목표를 하루 장수로 변환하는 핵심 함수 (안전한 처리)
- */
 export const calculateChaptersFromTimeGoal = (
     planType: string,
     targetMinutesPerDay: number
@@ -140,9 +128,6 @@ export const calculateChaptersFromTimeGoal = (
     }
 };
 
-/**
- * 🔥 시간 기반 계획 생성 (UI는 장 기반으로 표시) - 안전한 처리
- */
 export const createTimeBasedPlan = (
     planTypeId: string,
     startDate: Date,
@@ -161,7 +146,7 @@ export const createTimeBasedPlan = (
             throw new Error('Invalid date range');
         }
 
-        // 🔥 핵심: 시간 목표를 장수로 변환
+        //핵심: 시간 목표를 장수로 변환
         const chaptersPerDay = calculateChaptersFromTimeGoal(planTypeId, targetMinutesPerDay);
 
         return {
@@ -173,11 +158,11 @@ export const createTimeBasedPlan = (
             totalChapters: planType.totalChapters,
 
             // UI에서 보여줄 장 기반 데이터
-            chaptersPerDay,                // 시간 기반으로 계산된 하루 장수
+            chaptersPerDay,
 
             // 내부 시간 기반 데이터
-            targetMinutesPerDay,           // 실제 시간 목표
-            isTimeBasedCalculation: true,  // 시간 기반 계산임을 표시
+            targetMinutesPerDay,
+            isTimeBasedCalculation: true,
 
             currentDay: 1,
             readChapters: [],
@@ -189,14 +174,10 @@ export const createTimeBasedPlan = (
     }
 };
 
-/**
- * 🔥 시간 기반으로 오늘 읽어야 할 장들 계산
- * (기존 getTodayChapters 함수를 대체)
- */
 export const getTodayChaptersFromTime = (planData: TimeBasedBiblePlanData): ReadingStatus[] => {
     const currentDay = getCurrentDay(planData.startDate);
 
-    // 🔥 핵심: 시간 목표에 맞는 장들을 순차적으로 선택
+    //핵심: 시간 목표에 맞는 장들을 순차적으로 선택
     const bookRange = getBookRangeForPlan(planData.planType);
     const targetTime = planData.targetMinutesPerDay;
 
@@ -219,9 +200,6 @@ export const getTodayChaptersFromTime = (planData: TimeBasedBiblePlanData): Read
     return selectChaptersForTime(planData, todayNeededTime, bookRange);
 };
 
-/**
- * 시간에 맞는 장들을 순차적으로 선택
- */
 const selectChaptersForTime = (
     planData: TimeBasedBiblePlanData,
     targetTime: number,
@@ -281,21 +259,13 @@ const selectChaptersForTime = (
     return result;
 };
 
-/**
- * 🔥 기존 UI 호환성을 위한 래퍼 함수들
- */
-
-// 기존 getTodayChapters 함수와 호환
 export const getTodayChapters = (planData: any): ReadingStatus[] => {
     if (planData.isTimeBasedCalculation) {
         return getTodayChaptersFromTime(planData);
     }
-
-    // 기존 장 기반 로직 (기존 코드 유지)
     return getTodayChaptersLegacy(planData);
 };
 
-// 기존 장 기반 로직 (변경 없음)
 const getTodayChaptersLegacy = (planData: any): ReadingStatus[] => {
     const currentDay = getCurrentDay(planData.startDate);
     const startIndex = (currentDay - 1) * planData.chaptersPerDay;
@@ -321,7 +291,6 @@ const getTodayChaptersLegacy = (planData: any): ReadingStatus[] => {
     return todayChapters;
 };
 
-// 기존 getChapterStatus 함수와 호환
 export const getChapterStatus = (
     planData: any,
     book: number,
@@ -340,26 +309,24 @@ export const getChapterStatus = (
         return getChapterStatusTimeBased(planData, book, chapter);
     }
 
-    // 기존 장 기반 로직
     return getChapterStatusLegacy(planData, book, chapter);
 };
 
-// 시간 기반 장 상태 확인
 const getChapterStatusTimeBased = (planData: any, book: number, chapter: number): string => {
     try {
         const currentDay = getCurrentDay(planData.startDate);
 
-        // 오늘 읽어야 할 장들
+
         const todayChapters = getTodayChaptersFromTime(planData);
         const isTodayChapter = todayChapters.some(c => c.book === book && c.chapter === chapter);
 
         if (isTodayChapter) return 'today';
 
-        // 어제 읽어야 했던 장들 (간단한 추정)
+
         if (currentDay > 1) {
             const bookRange = getBookRangeForPlan(planData.planType);
             if (book >= bookRange.start && book <= bookRange.end) {
-                // 이 장이 언제쯤 읽혀야 했는지 추정
+
                 const chapterPosition = getChapterPositionInPlan(book, chapter, planData);
                 const expectedDay = Math.ceil(chapterPosition / planData.targetMinutesPerDay);
 
@@ -379,7 +346,6 @@ const getChapterStatusTimeBased = (planData: any, book: number, chapter: number)
     }
 };
 
-// 헬퍼 함수들
 const getBookRangeForPlan = (planType: string) => {
     switch (planType) {
         case 'pentateuch': return { start: 1, end: 5 };
@@ -440,11 +406,10 @@ const getBookAndChapterFromGlobalIndex = (globalIndex: number): { book: number, 
 };
 
 const getChapterStatusLegacy = (planData: any, book: number, chapter: number): string => {
-    // 기존 장 기반 로직 (변경 없음)
+
     return 'normal';
 };
 
-// 기존 타입들 (호환성 유지)
 export const BIBLE_PLAN_TYPES = [
     {
         id: 'full_bible',

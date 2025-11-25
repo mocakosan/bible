@@ -1,6 +1,3 @@
-// src/components/page/reading/_side/setting.tsx
-// 시간 기반 성경 읽기 시스템 - 하루 목표 시간 고정, 장수는 매일 다르게
-
 import { Box, Button, HStack, Text, VStack, Actionsheet, useDisclose, Badge } from 'native-base';
 import { useBaseStyle, useNativeNavigation } from '../../../../hooks';
 import Calender from '../../../section/calendar';
@@ -9,7 +6,12 @@ import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 import {ScrollView, View, Alert, Image} from 'react-native';
 import { Toast } from 'react-native-toast-message/lib/src/Toast';
-import { bibleSetting, fetchSql } from '../../../../utils';
+import {
+  bibleSetting,
+  fetchSql,
+  invalidateCache,
+  refreshCache
+} from '../../../../utils';
 import { defaultStorage } from '../../../../utils/mmkv';
 import {
   loadBiblePlanData,
@@ -17,7 +19,8 @@ import {
   deleteBiblePlanData,
   calculateMissedChapters,
   formatDate,
-  calculateProgress
+  calculateProgress,
+  invalidateTodayChaptersCache
 } from '../../../../utils/biblePlanUtils';
 import {
   DETAILED_BIBLE_PLAN_TYPES,
@@ -61,7 +64,6 @@ function generateTimeBasedDailyPlan(
     totalDays: number,
     startDate: Date
 ): DailyChapterPlan[] {
-  // 계획 타입별 범위 설정
   let startBook = 1;
   let endBook = 66;
 
@@ -81,7 +83,6 @@ function generateTimeBasedDailyPlan(
       break;
   }
 
-  // 전체 시간과 장수 계산
   let totalSeconds = 0;
   let totalChapters = 0;
   const allChapters: {
@@ -109,19 +110,16 @@ function generateTimeBasedDailyPlan(
     }
   }
 
-  // 하루 목표 시간 (초 단위)
   const targetSecondsPerDay = Math.round(totalSeconds / totalDays);
   const targetMinutesPerDay = Math.round(targetSecondsPerDay / 60);
 
   console.log(`
-  📊 시간 기반 계획 생성
+  시간 기반 계획 생성
   - 총 ${totalDays}일
-  - 전체 장수: ${totalChapters}장 (모든 장 포함)
-  - 전체 시간: ${Math.round(totalSeconds / 60)}분
-  - 하루 목표: ${targetMinutesPerDay}분 (${targetSecondsPerDay}초)
+  - 전체 장수: ${totalChapters}장
+  - 하루 목표: ${targetMinutesPerDay}분
   `);
 
-  // 일별 계획 생성
   const dailyPlan: DailyChapterPlan[] = [];
   let currentDate = new Date(startDate);
   let chapterIndex = 0;
@@ -130,7 +128,6 @@ function generateTimeBasedDailyPlan(
     const dayChapters: DailyChapterPlan['chapters'] = [];
     let dayTotalSeconds = 0;
 
-    // 마지막 날인 경우 남은 모든 장 추가
     if (day === totalDays) {
       while (chapterIndex < allChapters.length) {
         const chapter = allChapters[chapterIndex];
@@ -146,14 +143,12 @@ function generateTimeBasedDailyPlan(
         chapterIndex++;
       }
     } else {
-      // 목표 시간에 도달할 때까지 장 추가
       let targetReached = false;
 
       while (chapterIndex < allChapters.length && !targetReached) {
         const chapter = allChapters[chapterIndex];
         const nextTotalSeconds = dayTotalSeconds + chapter.seconds;
 
-        // 첫 장은 무조건 추가
         if (dayChapters.length === 0) {
           dayChapters.push({
             book: chapter.book,
@@ -165,13 +160,10 @@ function generateTimeBasedDailyPlan(
           });
           dayTotalSeconds += chapter.seconds;
           chapterIndex++;
-        }
-        // 목표 시간과의 차이 계산
-        else {
+        } else {
           const currentDiff = Math.abs(dayTotalSeconds - targetSecondsPerDay);
           const nextDiff = Math.abs(nextTotalSeconds - targetSecondsPerDay);
 
-          // 다음 장을 추가했을 때 목표에 더 가까워지면 추가
           if (nextDiff < currentDiff || dayTotalSeconds < targetSecondsPerDay * 0.5) {
             dayChapters.push({
               book: chapter.book,
@@ -205,13 +197,8 @@ function generateTimeBasedDailyPlan(
     }
   }
 
-  // 검증: 모든 장이 포함되었는지 확인
   const includedChapters = dailyPlan.reduce((sum, day) => sum + day.actualChapterCount, 0);
-  console.log(`✅ 계획 생성 완료: ${includedChapters}/${totalChapters}장 포함`);
-
-  if (includedChapters !== totalChapters) {
-    console.warn(`⚠️ 경고: 일부 장이 누락되었습니다 (${totalChapters - includedChapters}장)`);
-  }
+  console.log(`계획 생성 완료: ${includedChapters}/${totalChapters}장 포함`);
 
   return dailyPlan;
 }
@@ -227,7 +214,6 @@ function formatTime(totalSeconds: number): string {
   return `${minutes}분 ${seconds}초`;
 }
 
-// 총기간 컨트롤 컴포넌트
 const DurationControlComponent = ({ startDate, endDate, onEndDateChange, planData }: any) => {
   const convertStringToDate = (dateString: string) => {
     const cleaned = dateString.replace(/년|월/g, '-').replace(/일/g, '');
@@ -347,11 +333,11 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
   const [isTimeDataLoaded, setIsTimeDataLoaded] = useState(false);
 
   const [actualChapterCounts, setActualChapterCounts] = useState<{ [key: string]: number }>({
-    full_bible: 1189,   // ✅ 정확한 값
-    old_testament: 921,  // ✅ 929 → 921로 수정
-    new_testament: 268,  // ✅ 정확한 값
-    pentateuch: 187,     // ✅ 정확한 값
-    psalms: 150          // ✅ 정확한 값
+    full_bible: 1189,
+    old_testament: 921,
+    new_testament: 268,
+    pentateuch: 187,
+    psalms: 150
   });
 
   useEffect(() => {
@@ -359,11 +345,11 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
       try {
         const success = await loadChapterTimeDataFromCSV();
         setIsTimeDataLoaded(success);
-        console.log('⏱️ 시간 데이터 로드:', success ? '성공' : '실패');
+        console.log('시간 데이터 로드:', success ? '성공' : '실패');
 
         const defaultCounts = {
           full_bible: 1189,
-          old_testament: 921,  // ✅ 929 → 921로 수정
+          old_testament: 921,
           new_testament: 268,
           pentateuch: 187,
           psalms: 150
@@ -528,7 +514,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     initializeComponent();
   }, []);
 
-  // 🔥 핵심 수정: 시간 기반 계산 로직
   useEffect(() => {
     if (selectedPlanType && calendarState.start && calendarState.end) {
       try {
@@ -539,27 +524,14 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
           const selectedPlan = DETAILED_BIBLE_PLAN_TYPES.find(p => p.id === selectedPlanType);
           if (!selectedPlan) return;
 
-          // 총 일수 계산
           const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-          // 시간 기반 일별 계획 생성
           const dailyPlan = generateTimeBasedDailyPlan(selectedPlanType, totalDays, startDate);
 
-          // 전체 통계 계산
           const totalChapters = dailyPlan.reduce((sum, day) => sum + day.actualChapterCount, 0);
           const totalSeconds = dailyPlan.reduce((sum, day) => sum + day.totalSeconds, 0);
           const totalMinutes = totalSeconds / 60;
           const targetMinutesPerDay = Math.round(totalMinutes / totalDays);
           const avgChaptersPerDay = totalChapters / dailyPlan.length;
-
-          console.log(`
-          ✅ 시간 기반 계획 생성 완료
-          - 계획: ${selectedPlan.name}
-          - 총 ${totalDays}일
-          - 전체 ${totalChapters}장
-          - 하루 목표: ${targetMinutesPerDay}분 (고정)
-          - 평균 장수: ${avgChaptersPerDay.toFixed(1)}장/일
-          `);
 
           setCalculationResult({
             planType: selectedPlanType,
@@ -574,7 +546,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
             totalTimeSeconds: totalSeconds,
             isTimeBasedCalculation: true,
             hasActualTimeData: true,
-            dailyPlan: dailyPlan // 일별 계획 저장
+            dailyPlan: dailyPlan
           });
         }
       } catch (error) {
@@ -667,7 +639,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
       Toast.show({
         type: 'success',
         text1: '일독 설정하기를 눌러주세요',
-        text2: '목표일이 설정되었습니다. 이제 일독 설정하기 버튼을 눌러주세요'
+        text2: '목표일이 설정되었습니다'
       });
 
       if (mmkv) {
@@ -696,12 +668,13 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
     }
   };
 
+  //수정된 초기화 함수
   const onReset = () => {
     Alert.alert(
         '설정 초기화',
         planData
-            ? '일독 설정과 읽기 기록을 모두 초기화하시겠습니까?\n\n⚠️ 이 작업은 되돌릴 수 없습니다.'
-            : '읽기 기록을 초기화하시겠습니까?\n\n⚠️ 이 작업은 되돌릴 수 없습니다.',
+            ? '일독 설정과 읽기 기록을 모두 초기화하시겠습니까?\n\n️ 이 작업은 되돌릴 수 없습니다.'
+            : '읽기 기록을 초기화하시겠습니까?\n\n️ 이 작업은 되돌릴 수 없습니다.',
         [
           { text: '취소', style: 'cancel' },
           {
@@ -709,7 +682,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
             style: 'destructive',
             onPress: async () => {
               try {
-                console.log('=== 설정 초기화 프로세스 시작 ===');
+                console.log('===설정 초기화 시작 ===');
 
                 Toast.show({
                   type: 'info',
@@ -718,39 +691,72 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   autoHide: false
                 });
 
-                // MMKV 스토리지 초기화
+                // SQLite reading_table 완전 초기화
+                try {
+                  // 모든 레코드 삭제
+                  await fetchSql(bibleSetting, 'DELETE FROM reading_table', []);
+                  console.log('SQLite reading_table 삭제 완료');
+                } catch (sqlError) {
+                  console.error('SQLite DELETE 실패, UPDATE 시도:', sqlError);
+
+                  try {
+                    // 방법 2: read를 "false"로 업데이트
+                    await fetchSql(bibleSetting, 'UPDATE reading_table SET read = ?', ['false']);
+                    console.log('SQLite reading_table UPDATE 완료');
+                  } catch (updateError) {
+                    console.error('SQLite UPDATE도 실패:', updateError);
+                  }
+                }
+
+                // 🔥 2. 메모리 캐시 초기화 (sqlite.ts)
+                try {
+                  invalidateCache();
+                  console.log('메모리 캐시 무효화 완료');
+                } catch (cacheError) {
+                  console.warn('캐시 무효화 실패:', cacheError);
+                }
+
+                // 🔥 3. biblePlanUtils 캐시 무효화
+                try {
+                  invalidateTodayChaptersCache();
+                  console.log('일독 계획 캐시 무효화 완료');
+                } catch (planCacheError) {
+                  console.warn('일독 계획 캐시 무효화 실패:', planCacheError);
+                }
+
+                // 🔥 4. 일독 계획 데이터 삭제
+                try {
+                  deleteBiblePlanData();
+                  console.log('일독 계획 데이터 삭제 완료');
+                } catch (planError) {
+                  console.warn('일독 계획 삭제 실패:', planError);
+                }
+
+                //MMKV 스토리지 초기화
                 try {
                   const keysToDelete = [
                     'bible_reading_plan',
                     'bible_plan_data',
                     'bible_reading_cache',
                     'reading_progress',
-                    'calender'
+                    'calender',
+                    'playback_state'
                   ];
 
                   keysToDelete.forEach(key => {
                     try {
                       defaultStorage.delete(key);
-                      console.log(`MMKV 키 삭제 완료: ${key}`);
                     } catch (keyError) {
-                      console.warn(`MMKV 키 삭제 실패 (무시 가능): ${key}`, keyError);
+                      // 무시
                     }
                   });
 
                   console.log('MMKV 초기화 완료');
                 } catch (mmkvError) {
-                  console.error('MMKV 초기화 오류 (계속 진행):', mmkvError);
+                  console.error('MMKV 초기화 오류:', mmkvError);
                 }
 
-                // SQLite 데이터 초기화
-                try {
-                  await bibleSetting('UPDATE reading_table SET read = "F"');
-                  console.log('SQLite reading_table 초기화 완료');
-                } catch (sqlError) {
-                  console.error('SQLite 초기화 오류 (계속 진행):', sqlError);
-                }
-
-                // Redux 상태 초기화
+                //Redux 상태 초기화
                 try {
                   if (typeof store !== 'undefined' && store.dispatch) {
                     store.dispatch(bibleSelectSlice.actions.reset());
@@ -759,57 +765,52 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                     console.log('Redux 상태 초기화 완료');
                   }
                 } catch (reduxError) {
-                  console.error('Redux 초기화 오류 (무시 가능):', reduxError);
+                  console.warn('Redux 초기화 오류:', reduxError);
                 }
 
-                // 로컬 컴포넌트 상태 초기화
+                //로컬 컴포넌트 상태 초기화
+                setPlanData(null);
+                setMissedCount(0);
+                setSelectedPlanType('');
+                setCalculationResult(null);
+                setCalenderState({
+                  start: null,
+                  end: null
+                });
+                console.log(' 로컬 상태 초기화 완료');
+
+                //메모리 캐시 다시 초기화 (빈 상태로)
                 try {
-                  setPlanData(null);
-                  setMissedCount(0);
-                  setSelectedPlanType('');
-                  setCalculationResult(null);
-
-                  setCalenderState({
-                    start: null,
-                    end: null
-                  });
-
-                  console.log('로컬 상태 초기화 완료');
-                } catch (stateError) {
-                  console.error('로컬 상태 초기화 오류:', stateError);
+                  await refreshCache();
+                  console.log('메모리 캐시 재초기화 완료');
+                } catch (refreshError) {
+                  console.warn('캐시 재초기화 실패:', refreshError);
                 }
 
-                // 바텀시트 닫기
+                //바텀시트 닫기
                 try {
                   if (isOpen && typeof onClose === 'function') {
                     onClose();
                   }
                 } catch (closeError) {
-                  console.warn('바텀시트 닫기 오류 (무시 가능):', closeError);
+                  // 무시
                 }
 
-                // 상위 컴포넌트 새로고침
-                const triggerRefresh = () => {
-                  try {
-                    if (typeof onTrigger === 'function') {
-                      onTrigger();
-                    }
-                  } catch (triggerError) {
-                    console.warn('새로고침 트리거 오류:', triggerError);
+                //상위 컴포넌트 새로고침
+                console.log('🔄 상위 컴포넌트 새로고침 트리거');
+
+                if (typeof onTrigger === 'function') {
+                  onTrigger();
+                }
+
+                // 추가 새로고침 (안전장치)
+                setTimeout(() => {
+                  if (typeof onTrigger === 'function') {
+                    onTrigger();
                   }
-                };
+                }, 500);
 
-                console.log('🔄 Setting: Triggering immediate refresh');
-                triggerRefresh();
-
-                const delays = [50, 100, 200, 300, 500, 800, 1200, 2000, 3000];
-                delays.forEach((delay, index) => {
-                  setTimeout(() => {
-                    console.log(`🔄 Setting: Triggering refresh ${index + 1} (${delay}ms 후)`);
-                    triggerRefresh();
-                  }, delay);
-                });
-
+                // 완료 메시지
                 setTimeout(() => {
                   Toast.hide();
                   Toast.show({
@@ -818,29 +819,23 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                     text2: '모든 읽기 기록이 초기화되었습니다',
                     visibilityTime: 3000
                   });
-                }, 1500);
+                }, 800);
 
-                console.log('=== 설정 초기화 프로세스 완료 ===');
+                console.log('===설정 초기화 완료 ===');
 
               } catch (error) {
-                console.error('초기화 중 최종 오류 발생:', error);
+                console.error('초기화 중 오류:', error);
 
-                setTimeout(() => {
-                  Toast.hide();
-                  Toast.show({
-                    type: 'error',
-                    text1: '부분 초기화 완료',
-                    text2: '일부 데이터는 초기화되었습니다. 앱을 재시작하면 완전히 정리됩니다.',
-                    visibilityTime: 4000
-                  });
-                }, 1000);
+                Toast.hide();
+                Toast.show({
+                  type: 'error',
+                  text1: '초기화 오류',
+                  text2: '앱을 재시작해주세요',
+                  visibilityTime: 4000
+                });
 
-                try {
-                  if (typeof onTrigger === 'function') {
-                    onTrigger();
-                  }
-                } catch (triggerError) {
-                  console.warn('최종 새로고침 트리거 실패:', triggerError);
+                if (typeof onTrigger === 'function') {
+                  onTrigger();
                 }
               }
             }
@@ -850,18 +845,17 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
   };
 
   const handleSelectBibleCategory = (category: string) => {
-    console.log("🔥 성경 카테고리 선택:", category);
+    console.log("성경 카테고리 선택:", category);
 
     const selectedType = DETAILED_BIBLE_PLAN_TYPES.find(type => type.name === category);
     if (selectedType) {
       setSelectedPlanType(selectedType.id);
-      console.log("✅ 선택된 타입 ID:", selectedType.id);
+      console.log("선택된 타입 ID:", selectedType.id);
     } else {
-      console.error("❌ 선택된 타입을 찾을 수 없음:", category);
+      console.error("선택된 타입을 찾을 수 없음:", category);
     }
   };
 
-  // 🔥 핵심 수정: 계획 저장 시 일별 계획 포함
   const handleCompletePlanSetup = () => {
     if (!selectedPlanType) {
       Toast.show({
@@ -881,15 +875,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
 
     const selectedPlan = DETAILED_BIBLE_PLAN_TYPES.find(plan => plan.id === selectedPlanType);
     if (!selectedPlan) return;
-
-    console.log(`
-    💾 시간 기반 일독 계획 저장
-    - 계획: ${selectedPlan.name}
-    - 총 ${calculationResult.totalDays}일
-    - 전체 ${calculationResult.totalChapters}장
-    - 하루 목표: ${calculationResult.targetMinutesPerDay}분 (고정)
-    - 평균 장수: ${calculationResult.chaptersPerDayExact.toFixed(1)}장/일
-    `);
 
     const newPlanData = {
       planType: selectedPlanType,
@@ -912,7 +897,7 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
       totalTimeMinutes: calculationResult.totalTimeMinutes,
       totalTimeSeconds: calculationResult.totalTimeSeconds,
       hasActualTimeData: true,
-      dailyPlan: calculationResult.dailyPlan // 🔥 일별 계획 저장
+      dailyPlan: calculationResult.dailyPlan
     };
 
     saveBiblePlanData(newPlanData);
@@ -968,7 +953,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
               </>
           )}
           <Box bg={color.white}>
-            {/* 시작일 섹션 */}
             <HStack
                 h={70}
                 alignItems="center"
@@ -1002,7 +986,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
               </Button>
             </HStack>
 
-            {/* 종료일 섹션 */}
             <HStack
                 h={70}
                 alignItems="center"
@@ -1036,7 +1019,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
               </Button>
             </HStack>
 
-            {/* 총기간 섹션 */}
             <DurationControlComponent
                 startDate={calendarState.start}
                 endDate={calendarState.end}
@@ -1044,7 +1026,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 planData={planData}
             />
 
-            {/* 계산 결과 표시 */}
             {!planData && selectedPlanType && calculationResult && (
                 <Box bg="#F0F9FF" p={4} mx={4} mt={4} borderRadius="md">
                   <Text fontSize="16" color="#333333" textAlign="center" mb="2" fontWeight="600">
@@ -1082,7 +1063,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                 </Box>
             )}
 
-            {/* 하단 버튼들 */}
             <View
                 style={{
                   padding: 16,
@@ -1142,11 +1122,9 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
           </Box>
         </ScrollView>
 
-        {/* 성경일독 타입 선택 바텀시트 */}
         <Actionsheet isOpen={isOpen} onClose={onClose}>
           <Actionsheet.Content borderTopRadius="15" bg="white">
             {!selectedPlanType ? (
-                // 첫 번째 단계: 타입 선택 화면
                 <>
                   <Box w="100%" h={60} px={4} justifyContent="center" alignItems="center" borderBottomWidth={1} borderBottomColor="#F0F0F0">
                     <Text fontSize={18} fontWeight="600" color="#333333">
@@ -1202,7 +1180,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   </View>
                 </>
             ) : (
-                // 두 번째 단계: 선택된 타입의 상세 정보 화면
                 <>
                   <Box w="100%" h={60} px={4} justifyContent="center" alignItems="center" borderBottomWidth={1} borderBottomColor="#F0F0F0">
                     <Text fontSize={18} fontWeight="600" color="#333333">
@@ -1213,7 +1190,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                   <ScrollView style={{ width: '100%', maxHeight: 500 }}>
                     <View style={{ padding: 16 }}>
                       <VStack space={3} mb={4}>
-                        {/* 성경 타입 선택 박스들 */}
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                           {DETAILED_BIBLE_PLAN_TYPES.map((planType) => (
                               <Button
@@ -1227,7 +1203,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                                   mb={2}
                                   _pressed={{ bg: selectedPlanType === planType.id ? "#2BA89E" : "#E0E0E0" }}
                                   onPress={() => {
-                                    console.log("🔄 타입 변경:", planType.name);
                                     setSelectedPlanType(planType.id);
                                   }}
                               >
@@ -1250,14 +1225,12 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                           ))}
                         </View>
 
-                        {/* 선택된 타입의 상세 설명 */}
                         <Box bg="#F8F9FA" p={3} borderRadius="md">
                           <Text fontSize="16" color="#666" textAlign="center">
                             {DETAILED_BIBLE_PLAN_TYPES.find(t => t.id === selectedPlanType)?.description}
                           </Text>
                         </Box>
 
-                        {/* 예상 계산결과 */}
                         {calculationResult && (
                             <Box bg="#F0F9FF" p={4} borderRadius="md">
                               <HStack alignItems="center" justifyContent="center" mb={3}>
@@ -1310,7 +1283,6 @@ export default function SettingSidePage({ readState, onTrigger }: Props) {
                     </View>
                   </ScrollView>
 
-                  {/* 하단 버튼 */}
                   <Box w="100%" p={4}>
                     <Button
                         w="100%"

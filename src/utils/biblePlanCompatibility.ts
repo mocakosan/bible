@@ -1,21 +1,11 @@
-// utils/biblePlanCompatibility.ts
-// 기존 코드와 새로운 시간 기반 계산의 호환성을 위한 래퍼 함수들
-
 import {
     getTodayChapters as getTimeBasedTodayChapters,
     getChapterStatus as getTimeBasedChapterStatus,
     createTimeBasedPlan,
     initializeChapterTimes
 } from './timeBasedChapterCalculator';
-
-/**
- * 🔥 기존 biblePlanUtils.ts의 함수들을 대체하는 통합 함수들
- *
- * 이 함수들은 기존 코드를 수정하지 않고도 시간 기반 계산을 지원합니다.
- * 기존 장 기반 계획과 새로운 시간 기반 계획을 모두 처리합니다.
- */
-
-// 🔥 기존 getTodayChapters 함수를 대체
+import window from "@react-navigation/native/lib/typescript/src/__mocks__/window";
+//기존 getTodayChapters 함수를 대체
 export const getTodayChapters = (planData: any) => {
     if (!planData) return [];
 
@@ -28,7 +18,7 @@ export const getTodayChapters = (planData: any) => {
     return getLegacyTodayChapters(planData);
 };
 
-// 🔥 기존 getChapterStatus 함수를 대체
+//기존 getChapterStatus 함수를 대체
 export const getChapterStatus = (
     planData: any,
     book: number,
@@ -52,7 +42,7 @@ export const getChapterStatus = (
     return getLegacyChapterStatus(planData, book, chapter);
 };
 
-// 🔥 기존 calculateProgress 함수를 대체
+//기존 calculateProgress 함수를 대체
 export const calculateProgress = (planData: any) => {
     if (!planData) {
         return { progressPercentage: 0 };
@@ -66,7 +56,7 @@ export const calculateProgress = (planData: any) => {
     return calculateLegacyProgress(planData);
 };
 
-// 🔥 기존 markChapterAsRead 함수를 대체
+//기존 markChapterAsRead 함수를 대체
 export const markChapterAsRead = (
     planData: any,
     book: number,
@@ -102,7 +92,7 @@ export const markChapterAsRead = (
     };
 };
 
-// 🔥 기존 calculateMissedChapters 함수를 대체
+//기존 calculateMissedChapters 함수를 대체
 export const calculateMissedChapters = (planData: any): number => {
     if (!planData) return 0;
 
@@ -114,7 +104,7 @@ export const calculateMissedChapters = (planData: any): number => {
     return calculateLegacyMissedChapters(planData);
 };
 
-// 🔥 앱 초기화 시 호출할 함수
+//앱 초기화 시 호출할 함수
 export const initializeBiblePlanSystem = async () => {
     try {
         // CSV 파일 읽기 시도
@@ -139,16 +129,14 @@ export const initializeBiblePlanSystem = async () => {
         // 시간 데이터 초기화
         initializeChapterTimes(data);
 
-        console.log('✅ 시간 기반 성경 일독 시스템 초기화 완료');
+        console.log('시간 기반 성경 일독 시스템 초기화 완료');
         return true;
 
     } catch (error) {
-        console.warn('⚠️ 음성 데이터 로드 실패, 기본 추정치 사용:', error);
+        console.warn('음성 데이터 로드 실패, 기본 추정치 사용:', error);
         return false;
     }
 };
-
-// === 내부 구현 함수들 ===
 
 // 시간 기반 진행률 계산
 const calculateTimeBasedProgress = (planData: any) => {
@@ -297,7 +285,7 @@ const findChapterDayInPlan = (book: number, chapter: number, planData: any): num
     return Math.ceil(globalIndex / planData.chaptersPerDay);
 };
 
-// 🔥 기존 코드에서 import 구문만 바꾸면 되도록 모든 함수 export
+//기존 코드에서 import 구문만 바꾸면 되도록 모든 함수 export
 export {
     createTimeBasedPlan,
     initializeChapterTimes
