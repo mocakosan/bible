@@ -1,8 +1,9 @@
 package com.clsk.media;
 
 import android.app.Application;
-import android.content.BroadcastReceiver;
+import androidx.multidex.MultiDex;
 import android.content.Context;
+import android.content.BroadcastReceiver;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Build;
@@ -53,9 +54,7 @@ public class MainApplication extends Application implements ReactApplication {
                 packages.add(new RNAdPopcornRewardPackage());
                 packages.add(new ReactWrapperPackage());
                 packages.add(new MottoWebPackage());
-                // Buzzvil 패키지 추가
                 packages.add(new BuzzvilPackage());
-                // SettingsModule 패키지 추가
                 packages.add(new ReactPackage() {
                     @Override
                     public List<NativeModule> createNativeModules(ReactApplicationContext reactContext) {
@@ -67,8 +66,6 @@ public class MainApplication extends Application implements ReactApplication {
                         return Collections.emptyList();
                     }
                 });
-                // Packages that cannot be autolinked yet can be added manually here, for example:
-                // packages.add(new MyReactNativePackage());
                 return packages;
             }
 
@@ -99,38 +96,33 @@ public class MainApplication extends Application implements ReactApplication {
     }
 
     @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        MultiDex.install(this);
+    }
+
+    @Override
     public void onCreate() {
         super.onCreate();
 
-        // TrackPlayer와 백그라운드 재생을 위한 초기 설정
         initializeTrackPlayerEnvironment();
-
-        // Buzzvil SDK 초기화 (가장 먼저 호출)
         initializeBuzzvilSdk();
 
-        // SDK API 확인 (디버그용)
         if (BuildConfig.DEBUG) {
             checkBuzzvilSdkApi();
         }
 
         SoLoader.init(this, /* native exopackage */ false);
         if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
-            // If you opted-in for the New Architecture, we load the native entry point for this app.
             DefaultNewArchitectureEntryPoint.load();
         }
         ReactNativeFlipper.initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
     }
 
-    /**
-     * TrackPlayer 백그라운드 재생을 위한 환경 설정
-     */
     private void initializeTrackPlayerEnvironment() {
         try {
             Log.d("MainApplication", "TrackPlayer 환경 초기화 시작");
-
-            // 백그라운드 서비스 실행을 위한 권한 확인은 런타임에서 처리
             Log.d("MainApplication", "TrackPlayer 환경 초기화 완료");
-
         } catch (Exception e) {
             Log.e("MainApplication", "TrackPlayer 환경 초기화 중 오류", e);
         }
@@ -140,14 +132,11 @@ public class MainApplication extends Application implements ReactApplication {
         try {
             Log.d("MainApplication", "Buzzvil SDK 초기화 시작");
 
-            // 실제 APP_ID로 변경 필요
-            String appId = "177038632787380"; // 실제 버즈빌에서 제공받은 APP_ID로 변경
+            String appId = "177038632787380";
 
-            // BuzzBenefit 설정
             BuzzBenefitConfig buzzBenefitConfig = new BuzzBenefitConfig.Builder(appId)
                     .build();
 
-            // 3개 파라미터로 초기화 (Function0<Unit> 콜백 필요)
             BuzzvilSdk.initialize(this, buzzBenefitConfig, new kotlin.jvm.functions.Function0<kotlin.Unit>() {
                 @Override
                 public kotlin.Unit invoke() {
@@ -165,7 +154,6 @@ public class MainApplication extends Application implements ReactApplication {
 
     private void checkBuzzvilSdkApi() {
         try {
-            // BuzzvilSdk 클래스 확인
             Class<?> buzzvilSdkClass = Class.forName("com.buzzvil.sdk.BuzzvilSdk");
             Log.d("BuzzvilAPI", "=== BuzzvilSdk 메소드들 ===");
 
@@ -174,7 +162,6 @@ public class MainApplication extends Application implements ReactApplication {
                 Log.d("BuzzvilAPI", "메소드: " + method.getName() + " - " + method.toString());
             }
 
-            // BuzzvilSdkUser 클래스 확인
             Class<?> userClass = Class.forName("com.buzzvil.sdk.BuzzvilSdkUser");
             Log.d("BuzzvilAPI", "=== BuzzvilSdkUser 생성자들 ===");
 
@@ -183,7 +170,6 @@ public class MainApplication extends Application implements ReactApplication {
                 Log.d("BuzzvilAPI", "생성자: " + constructor.toString());
             }
 
-            // BuzzBenefitConfig 클래스 확인
             Class<?> configClass = Class.forName("com.buzzvil.buzzbenefit.BuzzBenefitConfig");
             Log.d("BuzzvilAPI", "=== BuzzBenefitConfig 확인 ===");
             Log.d("BuzzvilAPI", "Config 클래스: " + configClass.toString());
@@ -201,18 +187,12 @@ public class MainApplication extends Application implements ReactApplication {
         return super.registerReceiver(receiver, filter);
     }
 
-    /**
-     * 앱 종료 시 백그라운드 서비스 정리
-     */
     @Override
     public void onTerminate() {
         super.onTerminate();
         Log.d("MainApplication", "앱 종료 - 백그라운드 서비스 정리");
     }
 
-    /**
-     * 메모리 부족 시 처리
-     */
     @Override
     public void onLowMemory() {
         super.onLowMemory();

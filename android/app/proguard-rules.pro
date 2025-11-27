@@ -20,65 +20,89 @@
 
 -keep class com.tnkfactory.** { *;}
 
-# TrackPlayer 관련 설정 추가
+-keep class app.notifee.core.** { *; }
+-keep class io.invertase.notifee.** { *; }
+-dontwarn app.notifee.core.**
+-dontwarn io.invertase.notifee.**
+
+-keep class com.google.firebase.** { *; }
+-keep class io.invertase.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.firebase.**
+-dontwarn io.invertase.firebase.**
+-dontwarn com.google.android.gms.**
+
+-keep class io.invertase.firebase.messaging.** { *; }
+-keep class io.invertase.firebase.messaging.ReactNativeFirebaseMessagingService { *; }
+
+-keep class com.google.android.gms.ads.** { *; }
+-dontwarn com.google.android.gms.ads.**
+
 -keep class com.doublesymmetry.trackplayer.** { *; }
 -keep interface com.doublesymmetry.trackplayer.** { *; }
 -dontwarn com.doublesymmetry.trackplayer.**
 
-# Android Media 관련 설정
 -keep class androidx.media.** { *; }
 -keep class androidx.media3.** { *; }
 -dontwarn androidx.media.**
 -dontwarn androidx.media3.**
 
-# React Native Screens 관련 설정
 -keep class com.swmansion.rnscreens.** { *; }
 -keep class androidx.fragment.** { *; }
 -dontwarn com.swmansion.rnscreens.**
 
-# ExoPlayer 관련 설정 (TrackPlayer가 사용)
 -keep class com.google.android.exoplayer2.** { *; }
 -dontwarn com.google.android.exoplayer2.**
 
-# 미디어 세션 관련
 -keep class android.support.v4.media.** { *; }
 -keep class androidx.media.session.** { *; }
 -dontwarn android.support.v4.media.**
 -dontwarn androidx.media.session.**
 
-# React Native 관련 설정
 -keep class com.facebook.react.** { *; }
 -keep class com.facebook.hermes.** { *; }
 -dontwarn com.facebook.react.**
 -dontwarn com.facebook.hermes.**
 
-# 버즈빌 SDK 설정
 -keep class com.buzzvil.** { *; }
 -dontwarn com.buzzvil.**
 
-# 일반적인 Android 설정
 -keepattributes Signature
 -keepattributes *Annotation*
 -keepattributes EnclosingMethod
 -keepattributes InnerClasses
 
-# Kotlin 관련
 -keep class kotlin.** { *; }
 -dontwarn kotlin.**
 
-# 서비스 관련 설정 유지
--keep class * extends android.app.Service
--keep class * extends android.content.BroadcastReceiver
+-keep class * extends android.app.Service { *; }
+-keep class * extends android.content.BroadcastReceiver { *; }
+-keep class * extends android.app.Activity { *; }
 
-# 알림 관련 설정
 -keep class * extends androidx.core.app.NotificationCompat.** { *; }
+-keep class androidx.core.app.** { *; }
+-dontwarn androidx.core.app.**
 
-# JSON 직렬화를 위한 설정 (필요한 경우)
+-keep class androidx.** { *; }
+-dontwarn androidx.**
+
 -keepclassmembers class * {
     @com.fasterxml.jackson.annotation.JsonProperty <fields>;
 }
 
-# 리플렉션 사용하는 클래스들 보호
 -keepclassmembers class * {
     public <init>(...);
+}
+
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+-keepclassmembers class * implements android.os.Parcelable {
+    public static final android.os.Parcelable$Creator CREATOR;
 }
