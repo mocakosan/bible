@@ -1,0 +1,22 @@
+# Android heap dumps
+*.hprof
+
+# Android
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/*.iml
+android/.idea/
+android/.DS_Store
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store

@@ -1,0 +1,137 @@
+apply plugin: "com.android.application"
+apply plugin: "com.facebook.react"
+apply plugin: 'com.google.gms.google-services'
+apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")
+import com.android.build.OutputFile
+import org.apache.tools.ant.taskdefs.condition.Os
+
+react {
+}
+
+def enableSeparateBuildPerCPUArchitecture = false
+def enableProguardInReleaseBuilds = false
+def jscFlavor = 'org.webkit:android-jsc:+'
+
+def reactNativeArchitectures() {
+    def value = project.getProperties().get("reactNativeArchitectures")
+    return value ? value.split(",") : ["armeabi-v7a", "x86", "x86_64", "arm64-v8a"]
+}
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+
+    compileSdkVersion 34
+
+    namespace "com.clsk.media"
+    defaultConfig {
+        applicationId "com.clsk.media"
+        minSdk 24
+        targetSdk 35
+        versionCode 171
+        versionName "5.4.10"
+
+        // MultiDex 활성화 (ClassNotFoundException 방지)
+        multiDexEnabled true
+    }
+    dexOptions {
+        javaMaxHeapSize "4g"
+    }
+    lintOptions {
+        disable 'InvalidPackage'
+        abortOnError false
+        checkReleaseBuilds false
+    }
+    viewBinding {
+        enabled = true
+    }
+    configurations.all {
+        resolutionStrategy {
+            force 'androidx.work:work-runtime:2.8.0'
+            force 'androidx.work:work-runtime-ktx:2.8.0'
+        }
+    }
+    splits {
+        abi {
+            reset()
+            enable enableSeparateBuildPerCPUArchitecture
+            universalApk false
+            include (*reactNativeArchitectures())
+        }
+    }
+    signingConfigs {
+        release {
+            if (project.hasProperty('MYAPP_UPLOAD_STORE_FILE')) {
+                storeFile file(MYAPP_UPLOAD_STORE_FILE)
+                storePassword MYAPP_UPLOAD_STORE_PASSWORD
+                keyAlias MYAPP_UPLOAD_KEY_ALIAS
+                keyPassword MYAPP_UPLOAD_KEY_PASSWORD
+            }
+        }
+        debug {
+            if (project.hasProperty('MYAPP_UPLOAD_STORE_FILE')) {
+                storeFile file(MYAPP_UPLOAD_STORE_FILE)
+                storePassword MYAPP_UPLOAD_STORE_PASSWORD
+                keyAlias MYAPP_UPLOAD_KEY_ALIAS
+                keyPassword MYAPP_UPLOAD_KEY_PASSWORD
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.each { output ->
+            def versionCodes = ["armeabi-v7a": 1, "x86": 2, "arm64-v8a": 3, "x86_64": 4]
+            def abi = output.getFilter(OutputFile.ABI)
+            if (abi != null) {
+                output.versionCodeOverride =
+                        defaultConfig.versionCode * 1000 + versionCodes.get(abi)
+            }
+        }
+    }
+}
+
+dependencies {
+    implementation("com.facebook.react:react-android")
+    implementation 'androidx.multidex:multidex:2.0.1'
+    implementation 'com.tnkfactory:rwd:8.06.15'
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.0.0")
+    implementation project(':react-native-exit-app')
+    implementation 'com.igaworks.offerwall:AdPopcornOfferwall:9.1.6'
+    implementation project(':react-native-sqlite-storage')
+    implementation 'com.adforus.sdk:greenp_v3:3.5.2'
+    implementation 'com.google.android.gms:play-services-ads:22.5.0'
+    implementation 'com.google.ads.mediation:facebook:6.16.0.0'
+    implementation 'com.google.ads.mediation:pangle:5.5.0.9.0'
+    implementation 'com.unity3d.ads:unity-ads:4.9.2'
+    implementation 'com.google.ads.mediation:unity:4.9.2.0'
+    debugImplementation("com.facebook.flipper:flipper:${FLIPPER_VERSION}")
+    debugImplementation("com.facebook.flipper:flipper-network-plugin:${FLIPPER_VERSION}") {
+        exclude group:'com.squareup.okhttp3', module:'okhttp'
+    }
+    def buzzvilBomVersion = "6.1.+"
+    api platform("com.buzzvil:buzzvil-bom:$buzzvilBomVersion")
+    implementation "com.buzzvil:buzzvil-sdk"
+    debugImplementation("com.facebook.flipper:flipper-fresco-plugin:${FLIPPER_VERSION}")
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-android")
+    } else {
+        implementation jscFlavor
+    }
+    implementation platform("org.jetbrains.kotlin:kotlin-bom:1.8.0")
+    implementation 'com.igaworks.ssp:IgawAdPopcornSSP:3.7.0'
+    api 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.4.10'
+    api 'com.kakao.adfit:ads-base:3.16.0'
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+    implementation 'com.google.firebase:firebase-messaging'
+}
+
+apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)

@@ -1,0 +1,105 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "src/assets/fonts/ChosunCentennial_otf.otf",
+      "sha1": "a7ee01977e93c63434379a583299919462310647"
+    },
+    {
+      "path": "src/assets/fonts/IM_Hyemin.otf",
+      "sha1": "a3e63b3ffd75277ad28ad0cb06746d7faed0d53d"
+    },
+    {
+      "path": "src/assets/fonts/KCC-Chassam.otf",
+      "sha1": "d90bd25f0a993232bc03595ab9679f72d0d01536"
+    },
+    {
+      "path": "src/assets/fonts/KCCDodamdodam_OTF(MAC용).otf",
+      "sha1": "b8e36018160838b408802367cb11037425100705"
+    },
+    {
+      "path": "src/assets/fonts/KNPSKkomi.otf",
+      "sha1": "31f40ed365a7b91bad690db10c715b28c49dbf94"
+    },
+    {
+      "path": "src/assets/fonts/KOTRA HOPE.otf",
+      "sha1": "19a1d00e1e939c4afafe10344b43e02a74880ceb"
+    },
+    {
+      "path": "src/assets/fonts/KyoboHandwriting2020pdy.otf",
+      "sha1": "f333075cd8ef2b53c4d86b03006a8c28210cd0b8"
+    },
+    {
+      "path": "src/assets/fonts/KyoboHandwriting2021sjy.otf",
+      "sha1": "14523dbfa2fcc1987ef884f0dbd38fbf131a5f96"
+    },
+    {
+      "path": "src/assets/fonts/KyoboHandwriting2022khn.otf",
+      "sha1": "40210c169dc595960b1542ab3a707979bb16d072"
+    },
+    {
+      "path": "src/assets/fonts/LINESeedKR-Rg.otf",
+      "sha1": "7629a60bd6b7339a97dbaab3e5812d158537db9e"
+    },
+    {
+      "path": "src/assets/fonts/NanumBarunGothic.otf",
+      "sha1": "31807406fbe00cca4c9da3f45c8f8a17f88ef98a"
+    },
+    {
+      "path": "src/assets/fonts/NanumBarunGothicBold.otf",
+      "sha1": "d5b77d6b7f28e09c537dec95feb71af3f3ae137c"
+    },
+    {
+      "path": "src/assets/fonts/NanumBarunpenR.otf",
+      "sha1": "5d129f123ff12bc7b6e0b5beb5ab01d79e853e18"
+    },
+    {
+      "path": "src/assets/fonts/NanumGothic.otf",
+      "sha1": "5ddc85276725a76b3ccaca02349b04b044523c1b"
+    },
+    {
+      "path": "src/assets/fonts/NanumMyeongjo.otf",
+      "sha1": "1b75cb9703613cb75bb8fc8a2fdb538853473017"
+    },
+    {
+      "path": "src/assets/fonts/NanumPen.otf",
+      "sha1": "0c79698e6f8bf16b122150e2cb1ce5acfae991b2"
+    },
+    {
+      "path": "src/assets/fonts/NanumSquareNeoOTF-Rg.otf",
+      "sha1": "ba6dc93a1f184fb80a6f39dc1ef8b7b586cc20f4"
+    },
+    {
+      "path": "src/assets/fonts/NotoSansCJKkr-Bold.otf",
+      "sha1": "463ee210b3e6fd8758901fab115b7e8ea9813348"
+    },
+    {
+      "path": "src/assets/fonts/NotoSansKR-Regular.otf",
+      "sha1": "5f533d0d5caf3847afa2d78301e7b87b3485ecbc"
+    },
+    {
+      "path": "src/assets/fonts/PyeongChang-Regular.otf",
+      "sha1": "0ffc0edbaa675e625e6c3745cdc02bc30a71ac9d"
+    },
+    {
+      "path": "src/assets/fonts/S-CoreDream-6Bold.otf",
+      "sha1": "f58b1d53ee5815f4a1a762b0d536bb4c28249f73"
+    },
+    {
+      "path": "src/assets/fonts/SCDream3.otf",
+      "sha1": "4fe567db9c167acbe79e585f63cb074962e38bd7"
+    },
+    {
+      "path": "src/assets/fonts/TAEBAEK milkyway.otf",
+      "sha1": "81261be43b449daa788996d333a293ba795a490e"
+    },
+    {
+      "path": "src/assets/fonts/The Jamsil OTF 3 Regular.otf",
+      "sha1": "8635853071c635457d545c114d892754732bfd07"
+    },
+    {
+      "path": "src/assets/fonts/휴먼범석체.otf",
+      "sha1": "f18597f968421a191bbffb1dada922c547795be1"
+    }
+  ]
+}

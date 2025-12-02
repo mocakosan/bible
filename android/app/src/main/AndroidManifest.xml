@@ -1,0 +1,158 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 기본 권한 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- 버즈빌 SDK 권한 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- 백그라운드 서비스 권한 (TrackPlayer용) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- 알림 권한 (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <application
+            android:name=".MainApplication"
+            android:label="@string/app_name"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:allowBackup="true"
+            android:usesCleartextTraffic="true"
+            android:theme="@style/AppTheme"
+            android:requestLegacyExternalStorage="true">
+
+        <!-- 광고 관련 메타데이터 -->
+        <meta-data android:name="adpopcorn_ssp_app_key" android:value="755912846"/>
+        <meta-data
+                android:name="com.google.android.gms.ads.APPLICATION_ID"
+                android:value="ca-app-pub-1162719494234001~8543871093"
+                tools:replace="android:value" />
+        <meta-data android:name="adpopcorn_app_key" android:value="317053540"/>
+        <meta-data android:name="adpopcorn_hash_key" android:value="c04b39b6cc404310"/>
+        <meta-data android:name="adpopcorn_reward_server_type" android:value="server"/>
+        <meta-data android:name="tnkad_app_id" android:value="90c01040-a0a1-39b6-6b93-190f0a050800" />
+
+        <!-- 버즈빌 SDK 메타데이터 -->
+        <meta-data
+                android:name="buzzvil_app_id"
+                android:value="177038632787380" />
+
+        <!-- =============================================== -->
+        <!-- Firebase Messaging 메타데이터 (tools:replace 추가!) -->
+        <!-- =============================================== -->
+        <meta-data
+                android:name="com.google.firebase.messaging.default_notification_channel_id"
+                android:value="bible25"
+                tools:replace="android:value" />
+        <meta-data
+                android:name="com.google.firebase.messaging.default_notification_icon"
+                android:resource="@mipmap/ic_launcher"
+                tools:replace="android:resource" />
+
+        <activity
+                android:name=".MainActivity"
+                android:label="@string/app_name"
+                android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+                android:launchMode="singleTask"
+                android:windowSoftInputMode="adjustResize"
+                android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 카카오 로그인 -->
+        <activity
+                android:name="com.kakao.sdk.auth.AuthCodeHandlerActivity"
+                android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:host="oauth"
+                      android:scheme="kakao28a89768be0fbdb0e663bcfcab8b3ae8" />
+            </intent-filter>
+        </activity>
+
+        <!-- 광고 관련 액티비티 -->
+        <activity android:name="com.tnkfactory.ad.AdWallActivity"
+                  android:exported="true"
+                  android:screenOrientation="portrait"/>
+
+        <activity
+                android:name=".MottoWebActivity"
+                android:exported="false"
+                android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
+
+        <!-- 버즈빌 SDK 서비스 및 리시버 -->
+        <service
+                android:name="com.buzzvil.buzzbenefit.core.service.BuzzBenefitBackgroundService"
+                android:exported="false" />
+
+        <receiver
+                android:name="com.buzzvil.buzzbenefit.core.receiver.BuzzBenefitBootReceiver"
+                android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+                android:name="com.buzzvil.buzzbenefit.core.receiver.BuzzBenefitAlarmReceiver"
+                android:exported="false" />
+
+        <!-- 버즈빌 액티비티 -->
+        <activity
+                android:name="com.buzzvil.buzzbenefit.presentation.benefit.BuzzBenefitActivity"
+                android:exported="false"
+                android:screenOrientation="portrait"
+                android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
+        <activity
+                android:name="com.buzzvil.buzzbenefit.presentation.feed.FeedActivity"
+                android:exported="false"
+                android:screenOrientation="portrait"
+                android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
+        <!-- react-native-track-player 서비스 -->
+        <service
+                android:name="com.doublesymmetry.trackplayer.service.MusicService"
+                android:exported="false"
+                android:foregroundServiceType="mediaPlayback"
+                tools:replace="android:exported"
+                android:stopWithTask="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+                <action android:name="android.media.AUDIO_BECOMING_NOISY" />
+            </intent-filter>
+        </service>
+
+        <!-- react-native-track-player 리시버 -->
+        <receiver
+                android:name="androidx.media.session.MediaButtonReceiver"
+                android:exported="true">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Google Mobile Ads Service -->
+        <service
+                android:name="com.google.android.gms.ads.AdService"
+                android:enabled="true"
+                android:exported="false" />
+
+    </application>
+
+</manifest>
