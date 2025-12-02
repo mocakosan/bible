@@ -41,7 +41,7 @@ const adUnitId = "ca-app-pub-1162719494234001/2683008272";
 const interstitial = InterstitialAd.createForAdRequest(adUnitId);
 const RNAdPopcornRewardModule = NativeModules.RNAdPopcornRewardModule;
 
-// 안전한 ADID 가져오기 함수
+
 const getAdvertisingIdSafely = async () => {
   try {
     let adid = { id: "", isAdTrackingLimited: false };
