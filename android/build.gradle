@@ -8,6 +8,7 @@ buildscript {
         targetSdkVersion = 35
         kotlinVersion = "1.8.0"
         ndkVersion = "23.1.7779620"
+        javaMaxHeapSize = "4g"
     }
 
     repositories {

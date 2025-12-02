@@ -2,6 +2,7 @@ package com.clsk.media;
 
 import android.app.Application;
 import androidx.multidex.MultiDex;
+import androidx.multidex.MultiDexApplication;
 import android.content.Context;
 import android.content.BroadcastReceiver;
 import android.content.Intent;
@@ -35,7 +36,7 @@ import com.facebook.react.uimanager.ViewManager;
 import java.util.Arrays;
 import java.util.Collections;
 
-public class MainApplication extends Application implements ReactApplication {
+public class MainApplication extends MultiDexApplication implements ReactApplication {
 
     private final ReactNativeHost mReactNativeHost =
         new DefaultReactNativeHost(this) {

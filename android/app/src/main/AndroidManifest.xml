@@ -30,7 +30,9 @@
             android:usesCleartextTraffic="true"
             android:theme="@style/AppTheme"
             android:requestLegacyExternalStorage="true">
-
+        <meta-data
+                android:name="android.max_aspect"
+                android:value="2.1" />
         <!-- 광고 관련 메타데이터 -->
         <meta-data android:name="adpopcorn_ssp_app_key" android:value="755912846"/>
         <meta-data
