@@ -1,6 +1,3 @@
-// src/components/page/reading/_side/old.tsx
-// OldTestament 컴포넌트 전체 코드
-
 import { FlashList } from '@shopify/flash-list';
 import { isEmpty } from 'lodash';
 import { Center, Text } from 'native-base';
@@ -22,13 +19,11 @@ interface Props {
 function OldTestament({ readState, menuIndex, filterBooks }: Props) {
     const { color } = useBaseStyle();
     const { navigation } = useNativeNavigation();
-
-    // 🔥 readState를 훅에 전달
     const {
         planData,
         isChapterReadSync,
         getChapterStatus,
-        getChapterStyleWithExclamation, // 🆕 느낌표 포함 스타일 함수
+        getChapterStyleWithExclamation,
         loadPlan,
         loadAllReadingTableData,
         getTodayProgress,
@@ -36,7 +31,7 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
         refreshKey,
         forceRefresh,
         readingTableData
-    } = useBibleReading(readState); // readState 전달
+    } = useBibleReading(readState);
 
     const [visibleChapters, setVisibleChapters] = useState<Set<string>>(new Set());
 
@@ -123,7 +118,7 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
         console.log('=== OldTestament readingTableData 변경 감지 ===', Object.keys(readingTableData || {}).length, '개 항목');
     }, [readingTableData]);
 
-    // 🔥 기존 스타일 함수 (호환성 유지)
+    // 기존 스타일 함수 (호환성 유지)
     const getChapterStyleLegacy = useCallback((book: number, chapter: number) => {
         // 기본 스타일 (테두리만)
         const baseStyle = {
@@ -164,7 +159,7 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                 };
             }
 
-            // 🔥 일독 계획이 있는 경우 - 계획 타입별로 상태 확인
+            //일독 계획이 있는 경우 - 계획 타입별로 상태 확인
             let status = 'normal';
 
             // 시편 일독의 경우
@@ -199,7 +194,7 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                 case 'today':
                     return {
                         ...baseStyle,
-                        color: '#F44336', // 빨간색 (오늘 읽을 장) ⭐
+                        color: '#F44336', // 빨간색 (오늘 읽을 장)
                         showExclamation: false
                     };
                 case 'yesterday':
@@ -271,7 +266,7 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                         {Array.from({ length }).map((_, index) => {
                             const chapter = index + 1;
 
-                            // 🆕 느낌표 포함 스타일 함수 사용 (안전하게 처리)
+                            //느낌표 포함 스타일 함수 사용 (안전하게 처리)
                             let chapterStyle, showExclamation;
 
                             if (getChapterStyleWithExclamation) {
@@ -285,7 +280,7 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                                 showExclamation = legacyResult.showExclamation || false;
                             }
 
-                            // 🆕 개선된 읽기 상태 확인
+                            //개선된 읽기 상태 확인
                             const isRead = isChapterReadSync ? isChapterReadSync(book, chapter) : false;
                             const status = planData && getChapterStatus ? getChapterStatus(book, chapter) : 'normal';
 
@@ -299,8 +294,9 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                                     key={`${book}-${chapter}-${refreshKey}-${readState?.length || 0}-${isRead ? 'read' : 'unread'}`}
                                     activeOpacity={0.7}
                                     style={{
+                                        width: '13%',
                                         margin: 2,
-                                        position: 'relative' // 🔥 느낌표 절대 위치를 위해 필요
+                                        position: 'relative'
                                     }}
                                     onPress={() => onNavigate(book, chapter)}
                                 >
@@ -317,8 +313,6 @@ function OldTestament({ readState, menuIndex, filterBooks }: Props) {
                                             {chapter}
                                         </Text>
                                     </View>
-
-                                    {/* 🔥 느낌표 아이콘 (조건부 렌더링) */}
                                     {showExclamation && (
                                         <View
                                             style={{

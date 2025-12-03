@@ -1,6 +1,3 @@
-// src/components/page/reading/_side/new.tsx
-// NewTestament 컴포넌트 전체 코드
-
 import { FlashList } from '@shopify/flash-list';
 import { isEmpty } from 'lodash';
 import { Center, Text, Box } from 'native-base';
@@ -22,24 +19,22 @@ function NewTestament({ readState, menuIndex }: Props) {
     const { color } = useBaseStyle();
     const { navigation } = useNativeNavigation();
 
-    // 🔥 수정: useBibleReading 훅에서 새로운 함수들 추가
     const {
         planData,
         isChapterReadSync,
-        getChapterStatus,          // 🆕 추가
-        getChapterStyleWithExclamation,  // 🆕 추가 - 느낌표 포함 스타일 함수
+        getChapterStatus,
+        getChapterStyleWithExclamation,
         loadPlan,
         loadAllReadingTableData,
         refreshKey,
         forceRefresh,
         readingTableData,
-        getTodayProgress,          // 🆕 추가
-        getYesterdayProgress       // 🆕 추가
+        getTodayProgress,
+        getYesterdayProgress
     } = useBibleReading(readState);
 
     const [visibleChapters, setVisibleChapters] = useState<Set<string>>(new Set());
 
-    // 🔥 수정: 표시할 장들 업데이트 (구약과 동일한 로직)
     const updateVisibleChapters = useCallback(() => {
         if (!planData) {
             setVisibleChapters(new Set());
@@ -111,9 +106,7 @@ function NewTestament({ readState, menuIndex }: Props) {
         console.log('=== NewTestament readingTableData 변경 감지 ===', Object.keys(readingTableData || {}).length, '개 항목');
     }, [readingTableData]);
 
-    // 🔥 기존 스타일 함수 (호환성 유지)
     const getChapterStyleLegacy = useCallback((book: number, chapter: number) => {
-        // 기본 스타일 (테두리만)
         const baseStyle = {
             borderRadius: 17.5,
             width: 35,
@@ -230,8 +223,6 @@ function NewTestament({ readState, menuIndex }: Props) {
                     >
                         {Array.from({ length }).map((_, index) => {
                             const chapter = index + 1;
-
-                            // 🔥 수정: 새로운 느낌표 포함 스타일 함수 사용
                             const { style: chapterStyle, showExclamation } = getChapterStyleWithExclamation
                                 ? getChapterStyleWithExclamation(book, chapter)
                                 : getChapterStyleLegacy(book, chapter); // 호환성 유지
@@ -250,8 +241,9 @@ function NewTestament({ readState, menuIndex }: Props) {
                                     key={`${book}-${chapter}-${refreshKey}-${readState?.length || 0}-${isRead ? 'read' : 'unread'}`}
                                     activeOpacity={0.7}
                                     style={{
+                                        width: '13%',
                                         margin: 2,
-                                        position: 'relative' // 🔥 느낌표 절대 위치를 위해 필요
+                                        position: 'relative'
                                     }}
                                     onPress={() => onNavigate(book, chapter)}
                                 >
@@ -268,8 +260,6 @@ function NewTestament({ readState, menuIndex }: Props) {
                                             {chapter}
                                         </Text>
                                     </View>
-
-                                    {/* 🔥 느낌표 아이콘 (조건부 렌더링) */}
                                     {showExclamation && (
                                         <View
                                             style={{

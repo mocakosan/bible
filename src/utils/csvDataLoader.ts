@@ -1,7 +1,3 @@
-// src/utils/csvDataLoader.ts
-// 🔥 CSV 파일에서 실제 음성 시간 데이터를 로드하고 관리하는 시스템
-// 전체 1189장 데이터 포함 버전
-
 import { BibleStep } from './define';
 
 interface ChapterTimeData {
