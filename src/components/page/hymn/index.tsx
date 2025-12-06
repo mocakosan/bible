@@ -28,9 +28,8 @@ const HYMN_CATEGORIES: HymnCategory[] = [
     '교독문','001', '100', '200', '300', '400', '500', '600'
 ];
 
-const ITEMS_PER_PAGE = 20; // 페이지당 아이템 수
+const ITEMS_PER_PAGE = 20;
 
-// 검색어 하이라이트 컴포넌트
 const HighlightText = ({ text, keyword }: { text: string; keyword: string }) => {
     if (!keyword || !text) return <Text style={styles.hymnTitle}>{text}</Text>;
 
@@ -58,8 +57,8 @@ export default function HymnListScreen() {
 
     const [selectedCategory, setSelectedCategory] = useState<HymnCategory>('001');
     const [hymnList, setHymnList] = useState<HymnData[]>([]);
-    const [allHymnList, setAllHymnList] = useState<HymnData[]>([]); // 전체 데이터 캐시
-    const [searchResults, setSearchResults] = useState<HymnData[]>([]); // 검색 결과 전체
+    const [allHymnList, setAllHymnList] = useState<HymnData[]>([]);
+    const [searchResults, setSearchResults] = useState<HymnData[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchKeyword, setSearchKeyword] = useState('');
     const [isDocMode, setIsDocMode] = useState(false);
@@ -74,38 +73,33 @@ export default function HymnListScreen() {
             try {
                 console.log('[HYMN_LIST] 찬송가 플레이어 정지 시작');
 
-                // ✅ 플레이어 상태 확인
                 const state = await TrackPlayer.getState();
                 console.log(`[HYMN_LIST] 현재 플레이어 상태: ${state}`);
 
-                // ✅ 재생 중이거나 일시정지 상태면 정지
                 if (state === State.Playing || state === State.Paused || state === State.Ready || state === State.Buffering) {
                     await TrackPlayer.pause();
                     console.log('[HYMN_LIST] ⏸ 일시정지 완료');
 
                     await TrackPlayer.stop();
-                    console.log('[HYMN_LIST] ⏹ 정지 완료');
+                    console.log('[HYMN_LIST]정지 완료');
                 }
 
-                // ✅ 큐 리셋
                 await TrackPlayer.reset();
-                console.log('[HYMN_LIST] 🔄 큐 리셋 완료');
+                console.log('[HYMN_LIST]큐 리셋 완료');
 
-                // ✅ 찬송가 관련 모든 스토리지 초기화
                 defaultStorage.set('hymn_was_playing', false);
                 defaultStorage.set('is_hymn_player', false);
-                defaultStorage.delete('current_hymn_id'); // ✅ 현재 찬송가 ID 삭제
-                console.log('[HYMN_LIST] 📝 플래그 초기화 완료 (is_hymn_player = false, current_hymn_id 삭제)');
+                defaultStorage.delete('current_hymn_id');
+                console.log('[HYMN_LIST]플래그 초기화 완료');
 
-                console.log('[HYMN_LIST] ✅ 찬송가 플레이어 완전 정지 및 초기화 완료');
+                console.log('[HYMN_LIST]찬송가 플레이어 완전 정지 및 초기화 완료');
             } catch (error) {
-                console.error('[HYMN_LIST] ❌ 플레이어 정지 실패:', error);
+                console.error('[HYMN_LIST]플레이어 정지 실패:', error);
             }
         };
 
         stopHymnPlayer();
 
-        // ✅ 포커스 리스너 추가 - 화면 복귀 시에도 플레이어 정지 보장
         const unsubscribeFocus = navigation.addListener('focus', () => {
             console.log('[HYMN_LIST] 화면 포커스 - 플레이어 상태 재확인');
             stopHymnPlayer();
@@ -117,7 +111,6 @@ export default function HymnListScreen() {
         };
     }, [navigation]);
 
-    // 찬송가 데이터 로드
     useEffect(() => {
         if (!isDocMode && !isSearchMode) {
             loadHymnData();
@@ -134,7 +127,7 @@ export default function HymnListScreen() {
                 }
             });
 
-            console.log('✅ 찬송가 데이터 로드 성공:', response.data);
+            console.log('찬송가 데이터 로드 성공');
 
             let list = [];
             if (Array.isArray(response.data)) {
@@ -146,13 +139,13 @@ export default function HymnListScreen() {
             }
 
             setHymnList(list);
-            setAllHymnList(list); // 전체 데이터 캐시 저장
+            setAllHymnList(list);
 
             if (list.length === 0) {
-                console.warn('⚠️ 찬송가 목록이 비어있습니다.');
+                console.warn('찬송가 목록이 비어있습니다.');
             }
         } catch (error) {
-            console.error('❌ 찬송가 데이터 로드 실패:', error);
+            console.error('찬송가 데이터 로드 실패:', error);
             Alert.alert(
                 '데이터 로드 실패',
                 '찬송가 목록을 불러오는데 실패했습니다.\n네트워크 연결을 확인해주세요.',
@@ -167,8 +160,8 @@ export default function HymnListScreen() {
         }
     };
 
-    // 개선된 검색 필터 함수
-    const performSearch = (keyword: string, dataList: HymnData[]) => {
+    // 프론트엔드 필터링 (제목, 번호만 - 실시간 검색용)
+    const performQuickSearch = (keyword: string, dataList: HymnData[]) => {
         if (!keyword.trim()) {
             return [];
         }
@@ -176,62 +169,38 @@ export default function HymnListScreen() {
         const searchLower = keyword.toLowerCase().trim();
 
         const filtered = dataList.filter((item: HymnData) => {
-            // 찬송가 번호로 검색
-            if (item.num && String(item.num).includes(keyword)) {
-                return true;
-            }
-
-            // 제목으로 검색
-            if (item.title && item.title.toLowerCase().includes(searchLower)) {
-                return true;
-            }
-
-            // 부제목으로 검색
-            if (item.subtitle && item.subtitle.toLowerCase().includes(searchLower)) {
-                return true;
-            }
-
-            // 구 찬송가 번호로 검색
-            if (item.oldnum && String(item.oldnum).includes(keyword)) {
-                return true;
-            }
-
+            if (item.num && String(item.num).includes(keyword)) return true;
+            if (item.title && item.title.toLowerCase().includes(searchLower)) return true;
+            if (item.subtitle && item.subtitle.toLowerCase().includes(searchLower)) return true;
+            if (item.oldnum && String(item.oldnum).includes(keyword)) return true;
             return false;
         });
 
-        // 검색 결과 정렬 (관련도 순)
         return filtered.sort((a, b) => {
-            // 1. 번호 완전 일치 최우선
             const aNumMatch = String(a.num) === keyword;
             const bNumMatch = String(b.num) === keyword;
             if (aNumMatch && !bNumMatch) return -1;
             if (!aNumMatch && bNumMatch) return 1;
 
-            // 2. 제목 시작 일치
             const aTitleStart = a.title?.toLowerCase().startsWith(searchLower);
             const bTitleStart = b.title?.toLowerCase().startsWith(searchLower);
             if (aTitleStart && !bTitleStart) return -1;
             if (!aTitleStart && bTitleStart) return 1;
 
-            // 3. 번호 순 정렬
             return (a.num || 0) - (b.num || 0);
         });
     };
 
-    // 실시간 검색 함수 (디바운스 적용)
+    // 실시간 검색 (제목, 번호만)
     const debouncedSearch = useCallback(
         debounce((keyword: string) => {
             if (keyword.trim().length > 0) {
-                const results = performSearch(keyword, allHymnList);
+                const results = performQuickSearch(keyword, allHymnList);
                 setSearchResults(results);
                 setIsSearchMode(true);
                 setCurrentPage(1);
-
-                // 총 페이지 수 계산
-                const pages = Math.ceil(results.length / ITEMS_PER_PAGE);
-                setTotalPages(pages);
-
-                console.log(`🔍 실시간 검색: "${keyword}" - ${results.length}개 결과, ${pages}페이지`);
+                setTotalPages(Math.ceil(results.length / ITEMS_PER_PAGE));
+                console.log(`실시간 검색 (제목/번호): "${keyword}" - ${results.length}개 결과`);
             } else {
                 handleClearSearch();
             }
@@ -239,20 +208,18 @@ export default function HymnListScreen() {
         [allHymnList]
     );
 
-    // 컴포넌트 언마운트 시 디바운스 정리
     useEffect(() => {
         return () => {
             debouncedSearch.cancel();
         };
     }, [debouncedSearch]);
 
-    // 검색 입력 변경 핸들러
     const handleSearchInputChange = (text: string) => {
         setSearchKeyword(text);
         debouncedSearch(text);
     };
 
-    // 검색 버튼 클릭 또는 Enter 키 검색
+    // 검색 버튼 클릭 (백엔드 API - 가사 포함)
     const handleSearch = async () => {
         const keyword = searchKeyword.trim();
 
@@ -262,63 +229,61 @@ export default function HymnListScreen() {
         }
 
         Keyboard.dismiss();
+        setLoading(true);
 
         try {
-            // 캐시된 데이터가 있으면 사용, 없으면 로드
-            let dataToSearch = allHymnList;
+            console.log('\n========== 검색 버튼: 가사 포함 검색 ==========');
+            console.log(`검색어: "${keyword}"`);
 
-            if (allHymnList.length === 0) {
-                setLoading(true);
-                const response = await apiClient.get(API_ENDPOINTS.HYMN_LIST, {
-                    params: {
-                        take: 700,
-                        page: 1,
-                    }
-                });
-
-                let list = [];
-                if (Array.isArray(response.data)) {
-                    list = response.data;
-                } else if (response.data.list && Array.isArray(response.data.list)) {
-                    list = response.data.list;
-                } else if (response.data.data && Array.isArray(response.data.data)) {
-                    list = response.data.data;
+            const response = await apiClient.get(API_ENDPOINTS.HYMN_LIST, {
+                params: {
+                    keyword: keyword,
+                    page: 1,
+                    take: 700,
                 }
+            });
 
-                setAllHymnList(list);
-                dataToSearch = list;
-                setLoading(false);
+            console.log('백엔드 응답 수신');
+
+            let list = [];
+            if (Array.isArray(response.data)) {
+                list = response.data;
+            } else if (response.data.data && response.data.data.list && Array.isArray(response.data.data.list)) {
+                list = response.data.data.list;
+            } else if (response.data.data && Array.isArray(response.data.data)) {
+                list = response.data.data;
+            } else if (response.data.list && Array.isArray(response.data.list)) {
+                list = response.data.list;
             }
 
-            const results = performSearch(keyword, dataToSearch);
-            setSearchResults(results);
+            console.log(`백엔드 검색 결과 (가사 포함): ${list.length}개`);
+
+            setSearchResults(list);
             setIsSearchMode(true);
             setCurrentPage(1);
+            setTotalPages(Math.ceil(list.length / ITEMS_PER_PAGE));
 
-            const pages = Math.ceil(results.length / ITEMS_PER_PAGE);
-            setTotalPages(pages);
+            console.log(`최종 검색 결과: ${list.length}개`);
+            console.log('========== 검색 완료 ==========\n');
 
-            console.log(`✅ 검색 결과: ${results.length}개, ${pages}페이지`);
-
-            if (results.length === 0) {
+            if (list.length === 0) {
                 Alert.alert('검색 결과', `"${keyword}" 검색 결과가 없습니다.`);
             }
         } catch (error: any) {
-            console.error('❌ 검색 실패:', error);
+            console.error('\n 검색 실패:', error);
             Alert.alert('검색 실패', '검색 중 오류가 발생했습니다.');
             setSearchResults([]);
+        } finally {
             setLoading(false);
         }
     };
 
-    // Enter 키로 검색
     const handleSearchSubmit = () => {
         if (searchKeyword.trim()) {
             handleSearch();
         }
     };
 
-    // 검색 초기화
     const handleClearSearch = () => {
         setSearchKeyword('');
         setIsSearchMode(false);
@@ -328,18 +293,15 @@ export default function HymnListScreen() {
         loadHymnData();
     };
 
-    // 페이지 변경
     const handlePageChange = (page: number) => {
         setCurrentPage(page);
     };
 
-    // 숫자만 뽑아 안전하게 변환
     const toNum = (v: unknown) => {
         const n = parseInt(String(v).replace(/[^\d]/g, ''), 10);
         return Number.isNaN(n) ? null : n;
     };
 
-    // 현재 페이지에 표시할 데이터 (페이지네이션 적용)
     const paginatedSearchResults = useMemo(() => {
         if (!isSearchMode) return [];
 
@@ -349,12 +311,10 @@ export default function HymnListScreen() {
     }, [searchResults, currentPage, isSearchMode]);
 
     const filteredHymnList = useMemo(() => {
-        // 검색 모드일 때는 페이지네이션 적용된 검색 결과만 표시
         if (isSearchMode) {
             return paginatedSearchResults;
         }
 
-        // '교독문'이나 '분류' 같은 비숫자 탭이면 전체 노출
         const catNum = parseInt(String(selectedCategory), 10);
         if (!Number.isFinite(catNum)) return hymnList;
 
@@ -380,7 +340,6 @@ export default function HymnListScreen() {
                             selectedCategory === item && styles.categoryItemActive,
                         ]}
                         onPress={() => {
-                            // 카테고리 변경 시 검색 초기화
                             setIsSearchMode(false);
                             setSearchKeyword('');
                             setSearchResults([]);
@@ -412,11 +371,14 @@ export default function HymnListScreen() {
 
     const renderSearchBar = () => (
         <View>
+            <Text style={styles.searchHint}>
+                💡 가사로 검색하려면 검색 버튼을 눌러주세요
+            </Text>
             <View style={styles.searchContainer}>
                 <TextInput
                     ref={searchInputRef}
                     style={styles.searchInput}
-                    placeholder="찬송가 제목, 번호로 검색"
+                    placeholder="찬송가 제목, 번호,가사로 검색"
                     value={searchKeyword}
                     onChangeText={handleSearchInputChange}
                     onSubmitEditing={handleSearchSubmit}
@@ -429,10 +391,10 @@ export default function HymnListScreen() {
                     <Text style={styles.searchButtonText}>검색</Text>
                 </TouchableOpacity>
             </View>
+
         </View>
     );
 
-    // 검색 결과 헤더 (웹 스타일)
     const renderSearchResultHeader = () => (
         <View style={styles.searchResultHeader}>
             <View>
@@ -450,7 +412,6 @@ export default function HymnListScreen() {
         </View>
     );
 
-    // 페이지네이션 컴포넌트
     const renderPagination = () => {
         if (!isSearchMode || totalPages <= 1) return null;
 
@@ -470,7 +431,6 @@ export default function HymnListScreen() {
 
         return (
             <View style={styles.paginationContainer}>
-                {/* 이전 페이지 버튼 */}
                 <TouchableOpacity
                     style={[styles.paginationButton, currentPage === 1 && styles.paginationButtonDisabled]}
                     onPress={() => currentPage > 1 && handlePageChange(currentPage - 1)}
@@ -481,7 +441,6 @@ export default function HymnListScreen() {
                     </Text>
                 </TouchableOpacity>
 
-                {/* 페이지 번호 */}
                 {pageNumbers.map((page) => (
                     <TouchableOpacity
                         key={page}
@@ -500,7 +459,6 @@ export default function HymnListScreen() {
                     </TouchableOpacity>
                 ))}
 
-                {/* 다음 페이지 버튼 */}
                 <TouchableOpacity
                     style={[styles.paginationButton, currentPage === totalPages && styles.paginationButtonDisabled]}
                     onPress={() => currentPage < totalPages && handlePageChange(currentPage + 1)}
@@ -522,7 +480,6 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 1,
                     type: 'gyodok',
-                    // title: '교독문 - 개역개정'
                 })}
             >
                 <Text style={styles.docItemText}>개역개정</Text>
@@ -532,7 +489,6 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 2,
                     type: 'gyodok',
-                    // title: '교독문 - 개역한글'
                 })}
             >
                 <Text style={styles.docItemText}>개역한글</Text>
@@ -544,7 +500,6 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 1,
                     type: 'kido',
-                    // title: '주기도문 - 개역개정'
                 })}
             >
                 <Text style={styles.docItemText}>개역개정</Text>
@@ -554,7 +509,6 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 2,
                     type: 'kido',
-                    // title: '주기도문 - 개역한글'
                 })}
             >
                 <Text style={styles.docItemText}>개역한글</Text>
@@ -566,7 +520,6 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 1,
                     type: 'sado',
-                    // title: '사도신경 - 개역개정'
                 })}
             >
                 <Text style={styles.docItemText}>개역개정</Text>
@@ -576,7 +529,6 @@ export default function HymnListScreen() {
                 onPress={() => navigation.navigate('HymnDocScreen', {
                     version: 2,
                     type: 'sado',
-                    // title: '사도신경 - 개역한글'
                 })}
             >
                 <Text style={styles.docItemText}>개역한글</Text>
@@ -605,7 +557,6 @@ export default function HymnListScreen() {
         </TouchableOpacity>
     );
 
-    // 개선된 빈 검색 결과 컴포넌트
     const renderEmptySearchResult = () => (
         <View style={styles.emptySearchContainer}>
             <Text style={styles.emptySearchIcon}>🔍</Text>
@@ -620,6 +571,7 @@ export default function HymnListScreen() {
                 <Text style={styles.searchTip}>• 찬송가 번호로 검색해보세요 (예: 1, 23, 456)</Text>
                 <Text style={styles.searchTip}>• 제목 일부로 검색해보세요 (예: "주", "찬송")</Text>
                 <Text style={styles.searchTip}>• 구 찬송가 번호로 검색해보세요</Text>
+                <Text style={styles.searchTip}>• 🔍 가사로 검색하려면 검색 버튼을 눌러주세요!</Text>
             </View>
         </View>
     );
@@ -629,23 +581,18 @@ export default function HymnListScreen() {
             <BackHeaderLayout title="찬송가" />
             <Box safeAreaTop bg={color.status} />
 
-            {/* 배너 광고 */}
             <View style={[styles.adContainer, { top: 75 }]}>
                 <BannerAdComponent />
             </View>
 
-            {/* 검색바 */}
             <View style={{ top: 80 }}>
                 {renderSearchBar()}
             </View>
 
-            {/* 검색 모드가 아닐 때만 카테고리 헤더 표시 */}
             {!isSearchMode && renderCategoryHeader()}
 
-            {/* 검색 결과 헤더 (검색 모드일 때만) */}
             {isSearchMode && renderSearchResultHeader()}
 
-            {/* 컨텐츠 영역 */}
             {loading ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#2AC1BC" />
@@ -667,7 +614,7 @@ export default function HymnListScreen() {
                         }
                         contentContainerStyle={[
                             styles.listContainer,
-                            { paddingBottom: insets.bottom + 140 } // 페이지네이션 공간 확보
+                            { paddingBottom: insets.bottom + 140 }
                         ]}
                         ItemSeparatorComponent={() => <View style={styles.separator} />}
                         ListEmptyComponent={() => (
@@ -685,7 +632,6 @@ export default function HymnListScreen() {
                         )}
                     />
 
-                    {/* 페이지네이션 (검색 모드일 때만) */}
                     {renderPagination()}
                 </>
             )}
@@ -755,7 +701,11 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '500',
     },
-    // 웹 스타일의 검색 결과 헤더
+    searchHint: {
+        fontSize: 12,
+        color: '#2AC1BC',
+        textAlign: 'center',
+    },
     searchResultHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -877,7 +827,6 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#000000',
     },
-    // 빈 검색 결과 스타일
     emptySearchContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -920,7 +869,6 @@ const styles = StyleSheet.create({
         marginBottom: 4,
         lineHeight: 20,
     },
-    // 페이지네이션 스타일
     paginationContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
