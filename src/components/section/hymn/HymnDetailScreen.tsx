@@ -1427,7 +1427,7 @@ const styles = StyleSheet.create({
     sheetMusicImage: {
         width: '100%',
         minHeight: 500,
-        marginTop: -100,
+        marginTop: -60,
     },
     lyricsOverlay: {
         position: 'absolute',
