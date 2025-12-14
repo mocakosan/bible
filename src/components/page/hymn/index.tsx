@@ -877,6 +877,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#000000',
     },
+    // 빈 검색 결과 스타일
     emptySearchContainer: {
         flex: 1,
         justifyContent: 'center',
